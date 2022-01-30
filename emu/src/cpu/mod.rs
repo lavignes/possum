@@ -151,8 +151,8 @@ impl Cpu {
             Register::L => u16_parts(self.hl)[0],
             Register::IXH => u16_parts(self.ix)[1],
             Register::IXL => u16_parts(self.ix)[0],
-            Register::IYH => u16_parts(self.ix)[1],
-            Register::IYL => u16_parts(self.ix)[0],
+            Register::IYH => u16_parts(self.iy)[1],
+            Register::IYL => u16_parts(self.iy)[0],
             Register::I => u16_parts(self.ir)[1],
             Register::R => u16_parts(self.ir)[0],
         }
@@ -449,10 +449,10 @@ impl Cpu {
         let mut result = data;
         if self.flag(Flag::N) {
             if ((data & 0x0F) > 0x09) || self.flag(Flag::H) {
-                result -= 0x06;
+                result = result.borrowing_sub(0x06, false).0;
             }
             if (data > 0x99) || self.flag(Flag::C) {
-                result -= 0x60;
+                result = result.borrowing_sub(0x60, false).0;
             }
         } else {
             if ((data & 0x0F) > 0x09) || self.flag(Flag::H) {
@@ -462,6 +462,13 @@ impl Cpu {
                 result = result.carrying_add(0x60, false).0;
             }
         }
+        self.set_flag(Flag::C, data > 0x99);
+        self.set_flag(Flag::PV, (result.count_ones() & 1) == 0);
+        self.set_flag(Flag::X, (result & (Flag::X as u8)) != 0);
+        self.set_flag(Flag::H, ((data ^ result) & (Flag::H as u8)) != 0);
+        self.set_flag(Flag::Y, (result & (Flag::Y as u8)) != 0);
+        self.set_flag(Flag::Z, result == 0);
+        self.set_flag(Flag::S, (result & (Flag::S as u8)) != 0);
         self.set_register(Register::A, result);
         4
     }
@@ -1022,7 +1029,7 @@ impl Cpu {
     #[inline]
     fn rrc_hl_indirect(&mut self, bus: &mut impl Bus) -> usize {
         let data = bus.read(self.hl);
-        let result = self.rlc_base(data);
+        let result = self.rrc_base(data);
         bus.write(self.hl, result);
         11
     }
@@ -1479,12 +1486,12 @@ impl Cpu {
 
     #[inline]
     fn rrd(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn rld(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
@@ -1516,37 +1523,37 @@ impl Cpu {
 
     #[inline]
     fn cpi(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn ini(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn outi(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn ldd(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
-    fn cpd(&mut self, _: &mut impl Bus) -> usize {
-        8
+    fn cpd_wz(&mut self, _: &mut impl Bus) -> usize {
+        0
     }
 
     #[inline]
     fn ind(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn outd(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
@@ -1564,43 +1571,42 @@ impl Cpu {
 
     #[inline]
     fn cpir(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn inir(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn otir(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn lddr(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
-    fn cpdr(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+    fn cpdr_wz(&mut self, _: &mut impl Bus) -> usize {
+        0
     }
 
     #[inline]
     fn indr(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
     fn otdr(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        0
     }
 
     #[inline]
-    fn rlc_index_indirect_wz(&mut self, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn rlc_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let data = bus.read(addr);
@@ -1609,13 +1615,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn rrc_index_indirect_wz(&mut self, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn rrc_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let data = bus.read(addr);
@@ -1624,13 +1629,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn rl_index_indirect_wz(&mut self, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn rl_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let data = bus.read(addr);
@@ -1639,13 +1643,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn rr_index_indirect_wz(&mut self, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn rr_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let data = bus.read(addr);
@@ -1654,13 +1657,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn sla_index_indirect_wz(&mut self, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn sla_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let data = bus.read(addr);
@@ -1669,13 +1671,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn sra_index_indirect_wz(&mut self, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn sra_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let data = bus.read(addr);
@@ -1684,13 +1685,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn sll_index_indirect_wz(&mut self, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn sll_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let data = bus.read(addr);
@@ -1699,13 +1699,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn srl_index_indirect_wz(&mut self, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn srl_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let data = bus.read(addr);
@@ -1714,13 +1713,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn bit_index_indirect_wz(&mut self, mask: u8, index: WideRegister, bus: &mut impl Bus) -> usize {
+    fn bit_index_indirect_wz(&mut self, mask: u8, offset: i16, index: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let result = bus.read(addr) & mask;
@@ -1732,13 +1730,12 @@ impl Cpu {
         self.set_flag(Flag::Y, (w & (Flag::Y as u8)) != 0);
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::S, (result & (Flag::S as u8)) != 0);
-        16
+        11
     }
 
     #[inline]
-    fn reset_bit_index_indirect_wz(&mut self, mask: u8, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn reset_bit_index_indirect_wz(&mut self, mask: u8, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let result = bus.read(addr) & !mask;
@@ -1746,13 +1743,12 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     #[inline]
-    fn set_bit_index_indirect_wz(&mut self, mask: u8, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn set_bit_index_indirect_wz(&mut self, mask: u8, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
-        let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
         let result = bus.read(addr) | mask;
@@ -1760,7 +1756,7 @@ impl Cpu {
         if let Some(reg) = reg {
             self.set_register(reg, result);
         }
-        19
+        15
     }
 
     fn step(&mut self, bus: &mut impl Bus) -> usize {
@@ -1902,22 +1898,22 @@ impl Cpu {
             0x7E => /* ld a, (hl)       */ self.copy_register_hl_indirect(Register::A, bus),
             0x7F => /* ld a, a          */ self.copy_register(Register::A, Register::A),
 
-            0x80 => /* add b            */ self.add_carry(Register::B, false),
-            0x81 => /* add c            */ self.add_carry(Register::C, false),
-            0x82 => /* add d            */ self.add_carry(Register::D, false),
-            0x83 => /* add e            */ self.add_carry(Register::E, false),
-            0x84 => /* add h            */ self.add_carry(Register::H, false),
-            0x85 => /* add l            */ self.add_carry(Register::L, false),
-            0x86 => /* add (hl)         */ self.add_carry_hl_indirect(false, bus),
-            0x87 => /* add a            */ self.add_carry(Register::A, false),
-            0x88 => /* adc b            */ self.add_carry(Register::B, self.flag(Flag::C)),
-            0x89 => /* adc c            */ self.add_carry(Register::C, self.flag(Flag::C)),
-            0x8A => /* adc d            */ self.add_carry(Register::D, self.flag(Flag::C)),
-            0x8B => /* adc e            */ self.add_carry(Register::E, self.flag(Flag::C)),
-            0x8C => /* adc h            */ self.add_carry(Register::H, self.flag(Flag::C)),
-            0x8D => /* adc l            */ self.add_carry(Register::L, self.flag(Flag::C)),
-            0x8E => /* adc (hl)         */ self.add_carry_hl_indirect(self.flag(Flag::C), bus),
-            0x8F => /* adc a            */ self.add_carry(Register::A, self.flag(Flag::C)),
+            0x80 => /* add a, b         */ self.add_carry(Register::B, false),
+            0x81 => /* add a, c         */ self.add_carry(Register::C, false),
+            0x82 => /* add a, d         */ self.add_carry(Register::D, false),
+            0x83 => /* add a, e         */ self.add_carry(Register::E, false),
+            0x84 => /* add a, h         */ self.add_carry(Register::H, false),
+            0x85 => /* add a, l         */ self.add_carry(Register::L, false),
+            0x86 => /* add a, (hl)      */ self.add_carry_hl_indirect(false, bus),
+            0x87 => /* add a, a         */ self.add_carry(Register::A, false),
+            0x88 => /* adc a, b         */ self.add_carry(Register::B, self.flag(Flag::C)),
+            0x89 => /* adc a, c         */ self.add_carry(Register::C, self.flag(Flag::C)),
+            0x8A => /* adc a, d         */ self.add_carry(Register::D, self.flag(Flag::C)),
+            0x8B => /* adc a, e         */ self.add_carry(Register::E, self.flag(Flag::C)),
+            0x8C => /* adc a, h         */ self.add_carry(Register::H, self.flag(Flag::C)),
+            0x8D => /* adc a, l         */ self.add_carry(Register::L, self.flag(Flag::C)),
+            0x8E => /* adc a, (hl)      */ self.add_carry_hl_indirect(self.flag(Flag::C), bus),
+            0x8F => /* adc a, a         */ self.add_carry(Register::A, self.flag(Flag::C)),
 
             0x90 => /* sub b            */ self.sub_carry(Register::B, false),
             0x91 => /* sub c            */ self.sub_carry(Register::C, false),
@@ -1927,14 +1923,14 @@ impl Cpu {
             0x95 => /* sub l            */ self.sub_carry(Register::L, false),
             0x96 => /* sub (hl)         */ self.sub_carry_hl_indirect(false, bus),
             0x97 => /* sub a            */ self.sub_carry(Register::A, false),
-            0x98 => /* sbc b            */ self.sub_carry(Register::B, self.flag(Flag::C)),
-            0x99 => /* sbc c            */ self.sub_carry(Register::C, self.flag(Flag::C)),
-            0x9A => /* sbc d            */ self.sub_carry(Register::D, self.flag(Flag::C)),
-            0x9B => /* sbc e            */ self.sub_carry(Register::E, self.flag(Flag::C)),
-            0x9C => /* sbc h            */ self.sub_carry(Register::H, self.flag(Flag::C)),
-            0x9D => /* sbc l            */ self.sub_carry(Register::L, self.flag(Flag::C)),
-            0x9E => /* sbc (hl)         */ self.sub_carry_hl_indirect(self.flag(Flag::C), bus),
-            0x9F => /* sbc a            */ self.sub_carry(Register::A, self.flag(Flag::C)),
+            0x98 => /* sbc a, b         */ self.sub_carry(Register::B, self.flag(Flag::C)),
+            0x99 => /* sbc a, c         */ self.sub_carry(Register::C, self.flag(Flag::C)),
+            0x9A => /* sbc a, d         */ self.sub_carry(Register::D, self.flag(Flag::C)),
+            0x9B => /* sbc a, e         */ self.sub_carry(Register::E, self.flag(Flag::C)),
+            0x9C => /* sbc a, h         */ self.sub_carry(Register::H, self.flag(Flag::C)),
+            0x9D => /* sbc a, l         */ self.sub_carry(Register::L, self.flag(Flag::C)),
+            0x9E => /* sbc a, (hl)      */ self.sub_carry_hl_indirect(self.flag(Flag::C), bus),
+            0x9F => /* sbc a, a         */ self.sub_carry(Register::A, self.flag(Flag::C)),
 
             0xA0 => /* and b            */ self.and(Register::B),
             0xA1 => /* and c            */ self.and(Register::C),
@@ -2112,209 +2108,209 @@ impl Cpu {
             0x3E => /* srl (hl)         */ self.srl_hl_indirect(bus),
             0x3F => /* srl a            */ self.srl_register(Register::A),
 
-            0x40 => /* bit 1, b         */ self.bit_register(0x01, Register::B),
-            0x41 => /* bit 1, c         */ self.bit_register(0x01, Register::C),
-            0x42 => /* bit 1, d         */ self.bit_register(0x01, Register::D),
-            0x43 => /* bit 1, e         */ self.bit_register(0x01, Register::E),
-            0x44 => /* bit 1, h         */ self.bit_register(0x01, Register::H),
-            0x45 => /* bit 1, l         */ self.bit_register(0x01, Register::L),
-            0x46 => /* bit 1, (hl)      */ self.bit_hl_indirect_wz(0x01, bus),
-            0x47 => /* bit 1, a         */ self.bit_register(0x01, Register::A),
-            0x48 => /* bit 2, b         */ self.bit_register(0x02, Register::B),
-            0x49 => /* bit 2, c         */ self.bit_register(0x02, Register::C),
-            0x4A => /* bit 2, d         */ self.bit_register(0x02, Register::D),
-            0x4B => /* bit 2, e         */ self.bit_register(0x02, Register::E),
-            0x4C => /* bit 2, h         */ self.bit_register(0x02, Register::H),
-            0x4D => /* bit 2, l         */ self.bit_register(0x02, Register::L),
-            0x4E => /* bit 2, (hl)      */ self.bit_hl_indirect_wz(0x02, bus),
-            0x4F => /* bit 2, a         */ self.bit_register(0x02, Register::A),
+            0x40 => /* bit 0, b         */ self.bit_register(0x01, Register::B),
+            0x41 => /* bit 0, c         */ self.bit_register(0x01, Register::C),
+            0x42 => /* bit 0, d         */ self.bit_register(0x01, Register::D),
+            0x43 => /* bit 0, e         */ self.bit_register(0x01, Register::E),
+            0x44 => /* bit 0, h         */ self.bit_register(0x01, Register::H),
+            0x45 => /* bit 0, l         */ self.bit_register(0x01, Register::L),
+            0x46 => /* bit 0, (hl)      */ self.bit_hl_indirect_wz(0x01, bus),
+            0x47 => /* bit 0, a         */ self.bit_register(0x01, Register::A),
+            0x48 => /* bit 1, b         */ self.bit_register(0x02, Register::B),
+            0x49 => /* bit 1, c         */ self.bit_register(0x02, Register::C),
+            0x4A => /* bit 1, d         */ self.bit_register(0x02, Register::D),
+            0x4B => /* bit 1, e         */ self.bit_register(0x02, Register::E),
+            0x4C => /* bit 1, h         */ self.bit_register(0x02, Register::H),
+            0x4D => /* bit 1, l         */ self.bit_register(0x02, Register::L),
+            0x4E => /* bit 1, (hl)      */ self.bit_hl_indirect_wz(0x02, bus),
+            0x4F => /* bit 1, a         */ self.bit_register(0x02, Register::A),
 
-            0x50 => /* bit 3, b         */ self.bit_register(0x04, Register::B),
-            0x51 => /* bit 3, c         */ self.bit_register(0x04, Register::C),
-            0x52 => /* bit 3, d         */ self.bit_register(0x04, Register::D),
-            0x53 => /* bit 3, e         */ self.bit_register(0x04, Register::E),
-            0x54 => /* bit 3, h         */ self.bit_register(0x04, Register::H),
-            0x55 => /* bit 3, l         */ self.bit_register(0x04, Register::L),
-            0x56 => /* bit 3, (hl)      */ self.bit_hl_indirect_wz(0x04, bus),
-            0x57 => /* bit 3, a         */ self.bit_register(0x04, Register::A),
-            0x58 => /* bit 4, b         */ self.bit_register(0x08, Register::B),
-            0x59 => /* bit 4, c         */ self.bit_register(0x08, Register::C),
-            0x5A => /* bit 4, d         */ self.bit_register(0x08, Register::D),
-            0x5B => /* bit 4, e         */ self.bit_register(0x08, Register::E),
-            0x5C => /* bit 4, h         */ self.bit_register(0x08, Register::H),
-            0x5D => /* bit 4, l         */ self.bit_register(0x08, Register::L),
-            0x5E => /* bit 4, (hl)      */ self.bit_hl_indirect_wz(0x08, bus),
-            0x5F => /* bit 4, a         */ self.bit_register(0x08, Register::A),
+            0x50 => /* bit 2, b         */ self.bit_register(0x04, Register::B),
+            0x51 => /* bit 2, c         */ self.bit_register(0x04, Register::C),
+            0x52 => /* bit 2, d         */ self.bit_register(0x04, Register::D),
+            0x53 => /* bit 2, e         */ self.bit_register(0x04, Register::E),
+            0x54 => /* bit 2, h         */ self.bit_register(0x04, Register::H),
+            0x55 => /* bit 2, l         */ self.bit_register(0x04, Register::L),
+            0x56 => /* bit 2, (hl)      */ self.bit_hl_indirect_wz(0x04, bus),
+            0x57 => /* bit 2, a         */ self.bit_register(0x04, Register::A),
+            0x58 => /* bit 3, b         */ self.bit_register(0x08, Register::B),
+            0x59 => /* bit 3, c         */ self.bit_register(0x08, Register::C),
+            0x5A => /* bit 3, d         */ self.bit_register(0x08, Register::D),
+            0x5B => /* bit 3, e         */ self.bit_register(0x08, Register::E),
+            0x5C => /* bit 3, h         */ self.bit_register(0x08, Register::H),
+            0x5D => /* bit 3, l         */ self.bit_register(0x08, Register::L),
+            0x5E => /* bit 3, (hl)      */ self.bit_hl_indirect_wz(0x08, bus),
+            0x5F => /* bit 3, a         */ self.bit_register(0x08, Register::A),
 
-            0x60 => /* bit 5, b         */ self.bit_register(0x10, Register::B),
-            0x61 => /* bit 5, c         */ self.bit_register(0x10, Register::C),
-            0x62 => /* bit 5, d         */ self.bit_register(0x10, Register::D),
-            0x63 => /* bit 5, e         */ self.bit_register(0x10, Register::E),
-            0x64 => /* bit 5, h         */ self.bit_register(0x10, Register::H),
-            0x65 => /* bit 5, l         */ self.bit_register(0x10, Register::L),
-            0x66 => /* bit 5, (hl)      */ self.bit_hl_indirect_wz(0x10, bus),
-            0x67 => /* bit 5, a         */ self.bit_register(0x10, Register::A),
-            0x68 => /* bit 6, b         */ self.bit_register(0x20, Register::B),
-            0x69 => /* bit 6, c         */ self.bit_register(0x20, Register::C),
-            0x6A => /* bit 6, d         */ self.bit_register(0x20, Register::D),
-            0x6B => /* bit 6, e         */ self.bit_register(0x20, Register::E),
-            0x6C => /* bit 6, h         */ self.bit_register(0x20, Register::H),
-            0x6D => /* bit 6, l         */ self.bit_register(0x20, Register::L),
-            0x6E => /* bit 6, (hl)      */ self.bit_hl_indirect_wz(0x20, bus),
-            0x6F => /* bit 6, a         */ self.bit_register(0x20, Register::A),
+            0x60 => /* bit 4, b         */ self.bit_register(0x10, Register::B),
+            0x61 => /* bit 4, c         */ self.bit_register(0x10, Register::C),
+            0x62 => /* bit 4, d         */ self.bit_register(0x10, Register::D),
+            0x63 => /* bit 4, e         */ self.bit_register(0x10, Register::E),
+            0x64 => /* bit 4, h         */ self.bit_register(0x10, Register::H),
+            0x65 => /* bit 4, l         */ self.bit_register(0x10, Register::L),
+            0x66 => /* bit 4, (hl)      */ self.bit_hl_indirect_wz(0x10, bus),
+            0x67 => /* bit 4, a         */ self.bit_register(0x10, Register::A),
+            0x68 => /* bit 5, b         */ self.bit_register(0x20, Register::B),
+            0x69 => /* bit 5, c         */ self.bit_register(0x20, Register::C),
+            0x6A => /* bit 5, d         */ self.bit_register(0x20, Register::D),
+            0x6B => /* bit 5, e         */ self.bit_register(0x20, Register::E),
+            0x6C => /* bit 5, h         */ self.bit_register(0x20, Register::H),
+            0x6D => /* bit 5, l         */ self.bit_register(0x20, Register::L),
+            0x6E => /* bit 5, (hl)      */ self.bit_hl_indirect_wz(0x20, bus),
+            0x6F => /* bit 5, a         */ self.bit_register(0x20, Register::A),
 
-            0x70 => /* bit 7, b         */ self.bit_register(0x40, Register::B),
-            0x71 => /* bit 7, c         */ self.bit_register(0x40, Register::C),
-            0x72 => /* bit 7, d         */ self.bit_register(0x40, Register::D),
-            0x73 => /* bit 7, e         */ self.bit_register(0x40, Register::E),
-            0x74 => /* bit 7, h         */ self.bit_register(0x40, Register::H),
-            0x75 => /* bit 7, l         */ self.bit_register(0x40, Register::L),
-            0x76 => /* bit 7, (hl)      */ self.bit_hl_indirect_wz(0x40, bus),
-            0x77 => /* bit 7, a         */ self.bit_register(0x40, Register::A),
-            0x78 => /* bit 8, b         */ self.bit_register(0x80, Register::B),
-            0x79 => /* bit 8, c         */ self.bit_register(0x80, Register::C),
-            0x7A => /* bit 8, d         */ self.bit_register(0x80, Register::D),
-            0x7B => /* bit 8, e         */ self.bit_register(0x80, Register::E),
-            0x7C => /* bit 8, h         */ self.bit_register(0x80, Register::H),
-            0x7D => /* bit 8, l         */ self.bit_register(0x80, Register::L),
-            0x7E => /* bit 8, (hl)      */ self.bit_hl_indirect_wz(0x80, bus),
-            0x7F => /* bit 8, a         */ self.bit_register(0x80, Register::A),
+            0x70 => /* bit 6, b         */ self.bit_register(0x40, Register::B),
+            0x71 => /* bit 6, c         */ self.bit_register(0x40, Register::C),
+            0x72 => /* bit 6, d         */ self.bit_register(0x40, Register::D),
+            0x73 => /* bit 6, e         */ self.bit_register(0x40, Register::E),
+            0x74 => /* bit 6, h         */ self.bit_register(0x40, Register::H),
+            0x75 => /* bit 6, l         */ self.bit_register(0x40, Register::L),
+            0x76 => /* bit 6, (hl)      */ self.bit_hl_indirect_wz(0x40, bus),
+            0x77 => /* bit 6, a         */ self.bit_register(0x40, Register::A),
+            0x78 => /* bit 7, b         */ self.bit_register(0x80, Register::B),
+            0x79 => /* bit 7, c         */ self.bit_register(0x80, Register::C),
+            0x7A => /* bit 7, d         */ self.bit_register(0x80, Register::D),
+            0x7B => /* bit 7, e         */ self.bit_register(0x80, Register::E),
+            0x7C => /* bit 7, h         */ self.bit_register(0x80, Register::H),
+            0x7D => /* bit 7, l         */ self.bit_register(0x80, Register::L),
+            0x7E => /* bit 7, (hl)      */ self.bit_hl_indirect_wz(0x80, bus),
+            0x7F => /* bit 7, a         */ self.bit_register(0x80, Register::A),
 
-            0x80 => /* res 1, b         */ self.reset_bit_register(0x01, Register::B),
-            0x81 => /* res 1, c         */ self.reset_bit_register(0x01, Register::C),
-            0x82 => /* res 1, d         */ self.reset_bit_register(0x01, Register::D),
-            0x83 => /* res 1, e         */ self.reset_bit_register(0x01, Register::E),
-            0x84 => /* res 1, h         */ self.reset_bit_register(0x01, Register::H),
-            0x85 => /* res 1, l         */ self.reset_bit_register(0x01, Register::L),
-            0x86 => /* res 1, (hl)      */ self.reset_bit_hl_indirect(0x01, bus),
-            0x87 => /* res 1, a         */ self.reset_bit_register(0x01, Register::A),
-            0x88 => /* res 2, b         */ self.reset_bit_register(0x02, Register::B),
-            0x89 => /* res 2, c         */ self.reset_bit_register(0x02, Register::C),
-            0x8A => /* res 2, d         */ self.reset_bit_register(0x02, Register::D),
-            0x8B => /* res 2, e         */ self.reset_bit_register(0x02, Register::E),
-            0x8C => /* res 2, h         */ self.reset_bit_register(0x02, Register::H),
-            0x8D => /* res 2, l         */ self.reset_bit_register(0x02, Register::L),
-            0x8E => /* res 2, (hl)      */ self.reset_bit_hl_indirect(0x02, bus),
-            0x8F => /* res 2, a         */ self.reset_bit_register(0x02, Register::A),
+            0x80 => /* res 0, b         */ self.reset_bit_register(0x01, Register::B),
+            0x81 => /* res 0, c         */ self.reset_bit_register(0x01, Register::C),
+            0x82 => /* res 0, d         */ self.reset_bit_register(0x01, Register::D),
+            0x83 => /* res 0, e         */ self.reset_bit_register(0x01, Register::E),
+            0x84 => /* res 0, h         */ self.reset_bit_register(0x01, Register::H),
+            0x85 => /* res 0, l         */ self.reset_bit_register(0x01, Register::L),
+            0x86 => /* res 0, (hl)      */ self.reset_bit_hl_indirect(0x01, bus),
+            0x87 => /* res 0, a         */ self.reset_bit_register(0x01, Register::A),
+            0x88 => /* res 1, b         */ self.reset_bit_register(0x02, Register::B),
+            0x89 => /* res 1, c         */ self.reset_bit_register(0x02, Register::C),
+            0x8A => /* res 1, d         */ self.reset_bit_register(0x02, Register::D),
+            0x8B => /* res 1, e         */ self.reset_bit_register(0x02, Register::E),
+            0x8C => /* res 1, h         */ self.reset_bit_register(0x02, Register::H),
+            0x8D => /* res 1, l         */ self.reset_bit_register(0x02, Register::L),
+            0x8E => /* res 1, (hl)      */ self.reset_bit_hl_indirect(0x02, bus),
+            0x8F => /* res 1, a         */ self.reset_bit_register(0x02, Register::A),
 
-            0x90 => /* res 3, b         */ self.reset_bit_register(0x04, Register::B),
-            0x91 => /* res 3, c         */ self.reset_bit_register(0x04, Register::C),
-            0x92 => /* res 3, d         */ self.reset_bit_register(0x04, Register::D),
-            0x93 => /* res 3, e         */ self.reset_bit_register(0x04, Register::E),
-            0x94 => /* res 3, h         */ self.reset_bit_register(0x04, Register::H),
-            0x95 => /* res 3, l         */ self.reset_bit_register(0x04, Register::L),
-            0x96 => /* res 3, (hl)      */ self.reset_bit_hl_indirect(0x04, bus),
-            0x97 => /* res 3, a         */ self.reset_bit_register(0x04, Register::A),
-            0x98 => /* res 4, b         */ self.reset_bit_register(0x08, Register::B),
-            0x99 => /* res 4, c         */ self.reset_bit_register(0x08, Register::C),
-            0x9A => /* res 4, d         */ self.reset_bit_register(0x08, Register::D),
-            0x9B => /* res 4, e         */ self.reset_bit_register(0x08, Register::E),
-            0x9C => /* res 4, h         */ self.reset_bit_register(0x08, Register::H),
-            0x9D => /* res 4, l         */ self.reset_bit_register(0x08, Register::L),
-            0x9E => /* res 4, (hl)      */ self.reset_bit_hl_indirect(0x08, bus),
-            0x9F => /* res 4, a         */ self.reset_bit_register(0x08, Register::A),
+            0x90 => /* res 1, b         */ self.reset_bit_register(0x04, Register::B),
+            0x91 => /* res 1, c         */ self.reset_bit_register(0x04, Register::C),
+            0x92 => /* res 1, d         */ self.reset_bit_register(0x04, Register::D),
+            0x93 => /* res 1, e         */ self.reset_bit_register(0x04, Register::E),
+            0x94 => /* res 1, h         */ self.reset_bit_register(0x04, Register::H),
+            0x95 => /* res 1, l         */ self.reset_bit_register(0x04, Register::L),
+            0x96 => /* res 1, (hl)      */ self.reset_bit_hl_indirect(0x04, bus),
+            0x97 => /* res 1, a         */ self.reset_bit_register(0x04, Register::A),
+            0x98 => /* res 3, b         */ self.reset_bit_register(0x08, Register::B),
+            0x99 => /* res 3, c         */ self.reset_bit_register(0x08, Register::C),
+            0x9A => /* res 3, d         */ self.reset_bit_register(0x08, Register::D),
+            0x9B => /* res 3, e         */ self.reset_bit_register(0x08, Register::E),
+            0x9C => /* res 3, h         */ self.reset_bit_register(0x08, Register::H),
+            0x9D => /* res 3, l         */ self.reset_bit_register(0x08, Register::L),
+            0x9E => /* res 3, (hl)      */ self.reset_bit_hl_indirect(0x08, bus),
+            0x9F => /* res 3, a         */ self.reset_bit_register(0x08, Register::A),
 
-            0xA0 => /* res 5, b         */ self.reset_bit_register(0x10, Register::B),
-            0xA1 => /* res 5, c         */ self.reset_bit_register(0x10, Register::C),
-            0xA2 => /* res 5, d         */ self.reset_bit_register(0x10, Register::D),
-            0xA3 => /* res 5, e         */ self.reset_bit_register(0x10, Register::E),
-            0xA4 => /* res 5, h         */ self.reset_bit_register(0x10, Register::H),
-            0xA5 => /* res 5, l         */ self.reset_bit_register(0x10, Register::L),
-            0xA6 => /* res 5, (hl)      */ self.reset_bit_hl_indirect(0x10, bus),
-            0xA7 => /* res 5, a         */ self.reset_bit_register(0x10, Register::A),
-            0xA8 => /* res 6, b         */ self.reset_bit_register(0x20, Register::B),
-            0xA9 => /* res 6, c         */ self.reset_bit_register(0x20, Register::C),
-            0xAA => /* res 6, d         */ self.reset_bit_register(0x20, Register::D),
-            0xAB => /* res 6, e         */ self.reset_bit_register(0x20, Register::E),
-            0xAC => /* res 6, h         */ self.reset_bit_register(0x20, Register::H),
-            0xAD => /* res 6, l         */ self.reset_bit_register(0x20, Register::L),
-            0xAE => /* res 6, (hl)      */ self.reset_bit_hl_indirect(0x20, bus),
-            0xAF => /* res 6, a         */ self.reset_bit_register(0x20, Register::A),
+            0xA0 => /* res 4, b         */ self.reset_bit_register(0x10, Register::B),
+            0xA1 => /* res 4, c         */ self.reset_bit_register(0x10, Register::C),
+            0xA2 => /* res 4, d         */ self.reset_bit_register(0x10, Register::D),
+            0xA3 => /* res 4, e         */ self.reset_bit_register(0x10, Register::E),
+            0xA4 => /* res 4, h         */ self.reset_bit_register(0x10, Register::H),
+            0xA5 => /* res 4, l         */ self.reset_bit_register(0x10, Register::L),
+            0xA6 => /* res 4, (hl)      */ self.reset_bit_hl_indirect(0x10, bus),
+            0xA7 => /* res 4, a         */ self.reset_bit_register(0x10, Register::A),
+            0xA8 => /* res 5, b         */ self.reset_bit_register(0x20, Register::B),
+            0xA9 => /* res 5, c         */ self.reset_bit_register(0x20, Register::C),
+            0xAA => /* res 5, d         */ self.reset_bit_register(0x20, Register::D),
+            0xAB => /* res 5, e         */ self.reset_bit_register(0x20, Register::E),
+            0xAC => /* res 5, h         */ self.reset_bit_register(0x20, Register::H),
+            0xAD => /* res 5, l         */ self.reset_bit_register(0x20, Register::L),
+            0xAE => /* res 5, (hl)      */ self.reset_bit_hl_indirect(0x20, bus),
+            0xAF => /* res 5, a         */ self.reset_bit_register(0x20, Register::A),
 
-            0xB0 => /* res 7, b         */ self.reset_bit_register(0x40, Register::B),
-            0xB1 => /* res 7, c         */ self.reset_bit_register(0x40, Register::C),
-            0xB2 => /* res 7, d         */ self.reset_bit_register(0x40, Register::D),
-            0xB3 => /* res 7, e         */ self.reset_bit_register(0x40, Register::E),
-            0xB4 => /* res 7, h         */ self.reset_bit_register(0x40, Register::H),
-            0xB5 => /* res 7, l         */ self.reset_bit_register(0x40, Register::L),
-            0xB6 => /* res 7, (hl)      */ self.reset_bit_hl_indirect(0x40, bus),
-            0xB7 => /* res 7, a         */ self.reset_bit_register(0x40, Register::A),
-            0xB8 => /* res 8, b         */ self.reset_bit_register(0x80, Register::B),
-            0xB9 => /* res 8, c         */ self.reset_bit_register(0x80, Register::C),
-            0xBA => /* res 8, d         */ self.reset_bit_register(0x80, Register::D),
-            0xBB => /* res 8, e         */ self.reset_bit_register(0x80, Register::E),
-            0xBC => /* res 8, h         */ self.reset_bit_register(0x80, Register::H),
-            0xBD => /* res 8, l         */ self.reset_bit_register(0x80, Register::L),
-            0xBE => /* res 8, (hl)      */ self.reset_bit_hl_indirect(0x80, bus),
-            0xBF => /* res 8, a         */ self.reset_bit_register(0x80, Register::A),
+            0xB0 => /* res 6, b         */ self.reset_bit_register(0x40, Register::B),
+            0xB1 => /* res 6, c         */ self.reset_bit_register(0x40, Register::C),
+            0xB2 => /* res 6, d         */ self.reset_bit_register(0x40, Register::D),
+            0xB3 => /* res 6, e         */ self.reset_bit_register(0x40, Register::E),
+            0xB4 => /* res 6, h         */ self.reset_bit_register(0x40, Register::H),
+            0xB5 => /* res 6, l         */ self.reset_bit_register(0x40, Register::L),
+            0xB6 => /* res 6, (hl)      */ self.reset_bit_hl_indirect(0x40, bus),
+            0xB7 => /* res 6, a         */ self.reset_bit_register(0x40, Register::A),
+            0xB8 => /* res 7, b         */ self.reset_bit_register(0x80, Register::B),
+            0xB9 => /* res 7, c         */ self.reset_bit_register(0x80, Register::C),
+            0xBA => /* res 7, d         */ self.reset_bit_register(0x80, Register::D),
+            0xBB => /* res 7, e         */ self.reset_bit_register(0x80, Register::E),
+            0xBC => /* res 7, h         */ self.reset_bit_register(0x80, Register::H),
+            0xBD => /* res 7, l         */ self.reset_bit_register(0x80, Register::L),
+            0xBE => /* res 7, (hl)      */ self.reset_bit_hl_indirect(0x80, bus),
+            0xBF => /* res 7, a         */ self.reset_bit_register(0x80, Register::A),
 
-            0xC0 => /* set 1, b         */ self.set_bit_register(0x01, Register::B),
-            0xC1 => /* set 1, c         */ self.set_bit_register(0x01, Register::C),
-            0xC2 => /* set 1, d         */ self.set_bit_register(0x01, Register::D),
-            0xC3 => /* set 1, e         */ self.set_bit_register(0x01, Register::E),
-            0xC4 => /* set 1, h         */ self.set_bit_register(0x01, Register::H),
-            0xC5 => /* set 1, l         */ self.set_bit_register(0x01, Register::L),
-            0xC6 => /* set 1, (hl)      */ self.set_bit_hl_indirect(0x01, bus),
-            0xC7 => /* set 1, a         */ self.set_bit_register(0x01, Register::A),
-            0xC8 => /* set 2, b         */ self.set_bit_register(0x02, Register::B),
-            0xC9 => /* set 2, c         */ self.set_bit_register(0x02, Register::C),
-            0xCA => /* set 2, d         */ self.set_bit_register(0x02, Register::D),
-            0xCB => /* set 2, e         */ self.set_bit_register(0x02, Register::E),
-            0xCC => /* set 2, h         */ self.set_bit_register(0x02, Register::H),
-            0xCD => /* set 2, l         */ self.set_bit_register(0x02, Register::L),
-            0xCE => /* set 2, (hl)      */ self.set_bit_hl_indirect(0x02, bus),
-            0xCF => /* set 2, a         */ self.set_bit_register(0x02, Register::A),
+            0xC0 => /* set 0, b         */ self.set_bit_register(0x01, Register::B),
+            0xC1 => /* set 0, c         */ self.set_bit_register(0x01, Register::C),
+            0xC2 => /* set 0, d         */ self.set_bit_register(0x01, Register::D),
+            0xC3 => /* set 0, e         */ self.set_bit_register(0x01, Register::E),
+            0xC4 => /* set 0, h         */ self.set_bit_register(0x01, Register::H),
+            0xC5 => /* set 0, l         */ self.set_bit_register(0x01, Register::L),
+            0xC6 => /* set 0, (hl)      */ self.set_bit_hl_indirect(0x01, bus),
+            0xC7 => /* set 0, a         */ self.set_bit_register(0x01, Register::A),
+            0xC8 => /* set 1, b         */ self.set_bit_register(0x02, Register::B),
+            0xC9 => /* set 1, c         */ self.set_bit_register(0x02, Register::C),
+            0xCA => /* set 1, d         */ self.set_bit_register(0x02, Register::D),
+            0xCB => /* set 1, e         */ self.set_bit_register(0x02, Register::E),
+            0xCC => /* set 1, h         */ self.set_bit_register(0x02, Register::H),
+            0xCD => /* set 1, l         */ self.set_bit_register(0x02, Register::L),
+            0xCE => /* set 1, (hl)      */ self.set_bit_hl_indirect(0x02, bus),
+            0xCF => /* set 1, a         */ self.set_bit_register(0x02, Register::A),
 
-            0xD0 => /* set 3, b         */ self.set_bit_register(0x04, Register::B),
-            0xD1 => /* set 3, c         */ self.set_bit_register(0x04, Register::C),
-            0xD2 => /* set 3, d         */ self.set_bit_register(0x04, Register::D),
-            0xD3 => /* set 3, e         */ self.set_bit_register(0x04, Register::E),
-            0xD4 => /* set 3, h         */ self.set_bit_register(0x04, Register::H),
-            0xD5 => /* set 3, l         */ self.set_bit_register(0x04, Register::L),
-            0xD6 => /* set 3, (hl)      */ self.set_bit_hl_indirect(0x04, bus),
-            0xD7 => /* set 3, a         */ self.set_bit_register(0x04, Register::A),
-            0xD8 => /* set 4, b         */ self.set_bit_register(0x08, Register::B),
-            0xD9 => /* set 4, c         */ self.set_bit_register(0x08, Register::C),
-            0xDA => /* set 4, d         */ self.set_bit_register(0x08, Register::D),
-            0xDB => /* set 4, e         */ self.set_bit_register(0x08, Register::E),
-            0xDC => /* set 4, h         */ self.set_bit_register(0x08, Register::H),
-            0xDD => /* set 4, l         */ self.set_bit_register(0x08, Register::L),
-            0xDE => /* set 4, (hl)      */ self.set_bit_hl_indirect(0x08, bus),
-            0xDF => /* set 4, a         */ self.set_bit_register(0x08, Register::A),
+            0xD0 => /* set 2, b         */ self.set_bit_register(0x04, Register::B),
+            0xD1 => /* set 2, c         */ self.set_bit_register(0x04, Register::C),
+            0xD2 => /* set 2, d         */ self.set_bit_register(0x04, Register::D),
+            0xD3 => /* set 2, e         */ self.set_bit_register(0x04, Register::E),
+            0xD4 => /* set 2, h         */ self.set_bit_register(0x04, Register::H),
+            0xD5 => /* set 2, l         */ self.set_bit_register(0x04, Register::L),
+            0xD6 => /* set 2, (hl)      */ self.set_bit_hl_indirect(0x04, bus),
+            0xD7 => /* set 2, a         */ self.set_bit_register(0x04, Register::A),
+            0xD8 => /* set 3, b         */ self.set_bit_register(0x08, Register::B),
+            0xD9 => /* set 3, c         */ self.set_bit_register(0x08, Register::C),
+            0xDA => /* set 3, d         */ self.set_bit_register(0x08, Register::D),
+            0xDB => /* set 3, e         */ self.set_bit_register(0x08, Register::E),
+            0xDC => /* set 3, h         */ self.set_bit_register(0x08, Register::H),
+            0xDD => /* set 3, l         */ self.set_bit_register(0x08, Register::L),
+            0xDE => /* set 3, (hl)      */ self.set_bit_hl_indirect(0x08, bus),
+            0xDF => /* set 3, a         */ self.set_bit_register(0x08, Register::A),
 
-            0xE0 => /* set 5, b         */ self.set_bit_register(0x10, Register::B),
-            0xE1 => /* set 5, c         */ self.set_bit_register(0x10, Register::C),
-            0xE2 => /* set 5, d         */ self.set_bit_register(0x10, Register::D),
-            0xE3 => /* set 5, e         */ self.set_bit_register(0x10, Register::E),
-            0xE4 => /* set 5, h         */ self.set_bit_register(0x10, Register::H),
-            0xE5 => /* set 5, l         */ self.set_bit_register(0x10, Register::L),
-            0xE6 => /* set 5, (hl)      */ self.set_bit_hl_indirect(0x10, bus),
-            0xE7 => /* set 5, a         */ self.set_bit_register(0x10, Register::A),
-            0xE8 => /* set 7, b         */ self.set_bit_register(0x20, Register::B),
-            0xE9 => /* set 7, c         */ self.set_bit_register(0x20, Register::C),
-            0xEA => /* set 7, d         */ self.set_bit_register(0x20, Register::D),
-            0xEB => /* set 7, e         */ self.set_bit_register(0x20, Register::E),
-            0xEC => /* set 7, h         */ self.set_bit_register(0x20, Register::H),
-            0xED => /* set 7, l         */ self.set_bit_register(0x20, Register::L),
-            0xEE => /* set 7, (hl)      */ self.set_bit_hl_indirect(0x20, bus),
-            0xEF => /* set 7, a         */ self.set_bit_register(0x20, Register::A),
+            0xE0 => /* set 4, b         */ self.set_bit_register(0x10, Register::B),
+            0xE1 => /* set 4, c         */ self.set_bit_register(0x10, Register::C),
+            0xE2 => /* set 4, d         */ self.set_bit_register(0x10, Register::D),
+            0xE3 => /* set 4, e         */ self.set_bit_register(0x10, Register::E),
+            0xE4 => /* set 4, h         */ self.set_bit_register(0x10, Register::H),
+            0xE5 => /* set 4, l         */ self.set_bit_register(0x10, Register::L),
+            0xE6 => /* set 4, (hl)      */ self.set_bit_hl_indirect(0x10, bus),
+            0xE7 => /* set 4, a         */ self.set_bit_register(0x10, Register::A),
+            0xE8 => /* set 5, b         */ self.set_bit_register(0x20, Register::B),
+            0xE9 => /* set 5, c         */ self.set_bit_register(0x20, Register::C),
+            0xEA => /* set 5, d         */ self.set_bit_register(0x20, Register::D),
+            0xEB => /* set 5, e         */ self.set_bit_register(0x20, Register::E),
+            0xEC => /* set 5, h         */ self.set_bit_register(0x20, Register::H),
+            0xED => /* set 5, l         */ self.set_bit_register(0x20, Register::L),
+            0xEE => /* set 5, (hl)      */ self.set_bit_hl_indirect(0x20, bus),
+            0xEF => /* set 5, a         */ self.set_bit_register(0x20, Register::A),
 
-            0xF0 => /* set 7, b         */ self.set_bit_register(0x40, Register::B),
-            0xF1 => /* set 7, c         */ self.set_bit_register(0x40, Register::C),
-            0xF2 => /* set 7, d         */ self.set_bit_register(0x40, Register::D),
-            0xF3 => /* set 7, e         */ self.set_bit_register(0x40, Register::E),
-            0xF4 => /* set 7, h         */ self.set_bit_register(0x40, Register::H),
-            0xF5 => /* set 7, l         */ self.set_bit_register(0x40, Register::L),
-            0xF6 => /* set 7, (hl)      */ self.set_bit_hl_indirect(0x40, bus),
-            0xF7 => /* set 7, a         */ self.set_bit_register(0x40, Register::A),
-            0xF8 => /* set 8, b         */ self.set_bit_register(0x80, Register::B),
-            0xF9 => /* set 8, c         */ self.set_bit_register(0x80, Register::C),
-            0xFA => /* set 8, d         */ self.set_bit_register(0x80, Register::D),
-            0xFB => /* set 8, e         */ self.set_bit_register(0x80, Register::E),
-            0xFC => /* set 8, h         */ self.set_bit_register(0x80, Register::H),
-            0xFD => /* set 8, l         */ self.set_bit_register(0x80, Register::L),
-            0xFE => /* set 8, (hl)      */ self.set_bit_hl_indirect(0x80, bus),
-            0xFF => /* set 8, a         */ self.set_bit_register(0x80, Register::A),
+            0xF0 => /* set 6, b         */ self.set_bit_register(0x40, Register::B),
+            0xF1 => /* set 6, c         */ self.set_bit_register(0x40, Register::C),
+            0xF2 => /* set 6, d         */ self.set_bit_register(0x40, Register::D),
+            0xF3 => /* set 6, e         */ self.set_bit_register(0x40, Register::E),
+            0xF4 => /* set 6, h         */ self.set_bit_register(0x40, Register::H),
+            0xF5 => /* set 6, l         */ self.set_bit_register(0x40, Register::L),
+            0xF6 => /* set 6, (hl)      */ self.set_bit_hl_indirect(0x40, bus),
+            0xF7 => /* set 6, a         */ self.set_bit_register(0x40, Register::A),
+            0xF8 => /* set 7, b         */ self.set_bit_register(0x80, Register::B),
+            0xF9 => /* set 7, c         */ self.set_bit_register(0x80, Register::C),
+            0xFA => /* set 7, d         */ self.set_bit_register(0x80, Register::D),
+            0xFB => /* set 7, e         */ self.set_bit_register(0x80, Register::E),
+            0xFC => /* set 7, h         */ self.set_bit_register(0x80, Register::H),
+            0xFD => /* set 7, l         */ self.set_bit_register(0x80, Register::L),
+            0xFE => /* set 7, (hl)      */ self.set_bit_hl_indirect(0x80, bus),
+            0xFF => /* set 7, a         */ self.set_bit_register(0x80, Register::A),
         }
     }
 
@@ -2327,10 +2323,11 @@ impl Cpu {
             0x19 => /* add ix, de       */ self.add_wide_wz(WideRegister::IX, WideRegister::DE),
 
             0x21 => /* ld ix, **        */ self.read_wide_immediate(WideRegister::IX, bus),
-            0x22 => /* inc ix           */ self.inc_wide(WideRegister::IX),
-            0x23 => /* inc ixh          */ self.inc_wz(Register::IXH),
-            0x24 => /* dec ixh          */ self.dec_wz(Register::IXH),
-            0x25 => /* ld ixh, *        */ self.read_immediate(Register::IXH, bus),
+            0x22 => /* ld (**), ix      */ self.write_wide_absolute_wz(WideRegister::IX, bus),
+            0x23 => /* inc ix           */ self.inc_wide(WideRegister::IX),
+            0x24 => /* inc ixh          */ self.inc_wz(Register::IXH),
+            0x25 => /* dec ixh          */ self.dec_wz(Register::IXH),
+            0x26 => /* ld ixh, *        */ self.read_immediate(Register::IXH, bus),
             0x29 => /* add ix, ix       */ self.add_wide_wz(WideRegister::IX, WideRegister::IX),
             0x2A => /* ld ix, (**)      */ self.read_wide_absolute_wz(WideRegister::IX, bus),
             0x2B => /* dec ix           */ self.dec_wide(WideRegister::IX),
@@ -2392,26 +2389,26 @@ impl Cpu {
             0x8D => /* adc a, ixl       */ self.add_carry(Register::IXL, self.flag(Flag::C)),
             0x8E => /* adc a, (ix+*)    */ self.add_carry_index_indirect_wz(WideRegister::IX, self.flag(Flag::C), bus),
 
-            0x94 => /* sub a, ixh       */ self.sub_carry(Register::IXH, false),
-            0x95 => /* sub a, ixl       */ self.sub_carry(Register::IXL, false),
-            0x96 => /* sub a, (ix+*)    */ self.sub_carry_index_indirect_wz(WideRegister::IX, false, bus),
+            0x94 => /* sub ixh          */ self.sub_carry(Register::IXH, false),
+            0x95 => /* sub ixl          */ self.sub_carry(Register::IXL, false),
+            0x96 => /* sub (ix+*)       */ self.sub_carry_index_indirect_wz(WideRegister::IX, false, bus),
             0x9C => /* sbc a, ixh       */ self.sub_carry(Register::IXH, self.flag(Flag::C)),
             0x9D => /* sbc a, ixl       */ self.sub_carry(Register::IXL, self.flag(Flag::C)),
             0x9E => /* sbc a, (ix+*)    */ self.sub_carry_index_indirect_wz(WideRegister::IX, self.flag(Flag::C), bus),
 
-            0xA4 => /* and a, ixh       */ self.and(Register::IXH),
-            0xA5 => /* and a, ixl       */ self.and(Register::IXL),
-            0xA6 => /* and a, (ix+*)    */ self.and_index_indirect_wz(WideRegister::IX, bus),
-            0xAC => /* xor a, ixh       */ self.xor(Register::IXH),
-            0xAD => /* xor a, ixl       */ self.xor(Register::IXL),
-            0xAE => /* xor a, (ix+*)    */ self.xor_index_indirect_wz(WideRegister::IX, bus),
+            0xA4 => /* and ixh          */ self.and(Register::IXH),
+            0xA5 => /* and ixl          */ self.and(Register::IXL),
+            0xA6 => /* and (ix+*)       */ self.and_index_indirect_wz(WideRegister::IX, bus),
+            0xAC => /* xor ixh          */ self.xor(Register::IXH),
+            0xAD => /* xor ixl          */ self.xor(Register::IXL),
+            0xAE => /* xor (ix+*)       */ self.xor_index_indirect_wz(WideRegister::IX, bus),
 
-            0xB4 => /* or a, ixh        */ self.or(Register::IXH),
-            0xB5 => /* or a, ixl        */ self.or(Register::IXL),
-            0xB6 => /* or a, (ix+*)     */ self.or_index_indirect_wz(WideRegister::IX, bus),
-            0xBC => /* cp a, ixh        */ self.compare(Register::IXH),
-            0xBD => /* cp a, ixl        */ self.compare(Register::IXL),
-            0xBE => /* cp a, (ix+*)     */ self.compare_index_indirect_wz(WideRegister::IX, bus),
+            0xB4 => /* or ixh           */ self.or(Register::IXH),
+            0xB5 => /* or ixl           */ self.or(Register::IXL),
+            0xB6 => /* or (ix+*)        */ self.or_index_indirect_wz(WideRegister::IX, bus),
+            0xBC => /* cp ixh           */ self.compare(Register::IXH),
+            0xBD => /* cp ixl           */ self.compare(Register::IXL),
+            0xBE => /* cp (ix+*)        */ self.compare_index_indirect_wz(WideRegister::IX, bus),
 
             0xCB => /*                  */ self.ddcb_prefix(bus),
 
@@ -2502,7 +2499,7 @@ impl Cpu {
             0xA2 => /* ini              */ self.ini(bus),
             0xA3 => /* outi             */ self.outi(bus),
             0xA8 => /* ldd              */ self.ldd(bus),
-            0xA9 => /* cpd              */ self.cpd(bus),
+            0xA9 => /* cpd              */ self.cpdr_wz(bus),
             0xAA => /* ind              */ self.ind(bus),
             0xAB => /* outd             */ self.outd(bus),
 
@@ -2511,7 +2508,7 @@ impl Cpu {
             0xB2 => /* inir             */ self.inir(bus),
             0xB3 => /* otir             */ self.otir(bus),
             0xB8 => /* lddr             */ self.lddr(bus),
-            0xB9 => /* cpdr             */ self.cpdr(bus),
+            0xB9 => /* cpdr             */ self.cpdr_wz(bus),
             0xBA => /* indr             */ self.indr(bus),
             0xBB => /* otdr             */ self.otdr(bus),
 
@@ -2529,10 +2526,11 @@ impl Cpu {
             0x19 => /* add iy, de       */ self.add_wide_wz(WideRegister::IY, WideRegister::DE),
 
             0x21 => /* ld iy, **        */ self.read_wide_immediate(WideRegister::IY, bus),
-            0x22 => /* inc iy           */ self.inc_wide(WideRegister::IY),
-            0x23 => /* inc iyh          */ self.inc_wz(Register::IYH),
-            0x24 => /* dec iyh          */ self.dec_wz(Register::IYH),
-            0x25 => /* ld iyh, *        */ self.read_immediate(Register::IYH, bus),
+            0x22 => /* ld (**), iy      */ self.write_wide_absolute_wz(WideRegister::IY, bus),
+            0x23 => /* inc iy           */ self.inc_wide(WideRegister::IY),
+            0x24 => /* inc iyh          */ self.inc_wz(Register::IYH),
+            0x25 => /* dec iyh          */ self.dec_wz(Register::IYH),
+            0x26 => /* ld iyh, *        */ self.read_immediate(Register::IYH, bus),
             0x29 => /* add iy, iy       */ self.add_wide_wz(WideRegister::IY, WideRegister::IY),
             0x2A => /* ld iy, (**)      */ self.read_wide_absolute_wz(WideRegister::IY, bus),
             0x2B => /* dec iy           */ self.dec_wide(WideRegister::IY),
@@ -2594,26 +2592,26 @@ impl Cpu {
             0x8D => /* adc a, iyl       */ self.add_carry(Register::IYL, self.flag(Flag::C)),
             0x8E => /* adc a, (iy+*)    */ self.add_carry_index_indirect_wz(WideRegister::IY, self.flag(Flag::C), bus),
 
-            0x94 => /* sub a, iyh       */ self.sub_carry(Register::IYH, false),
-            0x95 => /* sub a, iyl       */ self.sub_carry(Register::IYL, false),
-            0x96 => /* sub a, (iy+*)    */ self.sub_carry_index_indirect_wz(WideRegister::IY, false, bus),
+            0x94 => /* sub iyh          */ self.sub_carry(Register::IYH, false),
+            0x95 => /* sub iyl          */ self.sub_carry(Register::IYL, false),
+            0x96 => /* sub (iy+*)       */ self.sub_carry_index_indirect_wz(WideRegister::IY, false, bus),
             0x9C => /* sbc a, iyh       */ self.sub_carry(Register::IYH, self.flag(Flag::C)),
             0x9D => /* sbc a, iyl       */ self.sub_carry(Register::IYL, self.flag(Flag::C)),
             0x9E => /* sbc a, (iy+*)    */ self.sub_carry_index_indirect_wz(WideRegister::IY, self.flag(Flag::C), bus),
 
-            0xA4 => /* and a, iyh       */ self.and(Register::IYH),
-            0xA5 => /* and a, iyl       */ self.and(Register::IYL),
-            0xA6 => /* and a, (iy+*)    */ self.and_index_indirect_wz(WideRegister::IY, bus),
-            0xAC => /* xor a, iyh       */ self.xor(Register::IYH),
-            0xAD => /* xor a, iyl       */ self.xor(Register::IYL),
-            0xAE => /* xor a, (iy+*)    */ self.xor_index_indirect_wz(WideRegister::IY, bus),
+            0xA4 => /* and iyh          */ self.and(Register::IYH),
+            0xA5 => /* and iyl          */ self.and(Register::IYL),
+            0xA6 => /* and (iy+*)       */ self.and_index_indirect_wz(WideRegister::IY, bus),
+            0xAC => /* xor iyh          */ self.xor(Register::IYH),
+            0xAD => /* xor iyl          */ self.xor(Register::IYL),
+            0xAE => /* xor (iy+*)       */ self.xor_index_indirect_wz(WideRegister::IY, bus),
 
-            0xB4 => /* or a, iyh        */ self.or(Register::IYH),
-            0xB5 => /* or a, iyl        */ self.or(Register::IYL),
-            0xB6 => /* or a, (iy+*)     */ self.or_index_indirect_wz(WideRegister::IY, bus),
-            0xBC => /* cp a, iyh        */ self.compare(Register::IYH),
-            0xBD => /* cp a, iyl        */ self.compare(Register::IYL),
-            0xBE => /* cp a, (iy+*)     */ self.compare_index_indirect_wz(WideRegister::IY, bus),
+            0xB4 => /* or iyh           */ self.or(Register::IYH),
+            0xB5 => /* or iyl           */ self.or(Register::IYL),
+            0xB6 => /* or (iy+*)        */ self.or_index_indirect_wz(WideRegister::IY, bus),
+            0xBC => /* cp iyh           */ self.compare(Register::IYH),
+            0xBD => /* cp iyl           */ self.compare(Register::IYL),
+            0xBE => /* cp (iy+*)        */ self.compare_index_indirect_wz(WideRegister::IY, bus),
 
             0xCB => /*                  */ self.fdcb_prefix(bus),
 
@@ -2630,558 +2628,560 @@ impl Cpu {
     }
 
     fn ddcb_prefix(&mut self, bus: &mut impl Bus) -> usize {
+        let offset = self.immediate(bus) as i8 as i16;
         let opcode = self.fetch(bus);
         // assume 4 cycles taken to fetch prefix
         4 + match opcode {
-            0x00 => /* rlc (ix+*), b    */ self.rlc_index_indirect_wz(WideRegister::IX, Some(Register::B), bus),
-            0x01 => /* rlc (ix+*), c    */ self.rlc_index_indirect_wz(WideRegister::IX, Some(Register::C), bus),
-            0x02 => /* rlc (ix+*), d    */ self.rlc_index_indirect_wz(WideRegister::IX, Some(Register::D), bus),
-            0x03 => /* rlc (ix+*), e    */ self.rlc_index_indirect_wz(WideRegister::IX, Some(Register::E), bus),
-            0x04 => /* rlc (ix+*), h    */ self.rlc_index_indirect_wz(WideRegister::IX, Some(Register::H), bus),
-            0x05 => /* rlc (ix+*), l    */ self.rlc_index_indirect_wz(WideRegister::IX, Some(Register::L), bus),
-            0x06 => /* rlc (ix+*)       */ self.rlc_index_indirect_wz(WideRegister::IX, None, bus),
-            0x07 => /* rlc (ix+*), a    */ self.rlc_index_indirect_wz(WideRegister::IX, Some(Register::A), bus),
-            0x08 => /* rrc (ix+*), b    */ self.rrc_index_indirect_wz(WideRegister::IX, Some(Register::B), bus),
-            0x09 => /* rrc (ix+*), c    */ self.rrc_index_indirect_wz(WideRegister::IX, Some(Register::C), bus),
-            0x0A => /* rrc (ix+*), d    */ self.rrc_index_indirect_wz(WideRegister::IX, Some(Register::D), bus),
-            0x0B => /* rrc (ix+*), e    */ self.rrc_index_indirect_wz(WideRegister::IX, Some(Register::E), bus),
-            0x0C => /* rrc (ix+*), h    */ self.rrc_index_indirect_wz(WideRegister::IX, Some(Register::H), bus),
-            0x0D => /* rrc (ix+*), l    */ self.rrc_index_indirect_wz(WideRegister::IX, Some(Register::L), bus),
-            0x0E => /* rrc (ix+*)       */ self.rrc_index_indirect_wz(WideRegister::IX, None, bus),
-            0x0F => /* rrc (ix+*), a    */ self.rrc_index_indirect_wz(WideRegister::IX, Some(Register::A), bus),
+            0x00 => /* rlc (ix+*), b    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
+            0x01 => /* rlc (ix+*), c    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
+            0x02 => /* rlc (ix+*), d    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
+            0x03 => /* rlc (ix+*), e    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::E), bus),
+            0x04 => /* rlc (ix+*), h    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::H), bus),
+            0x05 => /* rlc (ix+*), l    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::L), bus),
+            0x06 => /* rlc (ix+*)       */ self.rlc_index_indirect_wz(offset, WideRegister::IX, None, bus),
+            0x07 => /* rlc (ix+*), a    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::A), bus),
+            0x08 => /* rrc (ix+*), b    */ self.rrc_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
+            0x09 => /* rrc (ix+*), c    */ self.rrc_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
+            0x0A => /* rrc (ix+*), d    */ self.rrc_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
+            0x0B => /* rrc (ix+*), e    */ self.rrc_index_indirect_wz(offset, WideRegister::IX, Some(Register::E), bus),
+            0x0C => /* rrc (ix+*), h    */ self.rrc_index_indirect_wz(offset, WideRegister::IX, Some(Register::H), bus),
+            0x0D => /* rrc (ix+*), l    */ self.rrc_index_indirect_wz(offset, WideRegister::IX, Some(Register::L), bus),
+            0x0E => /* rrc (ix+*)       */ self.rrc_index_indirect_wz(offset, WideRegister::IX, None, bus),
+            0x0F => /* rrc (ix+*), a    */ self.rrc_index_indirect_wz(offset, WideRegister::IX, Some(Register::A), bus),
 
-            0x10 => /* rl (ix+*), b     */ self.rl_index_indirect_wz(WideRegister::IX, Some(Register::B), bus),
-            0x11 => /* rl (ix+*), c     */ self.rl_index_indirect_wz(WideRegister::IX, Some(Register::C), bus),
-            0x12 => /* rl (ix+*), d     */ self.rl_index_indirect_wz(WideRegister::IX, Some(Register::D), bus),
-            0x13 => /* rl (ix+*), e     */ self.rl_index_indirect_wz(WideRegister::IX, Some(Register::E), bus),
-            0x14 => /* rl (ix+*), h     */ self.rl_index_indirect_wz(WideRegister::IX, Some(Register::H), bus),
-            0x15 => /* rl (ix+*), l     */ self.rl_index_indirect_wz(WideRegister::IX, Some(Register::L), bus),
-            0x16 => /* rl (ix+*)        */ self.rl_index_indirect_wz(WideRegister::IX, None, bus),
-            0x17 => /* rl (ix+*), a     */ self.rl_index_indirect_wz(WideRegister::IX, Some(Register::A), bus),
-            0x18 => /* rr (ix+*), b     */ self.rr_index_indirect_wz(WideRegister::IX, Some(Register::B), bus),
-            0x19 => /* rr (ix+*), c     */ self.rr_index_indirect_wz(WideRegister::IX, Some(Register::C), bus),
-            0x1A => /* rr (ix+*), d     */ self.rr_index_indirect_wz(WideRegister::IX, Some(Register::D), bus),
-            0x1B => /* rr (ix+*), e     */ self.rr_index_indirect_wz(WideRegister::IX, Some(Register::E), bus),
-            0x1C => /* rr (ix+*), h     */ self.rr_index_indirect_wz(WideRegister::IX, Some(Register::H), bus),
-            0x1D => /* rr (ix+*), l     */ self.rr_index_indirect_wz(WideRegister::IX, Some(Register::L), bus),
-            0x1E => /* rr (ix+*)        */ self.rr_index_indirect_wz(WideRegister::IX, None, bus),
-            0x1F => /* rr (ix+*), a     */ self.rr_index_indirect_wz(WideRegister::IX, Some(Register::A), bus),
+            0x10 => /* rl (ix+*), b     */ self.rl_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
+            0x11 => /* rl (ix+*), c     */ self.rl_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
+            0x12 => /* rl (ix+*), d     */ self.rl_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
+            0x13 => /* rl (ix+*), e     */ self.rl_index_indirect_wz(offset, WideRegister::IX, Some(Register::E), bus),
+            0x14 => /* rl (ix+*), h     */ self.rl_index_indirect_wz(offset, WideRegister::IX, Some(Register::H), bus),
+            0x15 => /* rl (ix+*), l     */ self.rl_index_indirect_wz(offset, WideRegister::IX, Some(Register::L), bus),
+            0x16 => /* rl (ix+*)        */ self.rl_index_indirect_wz(offset, WideRegister::IX, None, bus),
+            0x17 => /* rl (ix+*), a     */ self.rl_index_indirect_wz(offset, WideRegister::IX, Some(Register::A), bus),
+            0x18 => /* rr (ix+*), b     */ self.rr_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
+            0x19 => /* rr (ix+*), c     */ self.rr_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
+            0x1A => /* rr (ix+*), d     */ self.rr_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
+            0x1B => /* rr (ix+*), e     */ self.rr_index_indirect_wz(offset, WideRegister::IX, Some(Register::E), bus),
+            0x1C => /* rr (ix+*), h     */ self.rr_index_indirect_wz(offset, WideRegister::IX, Some(Register::H), bus),
+            0x1D => /* rr (ix+*), l     */ self.rr_index_indirect_wz(offset, WideRegister::IX, Some(Register::L), bus),
+            0x1E => /* rr (ix+*)        */ self.rr_index_indirect_wz(offset, WideRegister::IX, None, bus),
+            0x1F => /* rr (ix+*), a     */ self.rr_index_indirect_wz(offset, WideRegister::IX, Some(Register::A), bus),
 
-            0x20 => /* sla (ix+*), b    */ self.sla_index_indirect_wz(WideRegister::IX, Some(Register::B), bus),
-            0x21 => /* sla (ix+*), c    */ self.sla_index_indirect_wz(WideRegister::IX, Some(Register::C), bus),
-            0x22 => /* sla (ix+*), d    */ self.sla_index_indirect_wz(WideRegister::IX, Some(Register::D), bus),
-            0x23 => /* sla (ix+*), e    */ self.sla_index_indirect_wz(WideRegister::IX, Some(Register::E), bus),
-            0x24 => /* sla (ix+*), h    */ self.sla_index_indirect_wz(WideRegister::IX, Some(Register::H), bus),
-            0x25 => /* sla (ix+*), l    */ self.sla_index_indirect_wz(WideRegister::IX, Some(Register::L), bus),
-            0x26 => /* sla (ix+*)       */ self.sla_index_indirect_wz(WideRegister::IX, None, bus),
-            0x27 => /* sla (ix+*), a    */ self.sla_index_indirect_wz(WideRegister::IX, Some(Register::A), bus),
-            0x28 => /* sra (ix+*), b    */ self.sra_index_indirect_wz(WideRegister::IX, Some(Register::B), bus),
-            0x29 => /* sra (ix+*), c    */ self.sra_index_indirect_wz(WideRegister::IX, Some(Register::C), bus),
-            0x2A => /* sra (ix+*), d    */ self.sra_index_indirect_wz(WideRegister::IX, Some(Register::D), bus),
-            0x2B => /* sra (ix+*), e    */ self.sra_index_indirect_wz(WideRegister::IX, Some(Register::E), bus),
-            0x2C => /* sra (ix+*), h    */ self.sra_index_indirect_wz(WideRegister::IX, Some(Register::H), bus),
-            0x2D => /* sra (ix+*), l    */ self.sra_index_indirect_wz(WideRegister::IX, Some(Register::L), bus),
-            0x2E => /* sra (ix+*)       */ self.sra_index_indirect_wz(WideRegister::IX, None, bus),
-            0x2F => /* sra (ix+*), a    */ self.sra_index_indirect_wz(WideRegister::IX, Some(Register::A), bus),
+            0x20 => /* sla (ix+*), b    */ self.sla_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
+            0x21 => /* sla (ix+*), c    */ self.sla_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
+            0x22 => /* sla (ix+*), d    */ self.sla_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
+            0x23 => /* sla (ix+*), e    */ self.sla_index_indirect_wz(offset, WideRegister::IX, Some(Register::E), bus),
+            0x24 => /* sla (ix+*), h    */ self.sla_index_indirect_wz(offset, WideRegister::IX, Some(Register::H), bus),
+            0x25 => /* sla (ix+*), l    */ self.sla_index_indirect_wz(offset, WideRegister::IX, Some(Register::L), bus),
+            0x26 => /* sla (ix+*)       */ self.sla_index_indirect_wz(offset, WideRegister::IX, None, bus),
+            0x27 => /* sla (ix+*), a    */ self.sla_index_indirect_wz(offset, WideRegister::IX, Some(Register::A), bus),
+            0x28 => /* sra (ix+*), b    */ self.sra_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
+            0x29 => /* sra (ix+*), c    */ self.sra_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
+            0x2A => /* sra (ix+*), d    */ self.sra_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
+            0x2B => /* sra (ix+*), e    */ self.sra_index_indirect_wz(offset, WideRegister::IX, Some(Register::E), bus),
+            0x2C => /* sra (ix+*), h    */ self.sra_index_indirect_wz(offset, WideRegister::IX, Some(Register::H), bus),
+            0x2D => /* sra (ix+*), l    */ self.sra_index_indirect_wz(offset, WideRegister::IX, Some(Register::L), bus),
+            0x2E => /* sra (ix+*)       */ self.sra_index_indirect_wz(offset, WideRegister::IX, None, bus),
+            0x2F => /* sra (ix+*), a    */ self.sra_index_indirect_wz(offset, WideRegister::IX, Some(Register::A), bus),
 
-            0x30 => /* sll (ix+*), b    */ self.sll_index_indirect_wz(WideRegister::IX, Some(Register::B), bus),
-            0x31 => /* sll (ix+*), c    */ self.sll_index_indirect_wz(WideRegister::IX, Some(Register::C), bus),
-            0x32 => /* sll (ix+*), d    */ self.sll_index_indirect_wz(WideRegister::IX, Some(Register::D), bus),
-            0x33 => /* sll (ix+*), e    */ self.sll_index_indirect_wz(WideRegister::IX, Some(Register::E), bus),
-            0x34 => /* sll (ix+*), h    */ self.sll_index_indirect_wz(WideRegister::IX, Some(Register::H), bus),
-            0x35 => /* sll (ix+*), l    */ self.sll_index_indirect_wz(WideRegister::IX, Some(Register::L), bus),
-            0x36 => /* sll (ix+*)       */ self.sll_index_indirect_wz(WideRegister::IX, None, bus),
-            0x37 => /* sll (ix+*), a    */ self.sll_index_indirect_wz(WideRegister::IX, Some(Register::A), bus),
-            0x38 => /* srl (ix+*), b    */ self.srl_index_indirect_wz(WideRegister::IX, Some(Register::B), bus),
-            0x39 => /* srl (ix+*), c    */ self.srl_index_indirect_wz(WideRegister::IX, Some(Register::C), bus),
-            0x3A => /* srl (ix+*), d    */ self.srl_index_indirect_wz(WideRegister::IX, Some(Register::D), bus),
-            0x3B => /* srl (ix+*), e    */ self.srl_index_indirect_wz(WideRegister::IX, Some(Register::E), bus),
-            0x3C => /* srl (ix+*), h    */ self.srl_index_indirect_wz(WideRegister::IX, Some(Register::H), bus),
-            0x3D => /* srl (ix+*), l    */ self.srl_index_indirect_wz(WideRegister::IX, Some(Register::L), bus),
-            0x3E => /* srl (ix+*)       */ self.srl_index_indirect_wz(WideRegister::IX, None, bus),
-            0x3F => /* srl (ix+*), a    */ self.srl_index_indirect_wz(WideRegister::IX, Some(Register::A), bus),
+            0x30 => /* sll (ix+*), b    */ self.sll_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
+            0x31 => /* sll (ix+*), c    */ self.sll_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
+            0x32 => /* sll (ix+*), d    */ self.sll_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
+            0x33 => /* sll (ix+*), e    */ self.sll_index_indirect_wz(offset, WideRegister::IX, Some(Register::E), bus),
+            0x34 => /* sll (ix+*), h    */ self.sll_index_indirect_wz(offset, WideRegister::IX, Some(Register::H), bus),
+            0x35 => /* sll (ix+*), l    */ self.sll_index_indirect_wz(offset, WideRegister::IX, Some(Register::L), bus),
+            0x36 => /* sll (ix+*)       */ self.sll_index_indirect_wz(offset, WideRegister::IX, None, bus),
+            0x37 => /* sll (ix+*), a    */ self.sll_index_indirect_wz(offset, WideRegister::IX, Some(Register::A), bus),
+            0x38 => /* srl (ix+*), b    */ self.srl_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
+            0x39 => /* srl (ix+*), c    */ self.srl_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
+            0x3A => /* srl (ix+*), d    */ self.srl_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
+            0x3B => /* srl (ix+*), e    */ self.srl_index_indirect_wz(offset, WideRegister::IX, Some(Register::E), bus),
+            0x3C => /* srl (ix+*), h    */ self.srl_index_indirect_wz(offset, WideRegister::IX, Some(Register::H), bus),
+            0x3D => /* srl (ix+*), l    */ self.srl_index_indirect_wz(offset, WideRegister::IX, Some(Register::L), bus),
+            0x3E => /* srl (ix+*)       */ self.srl_index_indirect_wz(offset, WideRegister::IX, None, bus),
+            0x3F => /* srl (ix+*), a    */ self.srl_index_indirect_wz(offset, WideRegister::IX, Some(Register::A), bus),
 
-            0x40 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IX, bus),
-            0x41 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IX, bus),
-            0x42 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IX, bus),
-            0x43 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IX, bus),
-            0x44 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IX, bus),
-            0x45 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IX, bus),
-            0x46 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IX, bus),
-            0x47 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IX, bus),
-            0x48 => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IX, bus),
-            0x49 => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IX, bus),
-            0x4A => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IX, bus),
-            0x4B => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IX, bus),
-            0x4C => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IX, bus),
-            0x4D => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IX, bus),
-            0x4E => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IX, bus),
-            0x4F => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IX, bus),
+            0x40 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IX, bus),
+            0x41 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IX, bus),
+            0x42 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IX, bus),
+            0x43 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IX, bus),
+            0x44 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IX, bus),
+            0x45 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IX, bus),
+            0x46 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IX, bus),
+            0x47 => /* bit 0, (ix+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IX, bus),
+            0x48 => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IX, bus),
+            0x49 => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IX, bus),
+            0x4A => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IX, bus),
+            0x4B => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IX, bus),
+            0x4C => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IX, bus),
+            0x4D => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IX, bus),
+            0x4E => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IX, bus),
+            0x4F => /* bit 1, (ix+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IX, bus),
 
-            0x50 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IX, bus),
-            0x51 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IX, bus),
-            0x52 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IX, bus),
-            0x53 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IX, bus),
-            0x54 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IX, bus),
-            0x55 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IX, bus),
-            0x56 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IX, bus),
-            0x57 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IX, bus),
-            0x58 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IX, bus),
-            0x59 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IX, bus),
-            0x5A => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IX, bus),
-            0x5B => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IX, bus),
-            0x5C => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IX, bus),
-            0x5D => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IX, bus),
-            0x5E => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IX, bus),
-            0x5F => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IX, bus),
+            0x50 => /* bit 2, (ix+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IX, bus),
+            0x51 => /* bit 2, (ix+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IX, bus),
+            0x52 => /* bit 2, (ix+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IX, bus),
+            0x53 => /* bit 2, (ix+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IX, bus),
+            0x54 => /* bit 2, (ix+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IX, bus),
+            0x55 => /* bit 2, (ix+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IX, bus),
+            0x56 => /* bit 2, (ix+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IX, bus),
+            0x57 => /* bit 2, (ix+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IX, bus),
+            0x58 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IX, bus),
+            0x59 => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IX, bus),
+            0x5A => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IX, bus),
+            0x5B => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IX, bus),
+            0x5C => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IX, bus),
+            0x5D => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IX, bus),
+            0x5E => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IX, bus),
+            0x5F => /* bit 3, (ix+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IX, bus),
 
-            0x60 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IX, bus),
-            0x61 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IX, bus),
-            0x62 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IX, bus),
-            0x63 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IX, bus),
-            0x64 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IX, bus),
-            0x65 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IX, bus),
-            0x66 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IX, bus),
-            0x67 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IX, bus),
-            0x68 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IX, bus),
-            0x69 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IX, bus),
-            0x6A => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IX, bus),
-            0x6B => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IX, bus),
-            0x6C => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IX, bus),
-            0x6D => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IX, bus),
-            0x6E => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IX, bus),
-            0x6F => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IX, bus),
+            0x60 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IX, bus),
+            0x61 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IX, bus),
+            0x62 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IX, bus),
+            0x63 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IX, bus),
+            0x64 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IX, bus),
+            0x65 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IX, bus),
+            0x66 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IX, bus),
+            0x67 => /* bit 4, (ix+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IX, bus),
+            0x68 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IX, bus),
+            0x69 => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IX, bus),
+            0x6A => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IX, bus),
+            0x6B => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IX, bus),
+            0x6C => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IX, bus),
+            0x6D => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IX, bus),
+            0x6E => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IX, bus),
+            0x6F => /* bit 5, (ix+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IX, bus),
 
-            0x70 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IX, bus),
-            0x71 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IX, bus),
-            0x72 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IX, bus),
-            0x73 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IX, bus),
-            0x74 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IX, bus),
-            0x75 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IX, bus),
-            0x76 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IX, bus),
-            0x77 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IX, bus),
-            0x78 => /* bit 8, (ix+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IX, bus),
-            0x79 => /* bit 8, (ix+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IX, bus),
-            0x7A => /* bit 8, (ix+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IX, bus),
-            0x7B => /* bit 8, (ix+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IX, bus),
-            0x7C => /* bit 8, (ix+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IX, bus),
-            0x7D => /* bit 8, (ix+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IX, bus),
-            0x7E => /* bit 8, (ix+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IX, bus),
-            0x7F => /* bit 8, (ix+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IX, bus),
+            0x70 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IX, bus),
+            0x71 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IX, bus),
+            0x72 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IX, bus),
+            0x73 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IX, bus),
+            0x74 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IX, bus),
+            0x75 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IX, bus),
+            0x76 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IX, bus),
+            0x77 => /* bit 6, (ix+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IX, bus),
+            0x78 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IX, bus),
+            0x79 => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IX, bus),
+            0x7A => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IX, bus),
+            0x7B => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IX, bus),
+            0x7C => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IX, bus),
+            0x7D => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IX, bus),
+            0x7E => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IX, bus),
+            0x7F => /* bit 7, (ix+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IX, bus),
 
-            0x80 => /* res 0, (ix+*), b */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::B), bus),
-            0x81 => /* res 0, (ix+*), c */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::C), bus),
-            0x82 => /* res 0, (ix+*), d */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::D), bus),
-            0x83 => /* res 0, (ix+*), e */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::E), bus),
-            0x84 => /* res 0, (ix+*), h */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::H), bus),
-            0x85 => /* res 0, (ix+*), l */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::L), bus),
-            0x86 => /* res 0, (ix+*)    */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IX, None, bus),
-            0x87 => /* res 0, (ix+*), a */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::A), bus),
-            0x88 => /* res 1, (ix+*), b */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::B), bus),
-            0x89 => /* res 1, (ix+*), c */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::C), bus),
-            0x8A => /* res 1, (ix+*), d */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::D), bus),
-            0x8B => /* res 1, (ix+*), e */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::E), bus),
-            0x8C => /* res 1, (ix+*), h */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::H), bus),
-            0x8D => /* res 1, (ix+*), l */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::L), bus),
-            0x8E => /* res 1, (ix+*)    */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IX, None, bus),
-            0x8F => /* res 1, (ix+*), a */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::A), bus),
+            0x80 => /* res 0, (ix+*), b */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::B), bus),
+            0x81 => /* res 0, (ix+*), c */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::C), bus),
+            0x82 => /* res 0, (ix+*), d */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::D), bus),
+            0x83 => /* res 0, (ix+*), e */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::E), bus),
+            0x84 => /* res 0, (ix+*), h */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::H), bus),
+            0x85 => /* res 0, (ix+*), l */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::L), bus),
+            0x86 => /* res 0, (ix+*)    */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IX, None, bus),
+            0x87 => /* res 0, (ix+*), a */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::A), bus),
+            0x88 => /* res 1, (ix+*), b */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::B), bus),
+            0x89 => /* res 1, (ix+*), c */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::C), bus),
+            0x8A => /* res 1, (ix+*), d */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::D), bus),
+            0x8B => /* res 1, (ix+*), e */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::E), bus),
+            0x8C => /* res 1, (ix+*), h */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::H), bus),
+            0x8D => /* res 1, (ix+*), l */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::L), bus),
+            0x8E => /* res 1, (ix+*)    */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IX, None, bus),
+            0x8F => /* res 1, (ix+*), a */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::A), bus),
 
-            0x90 => /* res 2, (ix+*), b */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::B), bus),
-            0x91 => /* res 2, (ix+*), c */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::C), bus),
-            0x92 => /* res 2, (ix+*), d */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::D), bus),
-            0x93 => /* res 2, (ix+*), e */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::E), bus),
-            0x94 => /* res 2, (ix+*), h */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::H), bus),
-            0x95 => /* res 2, (ix+*), l */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::L), bus),
-            0x96 => /* res 2, (ix+*)    */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IX, None, bus),
-            0x97 => /* res 2, (ix+*), a */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::A), bus),
-            0x98 => /* res 3, (ix+*), b */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::B), bus),
-            0x99 => /* res 3, (ix+*), c */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::C), bus),
-            0x9A => /* res 3, (ix+*), d */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::D), bus),
-            0x9B => /* res 3, (ix+*), e */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::E), bus),
-            0x9C => /* res 3, (ix+*), h */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::H), bus),
-            0x9D => /* res 3, (ix+*), l */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::L), bus),
-            0x9E => /* res 3, (ix+*)    */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IX, None, bus),
-            0x9F => /* res 3, (ix+*), a */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::A), bus),
+            0x90 => /* res 2, (ix+*), b */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::B), bus),
+            0x91 => /* res 2, (ix+*), c */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::C), bus),
+            0x92 => /* res 2, (ix+*), d */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::D), bus),
+            0x93 => /* res 2, (ix+*), e */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::E), bus),
+            0x94 => /* res 2, (ix+*), h */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::H), bus),
+            0x95 => /* res 2, (ix+*), l */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::L), bus),
+            0x96 => /* res 2, (ix+*)    */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IX, None, bus),
+            0x97 => /* res 2, (ix+*), a */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::A), bus),
+            0x98 => /* res 3, (ix+*), b */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::B), bus),
+            0x99 => /* res 3, (ix+*), c */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::C), bus),
+            0x9A => /* res 3, (ix+*), d */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::D), bus),
+            0x9B => /* res 3, (ix+*), e */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::E), bus),
+            0x9C => /* res 3, (ix+*), h */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::H), bus),
+            0x9D => /* res 3, (ix+*), l */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::L), bus),
+            0x9E => /* res 3, (ix+*)    */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IX, None, bus),
+            0x9F => /* res 3, (ix+*), a */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::A), bus),
 
-            0xA0 => /* res 4, (ix+*), b */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::B), bus),
-            0xA1 => /* res 4, (ix+*), c */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::C), bus),
-            0xA2 => /* res 4, (ix+*), d */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::D), bus),
-            0xA3 => /* res 4, (ix+*), e */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::E), bus),
-            0xA4 => /* res 4, (ix+*), h */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::H), bus),
-            0xA5 => /* res 4, (ix+*), l */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::L), bus),
-            0xA6 => /* res 4, (ix+*)    */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IX, None, bus),
-            0xA7 => /* res 4, (ix+*), a */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::A), bus),
-            0xA8 => /* res 5, (ix+*), b */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::B), bus),
-            0xA9 => /* res 5, (ix+*), c */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::C), bus),
-            0xAA => /* res 5, (ix+*), d */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::D), bus),
-            0xAB => /* res 5, (ix+*), e */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::E), bus),
-            0xAC => /* res 5, (ix+*), h */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::H), bus),
-            0xAD => /* res 5, (ix+*), l */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::L), bus),
-            0xAE => /* res 5, (ix+*)    */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IX, None, bus),
-            0xAF => /* res 5, (ix+*), a */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::A), bus),
+            0xA0 => /* res 4, (ix+*), b */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::B), bus),
+            0xA1 => /* res 4, (ix+*), c */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::C), bus),
+            0xA2 => /* res 4, (ix+*), d */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::D), bus),
+            0xA3 => /* res 4, (ix+*), e */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::E), bus),
+            0xA4 => /* res 4, (ix+*), h */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::H), bus),
+            0xA5 => /* res 4, (ix+*), l */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::L), bus),
+            0xA6 => /* res 4, (ix+*)    */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IX, None, bus),
+            0xA7 => /* res 4, (ix+*), a */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::A), bus),
+            0xA8 => /* res 5, (ix+*), b */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::B), bus),
+            0xA9 => /* res 5, (ix+*), c */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::C), bus),
+            0xAA => /* res 5, (ix+*), d */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::D), bus),
+            0xAB => /* res 5, (ix+*), e */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::E), bus),
+            0xAC => /* res 5, (ix+*), h */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::H), bus),
+            0xAD => /* res 5, (ix+*), l */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::L), bus),
+            0xAE => /* res 5, (ix+*)    */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IX, None, bus),
+            0xAF => /* res 5, (ix+*), a */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::A), bus),
 
-            0xB0 => /* res 6, (ix+*), b */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::B), bus),
-            0xB1 => /* res 6, (ix+*), c */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::C), bus),
-            0xB2 => /* res 6, (ix+*), d */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::D), bus),
-            0xB3 => /* res 6, (ix+*), e */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::E), bus),
-            0xB4 => /* res 6, (ix+*), h */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::H), bus),
-            0xB5 => /* res 6, (ix+*), l */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::L), bus),
-            0xB6 => /* res 6, (ix+*)    */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IX, None, bus),
-            0xB7 => /* res 6, (ix+*), a */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::A), bus),
-            0xB8 => /* res 7, (ix+*), b */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::B), bus),
-            0xB9 => /* res 7, (ix+*), c */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::C), bus),
-            0xBA => /* res 7, (ix+*), d */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::D), bus),
-            0xBB => /* res 7, (ix+*), e */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::E), bus),
-            0xBC => /* res 7, (ix+*), h */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::H), bus),
-            0xBD => /* res 7, (ix+*), l */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::L), bus),
-            0xBE => /* res 7, (ix+*)    */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IX, None, bus),
-            0xBF => /* res 7, (ix+*), a */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::A), bus),
+            0xB0 => /* res 6, (ix+*), b */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::B), bus),
+            0xB1 => /* res 6, (ix+*), c */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::C), bus),
+            0xB2 => /* res 6, (ix+*), d */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::D), bus),
+            0xB3 => /* res 6, (ix+*), e */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::E), bus),
+            0xB4 => /* res 6, (ix+*), h */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::H), bus),
+            0xB5 => /* res 6, (ix+*), l */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::L), bus),
+            0xB6 => /* res 6, (ix+*)    */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IX, None, bus),
+            0xB7 => /* res 6, (ix+*), a */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::A), bus),
+            0xB8 => /* res 7, (ix+*), b */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::B), bus),
+            0xB9 => /* res 7, (ix+*), c */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::C), bus),
+            0xBA => /* res 7, (ix+*), d */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::D), bus),
+            0xBB => /* res 7, (ix+*), e */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::E), bus),
+            0xBC => /* res 7, (ix+*), h */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::H), bus),
+            0xBD => /* res 7, (ix+*), l */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::L), bus),
+            0xBE => /* res 7, (ix+*)    */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IX, None, bus),
+            0xBF => /* res 7, (ix+*), a */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::A), bus),
 
-            0xC0 => /* set 0, (ix+*), b */ self.set_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::B), bus),
-            0xC1 => /* set 0, (ix+*), c */ self.set_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::C), bus),
-            0xC2 => /* set 0, (ix+*), d */ self.set_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::D), bus),
-            0xC3 => /* set 0, (ix+*), e */ self.set_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::E), bus),
-            0xC4 => /* set 0, (ix+*), h */ self.set_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::H), bus),
-            0xC5 => /* set 0, (ix+*), l */ self.set_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::L), bus),
-            0xC6 => /* set 0, (ix+*)    */ self.set_bit_index_indirect_wz(0x01, WideRegister::IX, None, bus),
-            0xC7 => /* set 0, (ix+*), a */ self.set_bit_index_indirect_wz(0x01, WideRegister::IX, Some(Register::A), bus),
-            0xC8 => /* set 1, (ix+*), b */ self.set_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::B), bus),
-            0xC9 => /* set 1, (ix+*), c */ self.set_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::C), bus),
-            0xCA => /* set 1, (ix+*), d */ self.set_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::D), bus),
-            0xCB => /* set 1, (ix+*), e */ self.set_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::E), bus),
-            0xCC => /* set 1, (ix+*), h */ self.set_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::H), bus),
-            0xCD => /* set 1, (ix+*), l */ self.set_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::L), bus),
-            0xCE => /* set 1, (ix+*)    */ self.set_bit_index_indirect_wz(0x02, WideRegister::IX, None, bus),
-            0xCF => /* set 1, (ix+*), a */ self.set_bit_index_indirect_wz(0x02, WideRegister::IX, Some(Register::A), bus),
+            0xC0 => /* set 0, (ix+*), b */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::B), bus),
+            0xC1 => /* set 0, (ix+*), c */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::C), bus),
+            0xC2 => /* set 0, (ix+*), d */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::D), bus),
+            0xC3 => /* set 0, (ix+*), e */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::E), bus),
+            0xC4 => /* set 0, (ix+*), h */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::H), bus),
+            0xC5 => /* set 0, (ix+*), l */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::L), bus),
+            0xC6 => /* set 0, (ix+*)    */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IX, None, bus),
+            0xC7 => /* set 0, (ix+*), a */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IX, Some(Register::A), bus),
+            0xC8 => /* set 1, (ix+*), b */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::B), bus),
+            0xC9 => /* set 1, (ix+*), c */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::C), bus),
+            0xCA => /* set 1, (ix+*), d */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::D), bus),
+            0xCB => /* set 1, (ix+*), e */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::E), bus),
+            0xCC => /* set 1, (ix+*), h */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::H), bus),
+            0xCD => /* set 1, (ix+*), l */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::L), bus),
+            0xCE => /* set 1, (ix+*)    */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IX, None, bus),
+            0xCF => /* set 1, (ix+*), a */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IX, Some(Register::A), bus),
 
-            0xD0 => /* set 2, (ix+*), b */ self.set_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::B), bus),
-            0xD1 => /* set 2, (ix+*), c */ self.set_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::C), bus),
-            0xD2 => /* set 2, (ix+*), d */ self.set_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::D), bus),
-            0xD3 => /* set 2, (ix+*), e */ self.set_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::E), bus),
-            0xD4 => /* set 2, (ix+*), h */ self.set_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::H), bus),
-            0xD5 => /* set 2, (ix+*), l */ self.set_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::L), bus),
-            0xD6 => /* set 2, (ix+*)    */ self.set_bit_index_indirect_wz(0x04, WideRegister::IX, None, bus),
-            0xD7 => /* set 2, (ix+*), a */ self.set_bit_index_indirect_wz(0x04, WideRegister::IX, Some(Register::A), bus),
-            0xD8 => /* set 3, (ix+*), b */ self.set_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::B), bus),
-            0xD9 => /* set 3, (ix+*), c */ self.set_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::C), bus),
-            0xDA => /* set 3, (ix+*), d */ self.set_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::D), bus),
-            0xDB => /* set 3, (ix+*), e */ self.set_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::E), bus),
-            0xDC => /* set 3, (ix+*), h */ self.set_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::H), bus),
-            0xDD => /* set 3, (ix+*), l */ self.set_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::L), bus),
-            0xDE => /* set 3, (ix+*)    */ self.set_bit_index_indirect_wz(0x08, WideRegister::IX, None, bus),
-            0xDF => /* set 3, (ix+*), a */ self.set_bit_index_indirect_wz(0x08, WideRegister::IX, Some(Register::A), bus),
+            0xD0 => /* set 2, (ix+*), b */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::B), bus),
+            0xD1 => /* set 2, (ix+*), c */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::C), bus),
+            0xD2 => /* set 2, (ix+*), d */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::D), bus),
+            0xD3 => /* set 2, (ix+*), e */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::E), bus),
+            0xD4 => /* set 2, (ix+*), h */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::H), bus),
+            0xD5 => /* set 2, (ix+*), l */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::L), bus),
+            0xD6 => /* set 2, (ix+*)    */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IX, None, bus),
+            0xD7 => /* set 2, (ix+*), a */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IX, Some(Register::A), bus),
+            0xD8 => /* set 3, (ix+*), b */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::B), bus),
+            0xD9 => /* set 3, (ix+*), c */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::C), bus),
+            0xDA => /* set 3, (ix+*), d */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::D), bus),
+            0xDB => /* set 3, (ix+*), e */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::E), bus),
+            0xDC => /* set 3, (ix+*), h */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::H), bus),
+            0xDD => /* set 3, (ix+*), l */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::L), bus),
+            0xDE => /* set 3, (ix+*)    */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IX, None, bus),
+            0xDF => /* set 3, (ix+*), a */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IX, Some(Register::A), bus),
 
-            0xE0 => /* set 4, (ix+*), b */ self.set_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::B), bus),
-            0xE1 => /* set 4, (ix+*), c */ self.set_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::C), bus),
-            0xE2 => /* set 4, (ix+*), d */ self.set_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::D), bus),
-            0xE3 => /* set 4, (ix+*), e */ self.set_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::E), bus),
-            0xE4 => /* set 4, (ix+*), h */ self.set_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::H), bus),
-            0xE5 => /* set 4, (ix+*), l */ self.set_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::L), bus),
-            0xE6 => /* set 4, (ix+*)    */ self.set_bit_index_indirect_wz(0x10, WideRegister::IX, None, bus),
-            0xE7 => /* set 4, (ix+*), a */ self.set_bit_index_indirect_wz(0x10, WideRegister::IX, Some(Register::A), bus),
-            0xE8 => /* set 5, (ix+*), b */ self.set_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::B), bus),
-            0xE9 => /* set 5, (ix+*), c */ self.set_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::C), bus),
-            0xEA => /* set 5, (ix+*), d */ self.set_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::D), bus),
-            0xEB => /* set 5, (ix+*), e */ self.set_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::E), bus),
-            0xEC => /* set 5, (ix+*), h */ self.set_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::H), bus),
-            0xED => /* set 5, (ix+*), l */ self.set_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::L), bus),
-            0xEE => /* set 5, (ix+*)    */ self.set_bit_index_indirect_wz(0x20, WideRegister::IX, None, bus),
-            0xEF => /* set 5, (ix+*), a */ self.set_bit_index_indirect_wz(0x20, WideRegister::IX, Some(Register::A), bus),
+            0xE0 => /* set 4, (ix+*), b */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::B), bus),
+            0xE1 => /* set 4, (ix+*), c */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::C), bus),
+            0xE2 => /* set 4, (ix+*), d */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::D), bus),
+            0xE3 => /* set 4, (ix+*), e */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::E), bus),
+            0xE4 => /* set 4, (ix+*), h */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::H), bus),
+            0xE5 => /* set 4, (ix+*), l */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::L), bus),
+            0xE6 => /* set 4, (ix+*)    */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IX, None, bus),
+            0xE7 => /* set 4, (ix+*), a */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IX, Some(Register::A), bus),
+            0xE8 => /* set 5, (ix+*), b */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::B), bus),
+            0xE9 => /* set 5, (ix+*), c */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::C), bus),
+            0xEA => /* set 5, (ix+*), d */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::D), bus),
+            0xEB => /* set 5, (ix+*), e */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::E), bus),
+            0xEC => /* set 5, (ix+*), h */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::H), bus),
+            0xED => /* set 5, (ix+*), l */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::L), bus),
+            0xEE => /* set 5, (ix+*)    */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IX, None, bus),
+            0xEF => /* set 5, (ix+*), a */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IX, Some(Register::A), bus),
 
-            0xF0 => /* set 6, (ix+*), b */ self.set_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::B), bus),
-            0xF1 => /* set 6, (ix+*), c */ self.set_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::C), bus),
-            0xF2 => /* set 6, (ix+*), d */ self.set_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::D), bus),
-            0xF3 => /* set 6, (ix+*), e */ self.set_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::E), bus),
-            0xF4 => /* set 6, (ix+*), h */ self.set_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::H), bus),
-            0xF5 => /* set 6, (ix+*), l */ self.set_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::L), bus),
-            0xF6 => /* set 6, (ix+*)    */ self.set_bit_index_indirect_wz(0x40, WideRegister::IX, None, bus),
-            0xF7 => /* set 6, (ix+*), a */ self.set_bit_index_indirect_wz(0x40, WideRegister::IX, Some(Register::A), bus),
-            0xF8 => /* set 7, (ix+*), b */ self.set_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::B), bus),
-            0xF9 => /* set 7, (ix+*), c */ self.set_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::C), bus),
-            0xFA => /* set 7, (ix+*), d */ self.set_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::D), bus),
-            0xFB => /* set 7, (ix+*), e */ self.set_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::E), bus),
-            0xFC => /* set 7, (ix+*), h */ self.set_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::H), bus),
-            0xFD => /* set 7, (ix+*), l */ self.set_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::L), bus),
-            0xFE => /* set 7, (ix+*)    */ self.set_bit_index_indirect_wz(0x80, WideRegister::IX, None, bus),
-            0xFF => /* set 7, (ix+*), a */ self.set_bit_index_indirect_wz(0x80, WideRegister::IX, Some(Register::A), bus),
+            0xF0 => /* set 6, (ix+*), b */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::B), bus),
+            0xF1 => /* set 6, (ix+*), c */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::C), bus),
+            0xF2 => /* set 6, (ix+*), d */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::D), bus),
+            0xF3 => /* set 6, (ix+*), e */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::E), bus),
+            0xF4 => /* set 6, (ix+*), h */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::H), bus),
+            0xF5 => /* set 6, (ix+*), l */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::L), bus),
+            0xF6 => /* set 6, (ix+*)    */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IX, None, bus),
+            0xF7 => /* set 6, (ix+*), a */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IX, Some(Register::A), bus),
+            0xF8 => /* set 7, (ix+*), b */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::B), bus),
+            0xF9 => /* set 7, (ix+*), c */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::C), bus),
+            0xFA => /* set 7, (ix+*), d */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::D), bus),
+            0xFB => /* set 7, (ix+*), e */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::E), bus),
+            0xFC => /* set 7, (ix+*), h */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::H), bus),
+            0xFD => /* set 7, (ix+*), l */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::L), bus),
+            0xFE => /* set 7, (ix+*)    */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, None, bus),
+            0xFF => /* set 7, (ix+*), a */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::A), bus),
         }
     }
 
     fn fdcb_prefix(&mut self, bus: &mut impl Bus) -> usize {
+        let offset = self.immediate(bus) as i8 as i16;
         let opcode = self.fetch(bus);
         // assume 4 cycles taken to fetch prefix
         4 + match opcode {
-            0x00 => /* rlc (iy+*), b    */ self.rlc_index_indirect_wz(WideRegister::IY, Some(Register::B), bus),
-            0x01 => /* rlc (iy+*), c    */ self.rlc_index_indirect_wz(WideRegister::IY, Some(Register::C), bus),
-            0x02 => /* rlc (iy+*), d    */ self.rlc_index_indirect_wz(WideRegister::IY, Some(Register::D), bus),
-            0x03 => /* rlc (iy+*), e    */ self.rlc_index_indirect_wz(WideRegister::IY, Some(Register::E), bus),
-            0x04 => /* rlc (iy+*), h    */ self.rlc_index_indirect_wz(WideRegister::IY, Some(Register::H), bus),
-            0x05 => /* rlc (iy+*), l    */ self.rlc_index_indirect_wz(WideRegister::IY, Some(Register::L), bus),
-            0x06 => /* rlc (iy+*)       */ self.rlc_index_indirect_wz(WideRegister::IY, None, bus),
-            0x07 => /* rlc (iy+*), a    */ self.rlc_index_indirect_wz(WideRegister::IY, Some(Register::A), bus),
-            0x08 => /* rrc (iy+*), b    */ self.rrc_index_indirect_wz(WideRegister::IY, Some(Register::B), bus),
-            0x09 => /* rrc (iy+*), c    */ self.rrc_index_indirect_wz(WideRegister::IY, Some(Register::C), bus),
-            0x0A => /* rrc (iy+*), d    */ self.rrc_index_indirect_wz(WideRegister::IY, Some(Register::D), bus),
-            0x0B => /* rrc (iy+*), e    */ self.rrc_index_indirect_wz(WideRegister::IY, Some(Register::E), bus),
-            0x0C => /* rrc (iy+*), h    */ self.rrc_index_indirect_wz(WideRegister::IY, Some(Register::H), bus),
-            0x0D => /* rrc (iy+*), l    */ self.rrc_index_indirect_wz(WideRegister::IY, Some(Register::L), bus),
-            0x0E => /* rrc (iy+*)       */ self.rrc_index_indirect_wz(WideRegister::IY, None, bus),
-            0x0F => /* rrc (iy+*), a    */ self.rrc_index_indirect_wz(WideRegister::IY, Some(Register::A), bus),
+            0x00 => /* rlc (iy+*), b    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
+            0x01 => /* rlc (iy+*), c    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
+            0x02 => /* rlc (iy+*), d    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
+            0x03 => /* rlc (iy+*), e    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::E), bus),
+            0x04 => /* rlc (iy+*), h    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::H), bus),
+            0x05 => /* rlc (iy+*), l    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::L), bus),
+            0x06 => /* rlc (iy+*)       */ self.rlc_index_indirect_wz(offset, WideRegister::IY, None, bus),
+            0x07 => /* rlc (iy+*), a    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::A), bus),
+            0x08 => /* rrc (iy+*), b    */ self.rrc_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
+            0x09 => /* rrc (iy+*), c    */ self.rrc_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
+            0x0A => /* rrc (iy+*), d    */ self.rrc_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
+            0x0B => /* rrc (iy+*), e    */ self.rrc_index_indirect_wz(offset, WideRegister::IY, Some(Register::E), bus),
+            0x0C => /* rrc (iy+*), h    */ self.rrc_index_indirect_wz(offset, WideRegister::IY, Some(Register::H), bus),
+            0x0D => /* rrc (iy+*), l    */ self.rrc_index_indirect_wz(offset, WideRegister::IY, Some(Register::L), bus),
+            0x0E => /* rrc (iy+*)       */ self.rrc_index_indirect_wz(offset, WideRegister::IY, None, bus),
+            0x0F => /* rrc (iy+*), a    */ self.rrc_index_indirect_wz(offset, WideRegister::IY, Some(Register::A), bus),
 
-            0x10 => /* rl (iy+*), b     */ self.rl_index_indirect_wz(WideRegister::IY, Some(Register::B), bus),
-            0x11 => /* rl (iy+*), c     */ self.rl_index_indirect_wz(WideRegister::IY, Some(Register::C), bus),
-            0x12 => /* rl (iy+*), d     */ self.rl_index_indirect_wz(WideRegister::IY, Some(Register::D), bus),
-            0x13 => /* rl (iy+*), e     */ self.rl_index_indirect_wz(WideRegister::IY, Some(Register::E), bus),
-            0x14 => /* rl (iy+*), h     */ self.rl_index_indirect_wz(WideRegister::IY, Some(Register::H), bus),
-            0x15 => /* rl (iy+*), l     */ self.rl_index_indirect_wz(WideRegister::IY, Some(Register::L), bus),
-            0x16 => /* rl (iy+*)        */ self.rl_index_indirect_wz(WideRegister::IY, None, bus),
-            0x17 => /* rl (iy+*), a     */ self.rl_index_indirect_wz(WideRegister::IY, Some(Register::A), bus),
-            0x18 => /* rr (iy+*), b     */ self.rr_index_indirect_wz(WideRegister::IY, Some(Register::B), bus),
-            0x19 => /* rr (iy+*), c     */ self.rr_index_indirect_wz(WideRegister::IY, Some(Register::C), bus),
-            0x1A => /* rr (iy+*), d     */ self.rr_index_indirect_wz(WideRegister::IY, Some(Register::D), bus),
-            0x1B => /* rr (iy+*), e     */ self.rr_index_indirect_wz(WideRegister::IY, Some(Register::E), bus),
-            0x1C => /* rr (iy+*), h     */ self.rr_index_indirect_wz(WideRegister::IY, Some(Register::H), bus),
-            0x1D => /* rr (iy+*), l     */ self.rr_index_indirect_wz(WideRegister::IY, Some(Register::L), bus),
-            0x1E => /* rr (iy+*)        */ self.rr_index_indirect_wz(WideRegister::IY, None, bus),
-            0x1F => /* rr (iy+*), a     */ self.rr_index_indirect_wz(WideRegister::IY, Some(Register::A), bus),
+            0x10 => /* rl (iy+*), b     */ self.rl_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
+            0x11 => /* rl (iy+*), c     */ self.rl_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
+            0x12 => /* rl (iy+*), d     */ self.rl_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
+            0x13 => /* rl (iy+*), e     */ self.rl_index_indirect_wz(offset, WideRegister::IY, Some(Register::E), bus),
+            0x14 => /* rl (iy+*), h     */ self.rl_index_indirect_wz(offset, WideRegister::IY, Some(Register::H), bus),
+            0x15 => /* rl (iy+*), l     */ self.rl_index_indirect_wz(offset, WideRegister::IY, Some(Register::L), bus),
+            0x16 => /* rl (iy+*)        */ self.rl_index_indirect_wz(offset, WideRegister::IY, None, bus),
+            0x17 => /* rl (iy+*), a     */ self.rl_index_indirect_wz(offset, WideRegister::IY, Some(Register::A), bus),
+            0x18 => /* rr (iy+*), b     */ self.rr_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
+            0x19 => /* rr (iy+*), c     */ self.rr_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
+            0x1A => /* rr (iy+*), d     */ self.rr_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
+            0x1B => /* rr (iy+*), e     */ self.rr_index_indirect_wz(offset, WideRegister::IY, Some(Register::E), bus),
+            0x1C => /* rr (iy+*), h     */ self.rr_index_indirect_wz(offset, WideRegister::IY, Some(Register::H), bus),
+            0x1D => /* rr (iy+*), l     */ self.rr_index_indirect_wz(offset, WideRegister::IY, Some(Register::L), bus),
+            0x1E => /* rr (iy+*)        */ self.rr_index_indirect_wz(offset, WideRegister::IY, None, bus),
+            0x1F => /* rr (iy+*), a     */ self.rr_index_indirect_wz(offset, WideRegister::IY, Some(Register::A), bus),
 
-            0x20 => /* sla (iy+*), b    */ self.sla_index_indirect_wz(WideRegister::IY, Some(Register::B), bus),
-            0x21 => /* sla (iy+*), c    */ self.sla_index_indirect_wz(WideRegister::IY, Some(Register::C), bus),
-            0x22 => /* sla (iy+*), d    */ self.sla_index_indirect_wz(WideRegister::IY, Some(Register::D), bus),
-            0x23 => /* sla (iy+*), e    */ self.sla_index_indirect_wz(WideRegister::IY, Some(Register::E), bus),
-            0x24 => /* sla (iy+*), h    */ self.sla_index_indirect_wz(WideRegister::IY, Some(Register::H), bus),
-            0x25 => /* sla (iy+*), l    */ self.sla_index_indirect_wz(WideRegister::IY, Some(Register::L), bus),
-            0x26 => /* sla (iy+*)       */ self.sla_index_indirect_wz(WideRegister::IY, None, bus),
-            0x27 => /* sla (iy+*), a    */ self.sla_index_indirect_wz(WideRegister::IY, Some(Register::A), bus),
-            0x28 => /* sra (iy+*), b    */ self.sra_index_indirect_wz(WideRegister::IY, Some(Register::B), bus),
-            0x29 => /* sra (iy+*), c    */ self.sra_index_indirect_wz(WideRegister::IY, Some(Register::C), bus),
-            0x2A => /* sra (iy+*), d    */ self.sra_index_indirect_wz(WideRegister::IY, Some(Register::D), bus),
-            0x2B => /* sra (iy+*), e    */ self.sra_index_indirect_wz(WideRegister::IY, Some(Register::E), bus),
-            0x2C => /* sra (iy+*), h    */ self.sra_index_indirect_wz(WideRegister::IY, Some(Register::H), bus),
-            0x2D => /* sra (iy+*), l    */ self.sra_index_indirect_wz(WideRegister::IY, Some(Register::L), bus),
-            0x2E => /* sra (iy+*)       */ self.sra_index_indirect_wz(WideRegister::IY, None, bus),
-            0x2F => /* sra (iy+*), a    */ self.sra_index_indirect_wz(WideRegister::IY, Some(Register::A), bus),
+            0x20 => /* sla (iy+*), b    */ self.sla_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
+            0x21 => /* sla (iy+*), c    */ self.sla_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
+            0x22 => /* sla (iy+*), d    */ self.sla_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
+            0x23 => /* sla (iy+*), e    */ self.sla_index_indirect_wz(offset, WideRegister::IY, Some(Register::E), bus),
+            0x24 => /* sla (iy+*), h    */ self.sla_index_indirect_wz(offset, WideRegister::IY, Some(Register::H), bus),
+            0x25 => /* sla (iy+*), l    */ self.sla_index_indirect_wz(offset, WideRegister::IY, Some(Register::L), bus),
+            0x26 => /* sla (iy+*)       */ self.sla_index_indirect_wz(offset, WideRegister::IY, None, bus),
+            0x27 => /* sla (iy+*), a    */ self.sla_index_indirect_wz(offset, WideRegister::IY, Some(Register::A), bus),
+            0x28 => /* sra (iy+*), b    */ self.sra_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
+            0x29 => /* sra (iy+*), c    */ self.sra_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
+            0x2A => /* sra (iy+*), d    */ self.sra_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
+            0x2B => /* sra (iy+*), e    */ self.sra_index_indirect_wz(offset, WideRegister::IY, Some(Register::E), bus),
+            0x2C => /* sra (iy+*), h    */ self.sra_index_indirect_wz(offset, WideRegister::IY, Some(Register::H), bus),
+            0x2D => /* sra (iy+*), l    */ self.sra_index_indirect_wz(offset, WideRegister::IY, Some(Register::L), bus),
+            0x2E => /* sra (iy+*)       */ self.sra_index_indirect_wz(offset, WideRegister::IY, None, bus),
+            0x2F => /* sra (iy+*), a    */ self.sra_index_indirect_wz(offset, WideRegister::IY, Some(Register::A), bus),
 
-            0x30 => /* sll (iy+*), b    */ self.sll_index_indirect_wz(WideRegister::IY, Some(Register::B), bus),
-            0x31 => /* sll (iy+*), c    */ self.sll_index_indirect_wz(WideRegister::IY, Some(Register::C), bus),
-            0x32 => /* sll (iy+*), d    */ self.sll_index_indirect_wz(WideRegister::IY, Some(Register::D), bus),
-            0x33 => /* sll (iy+*), e    */ self.sll_index_indirect_wz(WideRegister::IY, Some(Register::E), bus),
-            0x34 => /* sll (iy+*), h    */ self.sll_index_indirect_wz(WideRegister::IY, Some(Register::H), bus),
-            0x35 => /* sll (iy+*), l    */ self.sll_index_indirect_wz(WideRegister::IY, Some(Register::L), bus),
-            0x36 => /* sll (iy+*)       */ self.sll_index_indirect_wz(WideRegister::IY, None, bus),
-            0x37 => /* sll (iy+*), a    */ self.sll_index_indirect_wz(WideRegister::IY, Some(Register::A), bus),
-            0x38 => /* srl (iy+*), b    */ self.srl_index_indirect_wz(WideRegister::IY, Some(Register::B), bus),
-            0x39 => /* srl (iy+*), c    */ self.srl_index_indirect_wz(WideRegister::IY, Some(Register::C), bus),
-            0x3A => /* srl (iy+*), d    */ self.srl_index_indirect_wz(WideRegister::IY, Some(Register::D), bus),
-            0x3B => /* srl (iy+*), e    */ self.srl_index_indirect_wz(WideRegister::IY, Some(Register::E), bus),
-            0x3C => /* srl (iy+*), h    */ self.srl_index_indirect_wz(WideRegister::IY, Some(Register::H), bus),
-            0x3D => /* srl (iy+*), l    */ self.srl_index_indirect_wz(WideRegister::IY, Some(Register::L), bus),
-            0x3E => /* srl (iy+*)       */ self.srl_index_indirect_wz(WideRegister::IY, None, bus),
-            0x3F => /* srl (iy+*), a    */ self.srl_index_indirect_wz(WideRegister::IY, Some(Register::A), bus),
+            0x30 => /* sll (iy+*), b    */ self.sll_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
+            0x31 => /* sll (iy+*), c    */ self.sll_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
+            0x32 => /* sll (iy+*), d    */ self.sll_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
+            0x33 => /* sll (iy+*), e    */ self.sll_index_indirect_wz(offset, WideRegister::IY, Some(Register::E), bus),
+            0x34 => /* sll (iy+*), h    */ self.sll_index_indirect_wz(offset, WideRegister::IY, Some(Register::H), bus),
+            0x35 => /* sll (iy+*), l    */ self.sll_index_indirect_wz(offset, WideRegister::IY, Some(Register::L), bus),
+            0x36 => /* sll (iy+*)       */ self.sll_index_indirect_wz(offset, WideRegister::IY, None, bus),
+            0x37 => /* sll (iy+*), a    */ self.sll_index_indirect_wz(offset, WideRegister::IY, Some(Register::A), bus),
+            0x38 => /* srl (iy+*), b    */ self.srl_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
+            0x39 => /* srl (iy+*), c    */ self.srl_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
+            0x3A => /* srl (iy+*), d    */ self.srl_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
+            0x3B => /* srl (iy+*), e    */ self.srl_index_indirect_wz(offset, WideRegister::IY, Some(Register::E), bus),
+            0x3C => /* srl (iy+*), h    */ self.srl_index_indirect_wz(offset, WideRegister::IY, Some(Register::H), bus),
+            0x3D => /* srl (iy+*), l    */ self.srl_index_indirect_wz(offset, WideRegister::IY, Some(Register::L), bus),
+            0x3E => /* srl (iy+*)       */ self.srl_index_indirect_wz(offset, WideRegister::IY, None, bus),
+            0x3F => /* srl (iy+*), a    */ self.srl_index_indirect_wz(offset, WideRegister::IY, Some(Register::A), bus),
 
-            0x40 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IY, bus),
-            0x41 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IY, bus),
-            0x42 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IY, bus),
-            0x43 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IY, bus),
-            0x44 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IY, bus),
-            0x45 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IY, bus),
-            0x46 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IY, bus),
-            0x47 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, WideRegister::IY, bus),
-            0x48 => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IY, bus),
-            0x49 => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IY, bus),
-            0x4A => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IY, bus),
-            0x4B => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IY, bus),
-            0x4C => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IY, bus),
-            0x4D => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IY, bus),
-            0x4E => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IY, bus),
-            0x4F => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, WideRegister::IY, bus),
+            0x40 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IY, bus),
+            0x41 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IY, bus),
+            0x42 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IY, bus),
+            0x43 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IY, bus),
+            0x44 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IY, bus),
+            0x45 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IY, bus),
+            0x46 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IY, bus),
+            0x47 => /* bit 0, (iy+*)    */ self.bit_index_indirect_wz(0x01, offset, WideRegister::IY, bus),
+            0x48 => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IY, bus),
+            0x49 => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IY, bus),
+            0x4A => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IY, bus),
+            0x4B => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IY, bus),
+            0x4C => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IY, bus),
+            0x4D => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IY, bus),
+            0x4E => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IY, bus),
+            0x4F => /* bit 1, (iy+*)    */ self.bit_index_indirect_wz(0x02, offset, WideRegister::IY, bus),
 
-            0x50 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IY, bus),
-            0x51 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IY, bus),
-            0x52 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IY, bus),
-            0x53 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IY, bus),
-            0x54 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IY, bus),
-            0x55 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IY, bus),
-            0x56 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IY, bus),
-            0x57 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x04, WideRegister::IY, bus),
-            0x58 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IY, bus),
-            0x59 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IY, bus),
-            0x5A => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IY, bus),
-            0x5B => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IY, bus),
-            0x5C => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IY, bus),
-            0x5D => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IY, bus),
-            0x5E => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IY, bus),
-            0x5F => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x08, WideRegister::IY, bus),
+            0x50 => /* bit 2, (iy+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IY, bus),
+            0x51 => /* bit 2, (iy+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IY, bus),
+            0x52 => /* bit 2, (iy+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IY, bus),
+            0x53 => /* bit 2, (iy+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IY, bus),
+            0x54 => /* bit 2, (iy+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IY, bus),
+            0x55 => /* bit 2, (iy+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IY, bus),
+            0x56 => /* bit 2, (iy+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IY, bus),
+            0x57 => /* bit 2, (iy+*)    */ self.bit_index_indirect_wz(0x04, offset, WideRegister::IY, bus),
+            0x58 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IY, bus),
+            0x59 => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IY, bus),
+            0x5A => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IY, bus),
+            0x5B => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IY, bus),
+            0x5C => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IY, bus),
+            0x5D => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IY, bus),
+            0x5E => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IY, bus),
+            0x5F => /* bit 3, (iy+*)    */ self.bit_index_indirect_wz(0x08, offset, WideRegister::IY, bus),
 
-            0x60 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IY, bus),
-            0x61 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IY, bus),
-            0x62 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IY, bus),
-            0x63 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IY, bus),
-            0x64 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IY, bus),
-            0x65 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IY, bus),
-            0x66 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IY, bus),
-            0x67 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x10, WideRegister::IY, bus),
-            0x68 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IY, bus),
-            0x69 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IY, bus),
-            0x6A => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IY, bus),
-            0x6B => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IY, bus),
-            0x6C => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IY, bus),
-            0x6D => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IY, bus),
-            0x6E => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IY, bus),
-            0x6F => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x20, WideRegister::IY, bus),
+            0x60 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IY, bus),
+            0x61 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IY, bus),
+            0x62 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IY, bus),
+            0x63 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IY, bus),
+            0x64 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IY, bus),
+            0x65 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IY, bus),
+            0x66 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IY, bus),
+            0x67 => /* bit 4, (iy+*)    */ self.bit_index_indirect_wz(0x10, offset, WideRegister::IY, bus),
+            0x68 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IY, bus),
+            0x69 => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IY, bus),
+            0x6A => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IY, bus),
+            0x6B => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IY, bus),
+            0x6C => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IY, bus),
+            0x6D => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IY, bus),
+            0x6E => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IY, bus),
+            0x6F => /* bit 5, (iy+*)    */ self.bit_index_indirect_wz(0x20, offset, WideRegister::IY, bus),
 
-            0x70 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IY, bus),
-            0x71 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IY, bus),
-            0x72 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IY, bus),
-            0x73 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IY, bus),
-            0x74 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IY, bus),
-            0x75 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IY, bus),
-            0x76 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IY, bus),
-            0x77 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x40, WideRegister::IY, bus),
-            0x78 => /* bit 8, (iy+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IY, bus),
-            0x79 => /* bit 8, (iy+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IY, bus),
-            0x7A => /* bit 8, (iy+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IY, bus),
-            0x7B => /* bit 8, (iy+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IY, bus),
-            0x7C => /* bit 8, (iy+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IY, bus),
-            0x7D => /* bit 8, (iy+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IY, bus),
-            0x7E => /* bit 8, (iy+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IY, bus),
-            0x7F => /* bit 8, (iy+*)    */ self.bit_index_indirect_wz(0x80, WideRegister::IY, bus),
+            0x70 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IY, bus),
+            0x71 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IY, bus),
+            0x72 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IY, bus),
+            0x73 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IY, bus),
+            0x74 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IY, bus),
+            0x75 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IY, bus),
+            0x76 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IY, bus),
+            0x77 => /* bit 6, (iy+*)    */ self.bit_index_indirect_wz(0x40, offset, WideRegister::IY, bus),
+            0x78 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IY, bus),
+            0x79 => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IY, bus),
+            0x7A => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IY, bus),
+            0x7B => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IY, bus),
+            0x7C => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IY, bus),
+            0x7D => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IY, bus),
+            0x7E => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IY, bus),
+            0x7F => /* bit 7, (iy+*)    */ self.bit_index_indirect_wz(0x80, offset, WideRegister::IY, bus),
 
-            0x80 => /* res 0, (iy+*), b */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::B), bus),
-            0x81 => /* res 0, (iy+*), c */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::C), bus),
-            0x82 => /* res 0, (iy+*), d */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::D), bus),
-            0x83 => /* res 0, (iy+*), e */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::E), bus),
-            0x84 => /* res 0, (iy+*), h */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::H), bus),
-            0x85 => /* res 0, (iy+*), l */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::L), bus),
-            0x86 => /* res 0, (iy+*)    */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IY, None, bus),
-            0x87 => /* res 0, (iy+*), a */ self.reset_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::A), bus),
-            0x88 => /* res 1, (iy+*), b */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::B), bus),
-            0x89 => /* res 1, (iy+*), c */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::C), bus),
-            0x8A => /* res 1, (iy+*), d */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::D), bus),
-            0x8B => /* res 1, (iy+*), e */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::E), bus),
-            0x8C => /* res 1, (iy+*), h */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::H), bus),
-            0x8D => /* res 1, (iy+*), l */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::L), bus),
-            0x8E => /* res 1, (iy+*)    */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IY, None, bus),
-            0x8F => /* res 1, (iy+*), a */ self.reset_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::A), bus),
+            0x80 => /* res 0, (iy+*), b */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::B), bus),
+            0x81 => /* res 0, (iy+*), c */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::C), bus),
+            0x82 => /* res 0, (iy+*), d */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::D), bus),
+            0x83 => /* res 0, (iy+*), e */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::E), bus),
+            0x84 => /* res 0, (iy+*), h */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::H), bus),
+            0x85 => /* res 0, (iy+*), l */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::L), bus),
+            0x86 => /* res 0, (iy+*)    */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IY, None, bus),
+            0x87 => /* res 0, (iy+*), a */ self.reset_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::A), bus),
+            0x88 => /* res 1, (iy+*), b */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::B), bus),
+            0x89 => /* res 1, (iy+*), c */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::C), bus),
+            0x8A => /* res 1, (iy+*), d */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::D), bus),
+            0x8B => /* res 1, (iy+*), e */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::E), bus),
+            0x8C => /* res 1, (iy+*), h */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::H), bus),
+            0x8D => /* res 1, (iy+*), l */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::L), bus),
+            0x8E => /* res 1, (iy+*)    */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IY, None, bus),
+            0x8F => /* res 1, (iy+*), a */ self.reset_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::A), bus),
 
-            0x90 => /* res 2, (iy+*), b */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::B), bus),
-            0x91 => /* res 2, (iy+*), c */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::C), bus),
-            0x92 => /* res 2, (iy+*), d */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::D), bus),
-            0x93 => /* res 2, (iy+*), e */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::E), bus),
-            0x94 => /* res 2, (iy+*), h */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::H), bus),
-            0x95 => /* res 2, (iy+*), l */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::L), bus),
-            0x96 => /* res 2, (iy+*)    */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IY, None, bus),
-            0x97 => /* res 2, (iy+*), a */ self.reset_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::A), bus),
-            0x98 => /* res 3, (iy+*), b */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::B), bus),
-            0x99 => /* res 3, (iy+*), c */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::C), bus),
-            0x9A => /* res 3, (iy+*), d */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::D), bus),
-            0x9B => /* res 3, (iy+*), e */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::E), bus),
-            0x9C => /* res 3, (iy+*), h */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::H), bus),
-            0x9D => /* res 3, (iy+*), l */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::L), bus),
-            0x9E => /* res 3, (iy+*)    */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IY, None, bus),
-            0x9F => /* res 3, (iy+*), a */ self.reset_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::A), bus),
+            0x90 => /* res 2, (iy+*), b */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::B), bus),
+            0x91 => /* res 2, (iy+*), c */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::C), bus),
+            0x92 => /* res 2, (iy+*), d */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::D), bus),
+            0x93 => /* res 2, (iy+*), e */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::E), bus),
+            0x94 => /* res 2, (iy+*), h */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::H), bus),
+            0x95 => /* res 2, (iy+*), l */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::L), bus),
+            0x96 => /* res 2, (iy+*)    */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IY, None, bus),
+            0x97 => /* res 2, (iy+*), a */ self.reset_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::A), bus),
+            0x98 => /* res 3, (iy+*), b */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::B), bus),
+            0x99 => /* res 3, (iy+*), c */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::C), bus),
+            0x9A => /* res 3, (iy+*), d */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::D), bus),
+            0x9B => /* res 3, (iy+*), e */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::E), bus),
+            0x9C => /* res 3, (iy+*), h */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::H), bus),
+            0x9D => /* res 3, (iy+*), l */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::L), bus),
+            0x9E => /* res 3, (iy+*)    */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IY, None, bus),
+            0x9F => /* res 3, (iy+*), a */ self.reset_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::A), bus),
 
-            0xA0 => /* res 4, (iy+*), b */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::B), bus),
-            0xA1 => /* res 4, (iy+*), c */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::C), bus),
-            0xA2 => /* res 4, (iy+*), d */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::D), bus),
-            0xA3 => /* res 4, (iy+*), e */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::E), bus),
-            0xA4 => /* res 4, (iy+*), h */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::H), bus),
-            0xA5 => /* res 4, (iy+*), l */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::L), bus),
-            0xA6 => /* res 4, (iy+*)    */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IY, None, bus),
-            0xA7 => /* res 4, (iy+*), a */ self.reset_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::A), bus),
-            0xA8 => /* res 5, (iy+*), b */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::B), bus),
-            0xA9 => /* res 5, (iy+*), c */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::C), bus),
-            0xAA => /* res 5, (iy+*), d */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::D), bus),
-            0xAB => /* res 5, (iy+*), e */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::E), bus),
-            0xAC => /* res 5, (iy+*), h */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::H), bus),
-            0xAD => /* res 5, (iy+*), l */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::L), bus),
-            0xAE => /* res 5, (iy+*)    */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IY, None, bus),
-            0xAF => /* res 5, (iy+*), a */ self.reset_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::A), bus),
+            0xA0 => /* res 4, (iy+*), b */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::B), bus),
+            0xA1 => /* res 4, (iy+*), c */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::C), bus),
+            0xA2 => /* res 4, (iy+*), d */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::D), bus),
+            0xA3 => /* res 4, (iy+*), e */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::E), bus),
+            0xA4 => /* res 4, (iy+*), h */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::H), bus),
+            0xA5 => /* res 4, (iy+*), l */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::L), bus),
+            0xA6 => /* res 4, (iy+*)    */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IY, None, bus),
+            0xA7 => /* res 4, (iy+*), a */ self.reset_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::A), bus),
+            0xA8 => /* res 5, (iy+*), b */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::B), bus),
+            0xA9 => /* res 5, (iy+*), c */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::C), bus),
+            0xAA => /* res 5, (iy+*), d */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::D), bus),
+            0xAB => /* res 5, (iy+*), e */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::E), bus),
+            0xAC => /* res 5, (iy+*), h */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::H), bus),
+            0xAD => /* res 5, (iy+*), l */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::L), bus),
+            0xAE => /* res 5, (iy+*)    */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IY, None, bus),
+            0xAF => /* res 5, (iy+*), a */ self.reset_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::A), bus),
 
-            0xB0 => /* res 6, (iy+*), b */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::B), bus),
-            0xB1 => /* res 6, (iy+*), c */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::C), bus),
-            0xB2 => /* res 6, (iy+*), d */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::D), bus),
-            0xB3 => /* res 6, (iy+*), e */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::E), bus),
-            0xB4 => /* res 6, (iy+*), h */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::H), bus),
-            0xB5 => /* res 6, (iy+*), l */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::L), bus),
-            0xB6 => /* res 6, (iy+*)    */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IY, None, bus),
-            0xB7 => /* res 6, (iy+*), a */ self.reset_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::A), bus),
-            0xB8 => /* res 7, (iy+*), b */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::B), bus),
-            0xB9 => /* res 7, (iy+*), c */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::C), bus),
-            0xBA => /* res 7, (iy+*), d */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::D), bus),
-            0xBB => /* res 7, (iy+*), e */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::E), bus),
-            0xBC => /* res 7, (iy+*), h */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::H), bus),
-            0xBD => /* res 7, (iy+*), l */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::L), bus),
-            0xBE => /* res 7, (iy+*)    */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IY, None, bus),
-            0xBF => /* res 7, (iy+*), a */ self.reset_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::A), bus),
+            0xB0 => /* res 6, (iy+*), b */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::B), bus),
+            0xB1 => /* res 6, (iy+*), c */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::C), bus),
+            0xB2 => /* res 6, (iy+*), d */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::D), bus),
+            0xB3 => /* res 6, (iy+*), e */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::E), bus),
+            0xB4 => /* res 6, (iy+*), h */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::H), bus),
+            0xB5 => /* res 6, (iy+*), l */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::L), bus),
+            0xB6 => /* res 6, (iy+*)    */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IY, None, bus),
+            0xB7 => /* res 6, (iy+*), a */ self.reset_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::A), bus),
+            0xB8 => /* res 7, (iy+*), b */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::B), bus),
+            0xB9 => /* res 7, (iy+*), c */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::C), bus),
+            0xBA => /* res 7, (iy+*), d */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::D), bus),
+            0xBB => /* res 7, (iy+*), e */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::E), bus),
+            0xBC => /* res 7, (iy+*), h */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::H), bus),
+            0xBD => /* res 7, (iy+*), l */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::L), bus),
+            0xBE => /* res 7, (iy+*)    */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IY, None, bus),
+            0xBF => /* res 7, (iy+*), a */ self.reset_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::A), bus),
 
-            0xC0 => /* set 0, (iy+*), b */ self.set_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::B), bus),
-            0xC1 => /* set 0, (iy+*), c */ self.set_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::C), bus),
-            0xC2 => /* set 0, (iy+*), d */ self.set_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::D), bus),
-            0xC3 => /* set 0, (iy+*), e */ self.set_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::E), bus),
-            0xC4 => /* set 0, (iy+*), h */ self.set_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::H), bus),
-            0xC5 => /* set 0, (iy+*), l */ self.set_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::L), bus),
-            0xC6 => /* set 0, (iy+*)    */ self.set_bit_index_indirect_wz(0x01, WideRegister::IY, None, bus),
-            0xC7 => /* set 0, (iy+*), a */ self.set_bit_index_indirect_wz(0x01, WideRegister::IY, Some(Register::A), bus),
-            0xC8 => /* set 1, (iy+*), b */ self.set_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::B), bus),
-            0xC9 => /* set 1, (iy+*), c */ self.set_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::C), bus),
-            0xCA => /* set 1, (iy+*), d */ self.set_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::D), bus),
-            0xCB => /* set 1, (iy+*), e */ self.set_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::E), bus),
-            0xCC => /* set 1, (iy+*), h */ self.set_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::H), bus),
-            0xCD => /* set 1, (iy+*), l */ self.set_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::L), bus),
-            0xCE => /* set 1, (iy+*)    */ self.set_bit_index_indirect_wz(0x02, WideRegister::IY, None, bus),
-            0xCF => /* set 1, (iy+*), a */ self.set_bit_index_indirect_wz(0x02, WideRegister::IY, Some(Register::A), bus),
+            0xC0 => /* set 0, (iy+*), b */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::B), bus),
+            0xC1 => /* set 0, (iy+*), c */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::C), bus),
+            0xC2 => /* set 0, (iy+*), d */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::D), bus),
+            0xC3 => /* set 0, (iy+*), e */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::E), bus),
+            0xC4 => /* set 0, (iy+*), h */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::H), bus),
+            0xC5 => /* set 0, (iy+*), l */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::L), bus),
+            0xC6 => /* set 0, (iy+*)    */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IY, None, bus),
+            0xC7 => /* set 0, (iy+*), a */ self.set_bit_index_indirect_wz(0x01, offset, WideRegister::IY, Some(Register::A), bus),
+            0xC8 => /* set 1, (iy+*), b */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::B), bus),
+            0xC9 => /* set 1, (iy+*), c */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::C), bus),
+            0xCA => /* set 1, (iy+*), d */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::D), bus),
+            0xCB => /* set 1, (iy+*), e */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::E), bus),
+            0xCC => /* set 1, (iy+*), h */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::H), bus),
+            0xCD => /* set 1, (iy+*), l */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::L), bus),
+            0xCE => /* set 1, (iy+*)    */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IY, None, bus),
+            0xCF => /* set 1, (iy+*), a */ self.set_bit_index_indirect_wz(0x02, offset, WideRegister::IY, Some(Register::A), bus),
 
-            0xD0 => /* set 2, (iy+*), b */ self.set_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::B), bus),
-            0xD1 => /* set 2, (iy+*), c */ self.set_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::C), bus),
-            0xD2 => /* set 2, (iy+*), d */ self.set_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::D), bus),
-            0xD3 => /* set 2, (iy+*), e */ self.set_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::E), bus),
-            0xD4 => /* set 2, (iy+*), h */ self.set_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::H), bus),
-            0xD5 => /* set 2, (iy+*), l */ self.set_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::L), bus),
-            0xD6 => /* set 2, (iy+*)    */ self.set_bit_index_indirect_wz(0x04, WideRegister::IY, None, bus),
-            0xD7 => /* set 2, (iy+*), a */ self.set_bit_index_indirect_wz(0x04, WideRegister::IY, Some(Register::A), bus),
-            0xD8 => /* set 3, (iy+*), b */ self.set_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::B), bus),
-            0xD9 => /* set 3, (iy+*), c */ self.set_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::C), bus),
-            0xDA => /* set 3, (iy+*), d */ self.set_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::D), bus),
-            0xDB => /* set 3, (iy+*), e */ self.set_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::E), bus),
-            0xDC => /* set 3, (iy+*), h */ self.set_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::H), bus),
-            0xDD => /* set 3, (iy+*), l */ self.set_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::L), bus),
-            0xDE => /* set 3, (iy+*)    */ self.set_bit_index_indirect_wz(0x08, WideRegister::IY, None, bus),
-            0xDF => /* set 3, (iy+*), a */ self.set_bit_index_indirect_wz(0x08, WideRegister::IY, Some(Register::A), bus),
+            0xD0 => /* set 2, (iy+*), b */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::B), bus),
+            0xD1 => /* set 2, (iy+*), c */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::C), bus),
+            0xD2 => /* set 2, (iy+*), d */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::D), bus),
+            0xD3 => /* set 2, (iy+*), e */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::E), bus),
+            0xD4 => /* set 2, (iy+*), h */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::H), bus),
+            0xD5 => /* set 2, (iy+*), l */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::L), bus),
+            0xD6 => /* set 2, (iy+*)    */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IY, None, bus),
+            0xD7 => /* set 2, (iy+*), a */ self.set_bit_index_indirect_wz(0x04, offset, WideRegister::IY, Some(Register::A), bus),
+            0xD8 => /* set 3, (iy+*), b */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::B), bus),
+            0xD9 => /* set 3, (iy+*), c */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::C), bus),
+            0xDA => /* set 3, (iy+*), d */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::D), bus),
+            0xDB => /* set 3, (iy+*), e */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::E), bus),
+            0xDC => /* set 3, (iy+*), h */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::H), bus),
+            0xDD => /* set 3, (iy+*), l */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::L), bus),
+            0xDE => /* set 3, (iy+*)    */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IY, None, bus),
+            0xDF => /* set 3, (iy+*), a */ self.set_bit_index_indirect_wz(0x08, offset, WideRegister::IY, Some(Register::A), bus),
 
-            0xE0 => /* set 4, (iy+*), b */ self.set_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::B), bus),
-            0xE1 => /* set 4, (iy+*), c */ self.set_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::C), bus),
-            0xE2 => /* set 4, (iy+*), d */ self.set_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::D), bus),
-            0xE3 => /* set 4, (iy+*), e */ self.set_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::E), bus),
-            0xE4 => /* set 4, (iy+*), h */ self.set_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::H), bus),
-            0xE5 => /* set 4, (iy+*), l */ self.set_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::L), bus),
-            0xE6 => /* set 4, (iy+*)    */ self.set_bit_index_indirect_wz(0x10, WideRegister::IY, None, bus),
-            0xE7 => /* set 4, (iy+*), a */ self.set_bit_index_indirect_wz(0x10, WideRegister::IY, Some(Register::A), bus),
-            0xE8 => /* set 5, (iy+*), b */ self.set_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::B), bus),
-            0xE9 => /* set 5, (iy+*), c */ self.set_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::C), bus),
-            0xEA => /* set 5, (iy+*), d */ self.set_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::D), bus),
-            0xEB => /* set 5, (iy+*), e */ self.set_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::E), bus),
-            0xEC => /* set 5, (iy+*), h */ self.set_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::H), bus),
-            0xED => /* set 5, (iy+*), l */ self.set_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::L), bus),
-            0xEE => /* set 5, (iy+*)    */ self.set_bit_index_indirect_wz(0x20, WideRegister::IY, None, bus),
-            0xEF => /* set 5, (iy+*), a */ self.set_bit_index_indirect_wz(0x20, WideRegister::IY, Some(Register::A), bus),
+            0xE0 => /* set 4, (iy+*), b */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::B), bus),
+            0xE1 => /* set 4, (iy+*), c */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::C), bus),
+            0xE2 => /* set 4, (iy+*), d */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::D), bus),
+            0xE3 => /* set 4, (iy+*), e */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::E), bus),
+            0xE4 => /* set 4, (iy+*), h */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::H), bus),
+            0xE5 => /* set 4, (iy+*), l */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::L), bus),
+            0xE6 => /* set 4, (iy+*)    */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IY, None, bus),
+            0xE7 => /* set 4, (iy+*), a */ self.set_bit_index_indirect_wz(0x10, offset, WideRegister::IY, Some(Register::A), bus),
+            0xE8 => /* set 5, (iy+*), b */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::B), bus),
+            0xE9 => /* set 5, (iy+*), c */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::C), bus),
+            0xEA => /* set 5, (iy+*), d */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::D), bus),
+            0xEB => /* set 5, (iy+*), e */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::E), bus),
+            0xEC => /* set 5, (iy+*), h */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::H), bus),
+            0xED => /* set 5, (iy+*), l */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::L), bus),
+            0xEE => /* set 5, (iy+*)    */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IY, None, bus),
+            0xEF => /* set 5, (iy+*), a */ self.set_bit_index_indirect_wz(0x20, offset, WideRegister::IY, Some(Register::A), bus),
 
-            0xF0 => /* set 6, (iy+*), b */ self.set_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::B), bus),
-            0xF1 => /* set 6, (iy+*), c */ self.set_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::C), bus),
-            0xF2 => /* set 6, (iy+*), d */ self.set_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::D), bus),
-            0xF3 => /* set 6, (iy+*), e */ self.set_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::E), bus),
-            0xF4 => /* set 6, (iy+*), h */ self.set_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::H), bus),
-            0xF5 => /* set 6, (iy+*), l */ self.set_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::L), bus),
-            0xF6 => /* set 6, (iy+*)    */ self.set_bit_index_indirect_wz(0x40, WideRegister::IY, None, bus),
-            0xF7 => /* set 6, (iy+*), a */ self.set_bit_index_indirect_wz(0x40, WideRegister::IY, Some(Register::A), bus),
-            0xF8 => /* set 7, (iy+*), b */ self.set_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::B), bus),
-            0xF9 => /* set 7, (iy+*), c */ self.set_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::C), bus),
-            0xFA => /* set 7, (iy+*), d */ self.set_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::D), bus),
-            0xFB => /* set 7, (iy+*), e */ self.set_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::E), bus),
-            0xFC => /* set 7, (iy+*), h */ self.set_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::H), bus),
-            0xFD => /* set 7, (iy+*), l */ self.set_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::L), bus),
-            0xFE => /* set 7, (iy+*)    */ self.set_bit_index_indirect_wz(0x80, WideRegister::IY, None, bus),
-            0xFF => /* set 7, (iy+*), a */ self.set_bit_index_indirect_wz(0x80, WideRegister::IY, Some(Register::A), bus),
+            0xF0 => /* set 6, (iy+*), b */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::B), bus),
+            0xF1 => /* set 6, (iy+*), c */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::C), bus),
+            0xF2 => /* set 6, (iy+*), d */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::D), bus),
+            0xF3 => /* set 6, (iy+*), e */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::E), bus),
+            0xF4 => /* set 6, (iy+*), h */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::H), bus),
+            0xF5 => /* set 6, (iy+*), l */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::L), bus),
+            0xF6 => /* set 6, (iy+*)    */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IY, None, bus),
+            0xF7 => /* set 6, (iy+*), a */ self.set_bit_index_indirect_wz(0x40, offset, WideRegister::IY, Some(Register::A), bus),
+            0xF8 => /* set 7, (iy+*), b */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::B), bus),
+            0xF9 => /* set 7, (iy+*), c */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::C), bus),
+            0xFA => /* set 7, (iy+*), d */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::D), bus),
+            0xFB => /* set 7, (iy+*), e */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::E), bus),
+            0xFC => /* set 7, (iy+*), h */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::H), bus),
+            0xFD => /* set 7, (iy+*), l */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::L), bus),
+            0xFE => /* set 7, (iy+*)    */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, None, bus),
+            0xFF => /* set 7, (iy+*), a */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::A), bus),
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Instant};
 use super::*;
 
 const ZEXDOC: (&'static str, &'static [u8]) = ("zexdoc", include_bytes!("zexdoc.com"));
@@ -20,6 +20,16 @@ impl Bus for Vec<u8> {
     fn output(&mut self, port: u16, data: u8) {
         self[port as usize] = data;
     }
+}
+
+#[inline]
+fn flags(cpu: &Cpu, flags: &[Flag]) -> bool {
+    let mut flag = 0;
+    for f in flags {
+        flag |= *f as u8;
+    }
+    // mask off x and y
+    (((cpu.af as u8) & !((Flag::X as u8) | (Flag::Y as u8))) as u8) == flag
 }
 
 fn bios_call(cpu: &mut Cpu, bus: &mut impl Bus) {
@@ -497,4 +507,454 @@ fn add_immediate() {
     assert!(cpu.flag(Flag::Y));
     assert!(!cpu.flag(Flag::Z));
     assert!(cpu.flag(Flag::S));
+}
+
+#[test]
+fn rotates() {
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x3E, 0x01,                                     // ld a, $01
+        0x06, 0xFF,                                     // ld b, $ff
+        0x0E, 0x03,                                     // ld c, $03
+        0x16, 0xFE,                                     // ld d, $fe
+        0x1E, 0x11,                                     // ld e, $11
+        0x26, 0x3F,                                     // ld h, $3f
+        0x2E, 0x70,                                     // ld l, $70
+        0xCB, 0x0F,                                     // rrc a
+        0xCB, 0x07,                                     // rlc a
+        0xCB, 0x08,                                     // rrc b
+        0xCB, 0x00,                                     // rlc b
+        0xCB, 0x01,                                     // rlc c
+        0xCB, 0x09,                                     // rrc c
+        0xCB, 0x02,                                     // rrc d
+        0xCB, 0x0A,                                     // rlc d
+        0xCB, 0x0B,                                     // rrc e
+        0xCB, 0x03,                                     // rlc e
+        0xCB, 0x04,                                     // rlc h
+        0xCB, 0x0C,                                     // rrc h
+        0xCB, 0x05,                                     // rlc l
+        0xCB, 0x0D,                                     // rrc l
+        0xCB, 0x1F,                                     // rr a
+        0xCB, 0x17,                                     // rl a
+        0xCB, 0x18,                                     // rr b
+        0xCB, 0x10,                                     // rl b
+        0xCB, 0x11,                                     // rr c
+        0xCB, 0x19,                                     // rl c
+        0xCB, 0x12,                                     // rr d
+        0xCB, 0x1A,                                     // rl d
+        0xCB, 0x1B,                                     // rr e
+        0xCB, 0x13,                                     // rl e
+        0xCB, 0x14,                                     // rl h
+        0xCB, 0x1C,                                     // rr h
+        0xCB, 0x15,                                     // rl l
+        0xCB, 0x1D,                                     // rr l
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x80, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::S, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x01, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFF, cpu.register(Register::B));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFF, cpu.register(Register::B));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x06, cpu.register(Register::C));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x03, cpu.register(Register::C));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFD, cpu.register(Register::D));
+    assert!(flags(&cpu, &[Flag::S, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFE, cpu.register(Register::D));
+    assert!(flags(&cpu, &[Flag::S, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x88, cpu.register(Register::E));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x11, cpu.register(Register::E));
+    assert!(flags(&cpu, &[Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x7E, cpu.register(Register::H));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x3F, cpu.register(Register::H));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xE0, cpu.register(Register::L));
+    assert!(flags(&cpu, &[Flag::S]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x70, cpu.register(Register::L));
+    assert!(flags(&cpu, &[]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x01, cpu.register(Register::A));
+    assert!(flags(&cpu, &[]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x7F, cpu.register(Register::B));
+    assert!(flags(&cpu, &[Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFF, cpu.register(Register::B));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x06, cpu.register(Register::C));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x03, cpu.register(Register::C));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFC, cpu.register(Register::D));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFE, cpu.register(Register::D));
+    assert!(flags(&cpu, &[Flag::S]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x08, cpu.register(Register::E));
+    assert!(flags(&cpu, &[Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x11, cpu.register(Register::E));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x7E, cpu.register(Register::H));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x3F, cpu.register(Register::H));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xE0, cpu.register(Register::L));
+    assert!(flags(&cpu, &[Flag::S]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x70, cpu.register(Register::L));
+    assert!(flags(&cpu, &[]));
+}
+
+#[test]
+fn sla() {
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x3E, 0x01,                                     // ld a, $01
+        0x06, 0x80,                                     // ld b, $80
+        0x0E, 0xAA,                                     // ld c, $aa
+        0x16, 0xFE,                                     // ld d, $fe
+        0x1E, 0x7F,                                     // ld e, $7f
+        0x26, 0x11,                                     // ld h, $11
+        0x2E, 0x00,                                     // ld l, $00
+        0xCB, 0x27,                                     // sla a
+        0xCB, 0x20,                                     // sla b
+        0xCB, 0x21,                                     // sla c
+        0xCB, 0x22,                                     // sla d
+        0xCB, 0x23,                                     // sla e
+        0xCB, 0x24,                                     // sla h
+        0xCB, 0x25,                                     // sla l
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x02, cpu.register(Register::A));
+    assert!(flags(&cpu, &[]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::B));
+    assert!(flags(&cpu, &[Flag::Z, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x54, cpu.register(Register::C));
+    assert!(flags(&cpu, &[Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFC, cpu.register(Register::D));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFE, cpu.register(Register::E));
+    assert!(flags(&cpu, &[Flag::S]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x22, cpu.register(Register::H));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::L));
+    assert!(flags(&cpu, &[Flag::Z, Flag::PV]));
+}
+
+#[test]
+fn sla_wide() {
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x21, 0x00, 0x10,                               // ld hl, $1000
+        0xDD, 0x21, 0x00, 0x10,                         // ld ix, $1001
+        0xFD, 0x21, 0x03, 0x10,                         // ld iy, $1003
+        0xCB, 0x26,                                     // sla (hl)
+        0x7E,                                           // ld a, (hl)
+        0xDD, 0xCB, 0x01, 0x26,                         // sla (ix+1)
+        0xDD, 0x7E, 0x01,                               // ld a, (ix+1)
+        0xFD, 0xCB, 0xFF, 0x26,                         // sla (iy-1)
+        0xFD, 0x7E, 0xFF,                               // ld a, (iy-1)
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    bus[0x1000] = 0x01;
+    bus[0x1001] = 0x80;
+    bus[0x1002] = 0xAA;
+    let mut cpu = Cpu::default();
+    assert_eq!(10, cpu.step(&mut bus));
+    assert_eq!(14, cpu.step(&mut bus));
+    assert_eq!(14, cpu.step(&mut bus));
+    assert_eq!(15, cpu.step(&mut bus));
+    assert_eq!(0x02, bus[0x1000]);
+    assert!(flags(&cpu, &[]));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0x02, cpu.register(Register::A));
+    assert_eq!(23, cpu.step(&mut bus));
+    assert_eq!(0x00, bus[0x1001]);
+    assert!(flags(&cpu, &[Flag::Z, Flag::PV, Flag::C]));
+    assert_eq!(19, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert_eq!(23, cpu.step(&mut bus));
+    assert_eq!(0x54, bus[0x1002]);
+    assert!(flags(&cpu, &[Flag::C]));
+    assert_eq!(19, cpu.step(&mut bus));
+    assert_eq!(0x54, cpu.register(Register::A));
+}
+
+#[test]
+fn sra() {
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x3E, 0x01,                                     // ld a, $01
+        0x06, 0x80,                                     // ld b, $80
+        0x0E, 0xAA,                                     // ld c, $aa
+        0x16, 0xFE,                                     // ld d, $fe
+        0x1E, 0x7F,                                     // ld e, $7f
+        0x26, 0x11,                                     // ld h, $11
+        0x2E, 0x00,                                     // ld l, $00
+        0xCB, 0x2F,                                     // sra a
+        0xCB, 0x28,                                     // sra b
+        0xCB, 0x29,                                     // sra c
+        0xCB, 0x2A,                                     // sra d
+        0xCB, 0x2B,                                     // sra e
+        0xCB, 0x2C,                                     // sra h
+        0xCB, 0x2D,                                     // sra l
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xC0, cpu.register(Register::B));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xD5, cpu.register(Register::C));
+    assert!(flags(&cpu, &[Flag::S]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0xFF, cpu.register(Register::D));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x3F, cpu.register(Register::E));
+    assert!(flags(&cpu, &[Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x08, cpu.register(Register::H));
+    assert!(flags(&cpu, &[Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::L));
+    assert!(flags(&cpu, &[Flag::Z, Flag::PV]));
+}
+
+#[test]
+fn srl() {
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x3E, 0x01,                                     // ld a, $01
+        0x06, 0x80,                                     // ld b, $80
+        0x0E, 0xAA,                                     // ld c, $aa
+        0x16, 0xFE,                                     // ld d, $fe
+        0x1E, 0x7F,                                     // ld e, $7f
+        0x26, 0x11,                                     // ld h, $11
+        0x2E, 0x00,                                     // ld l, $00
+        0xCB, 0x3F,                                     // srl a
+        0xCB, 0x38,                                     // srl b
+        0xCB, 0x39,                                     // srl c
+        0xCB, 0x3A,                                     // srl d
+        0xCB, 0x3B,                                     // srl e
+        0xCB, 0x3C,                                     // srl h
+        0xCB, 0x3D,                                     // srl l
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x40, cpu.register(Register::B));
+    assert!(flags(&cpu, &[]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x55, cpu.register(Register::C));
+    assert!(flags(&cpu, &[Flag::PV]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x7F, cpu.register(Register::D));
+    assert!(flags(&cpu, &[]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x3F, cpu.register(Register::E));
+    assert!(flags(&cpu, &[Flag::PV, Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x08, cpu.register(Register::H));
+    assert!(flags(&cpu, &[Flag::C]));
+    assert_eq!(8, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::L));
+    assert!(flags(&cpu, &[Flag::Z, Flag::PV]));
+}
+
+#[test]
+fn daa() {
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x3E, 0x15,                                     // ld a, $15
+        0x06, 0x27,                                     // ld b, $27
+        0x80,                                           // add a, b
+        0x27,                                           // daa
+        0x90,                                           // sub b
+        0x27,                                           // daa
+        0x3E, 0x90,                                     // ld a, $90
+        0x06, 0x15,                                     // ld b, $15
+        0x80,                                           // add a, b
+        0x27,                                           // daa
+        0x90,                                           // sub b
+        0x27,                                           // daa
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x3C, cpu.register(Register::A));
+    assert!(flags(&cpu, &[]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x42, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::H, Flag::PV]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x1B, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::H, Flag::N]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x15, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::N]));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0xA5, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::S]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x05, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::PV, Flag::C]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0xF0, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::S, Flag::N, Flag::C]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x90, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::S, Flag::PV, Flag::N, Flag::C]));
+}
+
+#[test]
+fn cpl() {
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x97,                                           // sub a
+        0x2F,                                           // cpl
+        0x2F,                                           // cpl
+        0xC6, 0xAA,                                     // add a, $aa
+        0x2F,                                           // cpl
+        0x2F,                                           // cpl
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::N]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0xFF, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::H, Flag::N]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::H, Flag::N]));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0xAA, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::S]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x55, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::S, Flag::H, Flag::N]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0xAA, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::S, Flag::H, Flag::N]));
+}
+
+#[test]
+fn ccf_scf() {
+    #[rustfmt::skip]
+        let mut bus = vec![
+        0x97,                                           // sub a
+        0x37,                                           // scf
+        0x3F,                                           // ccf
+        0xD6, 0xCC,                                     // sub $cc
+        0x3F,                                           // ccf
+        0x37,                                           // scf
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::N]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::C]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::Z, Flag::H]));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0x34, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::H, Flag::N, Flag::C]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x34, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::H]));
+    assert_eq!(4, cpu.step(&mut bus));
+    assert_eq!(0x34, cpu.register(Register::A));
+    assert!(flags(&cpu, &[Flag::C]));
 }
