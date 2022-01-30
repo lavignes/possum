@@ -2,3 +2,5 @@
 
 mod cpu;
 mod bus;
+mod dma;
+mod system;

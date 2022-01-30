@@ -4,6 +4,7 @@ use super::*;
 const ZEXDOC: (&'static str, &'static [u8]) = ("zexdoc", include_bytes!("zexdoc.com"));
 const ZEXALL: (&'static str, &'static [u8]) = ("zexall", include_bytes!("zexall.com"));
 
+// TODO: Make a test bus with real io buffer
 impl Bus for Vec<u8> {
     fn read(&mut self, addr: u16) -> u8 {
         self[addr as usize]

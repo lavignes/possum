@@ -75,7 +75,7 @@ impl Default for InterruptMode {
 }
 
 #[derive(Default)]
-struct Cpu {
+pub struct Cpu {
     pc: u16,
     sp: u16,
     af: u16,
@@ -98,6 +98,7 @@ struct Cpu {
     iff1: bool,
     iff2: bool,
     irq: bool,
+    reti: bool,
 }
 
 #[inline]
@@ -1459,10 +1460,10 @@ impl Cpu {
     }
 
     #[inline]
-    fn reti(&mut self, bus: &mut impl Bus) -> usize {
+    fn reti_wz(&mut self, bus: &mut impl Bus) -> usize {
         let cycles = 1 + self.return_wz(bus);
-        // signal to the bus that we're open for more interrupts
-        bus.reti();
+        // signal to the bus that we're open for business
+        self.reti = true;
         cycles
     }
 
@@ -1759,7 +1760,17 @@ impl Cpu {
         15
     }
 
-    fn step(&mut self, bus: &mut impl Bus) -> usize {
+    #[inline]
+    pub fn reti(&self) -> bool {
+        self.reti
+    }
+
+    pub fn step(&mut self, bus: &mut impl Bus) -> usize {
+        // We've finished returning from interrupts
+        self.reti = false;
+
+        // TODO: service interrupts here
+
         let opcode = self.fetch(bus);
         match opcode {
             0x00 => /* nop              */ self.nop(),
@@ -2441,7 +2452,7 @@ impl Cpu {
             0x4A => /* adc hl, bc       */ self.add_carry_wide_wz(WideRegister::HL, WideRegister::BC),
             0x4B => /* ld bc, (**)      */ self.read_wide_absolute_wz(WideRegister::BC, bus),
             0x4C => /* neg              */ self.neg(),
-            0x4D => /* reti             */ self.reti(bus),
+            0x4D => /* reti             */ self.reti_wz(bus),
             0x4E => /* im 0/1           */ self.set_interrupt_mode(InterruptMode::Zero),
             0x4F => /* ld r, a          */ self.copy_register(Register::R, Register::A),
 
