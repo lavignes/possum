@@ -627,7 +627,7 @@ impl Cpu {
         self.set_flag(Flag::N, true);
         self.set_flag(
             Flag::PV,
-            ((((lhs ^ rhs ^ 0x80) & (result ^ lhs)) >> 5) & (Flag::PV as u8)) != 0,
+            ((((lhs ^ rhs) & (result ^ lhs)) >> 5) & (Flag::PV as u8)) != 0,
         );
         self.set_flag(Flag::X, (result & (Flag::X as u8)) != 0);
         self.set_flag(Flag::H, ((lhs ^ rhs ^ result) & (Flag::H as u8)) != 0);
@@ -735,20 +735,20 @@ impl Cpu {
     }
 
     #[inline]
-    fn compare_base(&mut self, sub: u8) {
-        let data = self.register(Register::A);
-        let (result, carry) = data.borrowing_sub(sub, false);
+    fn compare_base(&mut self, rhs: u8) {
+        let lhs = self.register(Register::A);
+        let (result, carry) = lhs.borrowing_sub(rhs, false);
         self.set_flag(Flag::C, carry);
         self.set_flag(Flag::N, true);
         self.set_flag(
             Flag::PV,
-            ((((data ^ sub ^ 0x80) & (result ^ data)) >> 5) & (Flag::PV as u8)) != 0,
+            ((((lhs ^ rhs) & (result ^ lhs)) >> 5) & (Flag::PV as u8)) != 0,
         );
         // note that the flags for X and Y are taken from sub
         // this is what differentiates this from sbc_base's flags
-        self.set_flag(Flag::X, (sub & (Flag::X as u8)) != 0);
-        self.set_flag(Flag::H, ((data ^ sub ^ result) & (Flag::H as u8)) != 0);
-        self.set_flag(Flag::Y, (sub & (Flag::Y as u8)) != 0);
+        self.set_flag(Flag::X, (rhs & (Flag::X as u8)) != 0);
+        self.set_flag(Flag::H, ((lhs ^ rhs ^ result) & (Flag::H as u8)) != 0);
+        self.set_flag(Flag::Y, (rhs & (Flag::Y as u8)) != 0);
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::S, (result & (Flag::S as u8)) != 0);
     }
@@ -1536,7 +1536,7 @@ impl Cpu {
 
     #[inline]
     fn cpd(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        8
     }
 
     #[inline]

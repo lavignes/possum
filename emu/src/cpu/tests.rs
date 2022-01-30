@@ -432,3 +432,69 @@ fn jr() {
     assert_eq!(12, cpu.step(&mut bus));
     assert_eq!(0x0000, cpu.pc);
 }
+
+#[test]
+fn add_immediate() {
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x3E, 0x0F,                                     // ld a, $0f
+        0xC6, 0x01,                                     // add a, 1
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0x0F, cpu.register(Register::A));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0x10, cpu.register(Register::A));
+    assert!(!cpu.flag(Flag::C));
+    assert!(!cpu.flag(Flag::N));
+    assert!(!cpu.flag(Flag::PV));
+    assert!(!cpu.flag(Flag::X));
+    assert!(cpu.flag(Flag::H));
+    assert!(!cpu.flag(Flag::Y));
+    assert!(!cpu.flag(Flag::Z));
+    assert!(!cpu.flag(Flag::S));
+
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x3E, 0xFF,                                     // ld a, $ff
+        0xC6, 0x01,                                     // add a, 1
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0xFF, cpu.register(Register::A));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0x00, cpu.register(Register::A));
+    assert!(cpu.flag(Flag::C));
+    assert!(!cpu.flag(Flag::N));
+    assert!(!cpu.flag(Flag::PV));
+    assert!(!cpu.flag(Flag::X));
+    assert!(cpu.flag(Flag::H));
+    assert!(!cpu.flag(Flag::Y));
+    assert!(cpu.flag(Flag::Z));
+    assert!(!cpu.flag(Flag::S));
+
+    #[rustfmt::skip]
+    let mut bus = vec![
+        0x3E, 0x7F,                                     // ld a, $7f
+        0xC6, 0x7F,                                     // add a, $7f
+        0x00,                                           // nop
+    ];
+    bus.resize(65536, 0);
+    let mut cpu = Cpu::default();
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0x7F, cpu.register(Register::A));
+    assert_eq!(7, cpu.step(&mut bus));
+    assert_eq!(0xFE, cpu.register(Register::A));
+    assert!(!cpu.flag(Flag::C));
+    assert!(!cpu.flag(Flag::N));
+    assert!(cpu.flag(Flag::PV));
+    assert!(cpu.flag(Flag::X));
+    assert!(cpu.flag(Flag::H));
+    assert!(cpu.flag(Flag::Y));
+    assert!(!cpu.flag(Flag::Z));
+    assert!(cpu.flag(Flag::S));
+}
