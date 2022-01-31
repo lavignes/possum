@@ -1,27 +1,9 @@
 use std::time::{Instant};
+use crate::bus::TestBus;
 use super::*;
 
 const ZEXDOC: (&'static str, &'static [u8]) = ("zexdoc", include_bytes!("zexdoc.com"));
 const ZEXALL: (&'static str, &'static [u8]) = ("zexall", include_bytes!("zexall.com"));
-
-// TODO: Make a test bus with real io buffer
-impl Bus for Vec<u8> {
-    fn read(&mut self, addr: u16) -> u8 {
-        self[addr as usize]
-    }
-
-    fn write(&mut self, addr: u16, data: u8) {
-        self[addr as usize] = data;
-    }
-
-    fn input(&mut self, port: u16) -> u8 {
-        self[port as usize]
-    }
-
-    fn output(&mut self, port: u16, data: u8) {
-        self[port as usize] = data;
-    }
-}
 
 #[inline]
 fn flags(cpu: &Cpu, flags: &[Flag]) -> bool {
@@ -56,9 +38,9 @@ fn bios_call(cpu: &mut Cpu, bus: &mut impl Bus) {
 fn zextests() {
     for (name, test) in [ZEXDOC, ZEXALL] {
         println!("zextest \"{name}\":");
-        let mut bus = vec![0u8; 65536];
+        let mut bus = TestBus::new();
         for (i, b) in test.iter().enumerate() {
-            bus[0x100 + i] = *b;
+            bus.mem_mut()[0x100 + i] = *b;
         }
         let mut cpu = Cpu::default();
         cpu.pc = 0x0100;
@@ -84,10 +66,9 @@ fn zextests() {
 #[test]
 fn nop() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(4, cpu.step(&mut bus));
     assert_eq!(0x0001, cpu.ir);
@@ -97,11 +78,10 @@ fn nop() {
 #[test]
 fn read_wide_immediate() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x01, 0x34, 0x12,                               // ld bc, $1234
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(10, cpu.step(&mut bus));
     assert_eq!(0x0001, cpu.ir);
@@ -112,32 +92,30 @@ fn read_wide_immediate() {
 #[test]
 fn write_indirect() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x42,                                     // ld a, $42
         0x01, 0x01, 0x00,                               // ld bc, $0001
         0x02,                                           // ld (bc), a
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x4200, cpu.af);
     assert_eq!(10, cpu.step(&mut bus));
     assert_eq!(7, cpu.step(&mut bus));
-    assert_eq!(0x42, bus[0x0001]);
+    assert_eq!(0x42, bus.mem()[0x0001]);
 }
 
 #[test]
 fn inc_wide() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x01, 0x01, 0x00,                               // ld bc, $0001
         0x03,                                           // inc bc
         0x01, 0xFF, 0xFF,                               // ld bc, $ffff
         0x03,                                           // inc bc
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(10, cpu.step(&mut bus));
     assert_eq!(6, cpu.step(&mut bus));
@@ -150,12 +128,11 @@ fn inc_wide() {
 #[test]
 fn inc() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x0F,                                     // ld a, $0f
         0x3C,                                           // inc a
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x0F, cpu.register(Register::A));
@@ -171,12 +148,11 @@ fn inc() {
     assert!(!cpu.flag(Flag::S));
 
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x7F,                                     // ld a, $7f
         0x3C,                                           // inc a
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x7F, cpu.register(Register::A));
@@ -192,12 +168,11 @@ fn inc() {
     assert!(cpu.flag(Flag::S));
 
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0xFF,                                     // ld a, $ff
         0x3C,                                           // inc a
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0xFF, cpu.register(Register::A));
@@ -216,12 +191,11 @@ fn inc() {
 #[test]
 fn dec() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x10,                                     // ld a, $10
         0x3D,                                           // dec a
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x10, cpu.register(Register::A));
@@ -237,12 +211,11 @@ fn dec() {
     assert!(!cpu.flag(Flag::S));
 
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x80,                                     // ld a, $80
         0x3D,                                           // dec a
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x80, cpu.register(Register::A));
@@ -258,12 +231,11 @@ fn dec() {
     assert!(!cpu.flag(Flag::S));
 
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x00,                                     // ld a, $00
         0x3D,                                           // inc a
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x00, cpu.register(Register::A));
@@ -282,12 +254,11 @@ fn dec() {
 #[test]
 fn rlca() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x80,                                     // ld a, $80
         0x07,                                           // rlca
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x80, cpu.register(Register::A));
@@ -303,13 +274,12 @@ fn rlca() {
     assert!(!cpu.flag(Flag::S));
 
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x80,                                     // ld a, $80
         0x07,                                           // rlca
         0x07,                                           // rlca
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x80, cpu.register(Register::A));
@@ -330,14 +300,13 @@ fn rlca() {
 #[test]
 fn exchange() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x21, 0xFF, 0xFF,                               // ld hl, $ffff
         0xE5,                                           // push hl
         0xF1,                                           // pop af
         0x08,                                           // ex af, af'
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(10, cpu.step(&mut bus));
     assert_eq!(0xFFFF, cpu.hl);
@@ -351,13 +320,12 @@ fn exchange() {
 #[test]
 fn add_wide() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x21, 0xFF, 0x0F,                               // ld hl, $0fff
         0x01, 0x01, 0x00,                               // ld bc, 1
         0x09,                                           // add hl, bc
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(10, cpu.step(&mut bus));
     assert_eq!(0x0FFF, cpu.hl);
@@ -378,12 +346,11 @@ fn add_wide() {
 #[test]
 fn rrca() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x0F,                                           // rrca
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x01, cpu.register(Register::A));
@@ -399,13 +366,12 @@ fn rrca() {
     assert!(!cpu.flag(Flag::S));
 
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x0F,                                           // rrca
         0x0F,                                           // rrca
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x01, cpu.register(Register::A));
@@ -426,7 +392,7 @@ fn rrca() {
 #[test]
 fn jr() {
     #[rustfmt::skip]
-        let mut bus = vec![
+        let mut bus = TestBus::with_mem(vec![
         0x00,                                           // nop
         0x18, 0x04,                                     // jr +4
         0x00,                                           // nop
@@ -435,8 +401,7 @@ fn jr() {
         0x00,                                           // nop
         0x18, 0xF7,                                     // jr -9
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(4, cpu.step(&mut bus));
     assert_eq!(12, cpu.step(&mut bus));
@@ -447,12 +412,11 @@ fn jr() {
 #[test]
 fn add_immediate() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x0F,                                     // ld a, $0f
         0xC6, 0x01,                                     // add a, 1
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x0F, cpu.register(Register::A));
@@ -468,12 +432,11 @@ fn add_immediate() {
     assert!(!cpu.flag(Flag::S));
 
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0xFF,                                     // ld a, $ff
         0xC6, 0x01,                                     // add a, 1
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0xFF, cpu.register(Register::A));
@@ -489,12 +452,11 @@ fn add_immediate() {
     assert!(!cpu.flag(Flag::S));
 
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x7F,                                     // ld a, $7f
         0xC6, 0x7F,                                     // add a, $7f
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x7F, cpu.register(Register::A));
@@ -513,7 +475,7 @@ fn add_immediate() {
 #[test]
 fn rotates() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x06, 0xFF,                                     // ld b, $ff
         0x0E, 0x03,                                     // ld c, $03
@@ -550,8 +512,7 @@ fn rotates() {
         0xCB, 0x15,                                     // rl l
         0xCB, 0x1D,                                     // rr l
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(7, cpu.step(&mut bus));
@@ -649,7 +610,7 @@ fn rotates() {
 #[test]
 fn sla() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x06, 0x80,                                     // ld b, $80
         0x0E, 0xAA,                                     // ld c, $aa
@@ -665,8 +626,7 @@ fn sla() {
         0xCB, 0x24,                                     // sla h
         0xCB, 0x25,                                     // sla l
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(7, cpu.step(&mut bus));
@@ -701,7 +661,7 @@ fn sla() {
 #[test]
 fn sla_wide() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x21, 0x00, 0x10,                               // ld hl, $1000
         0xDD, 0x21, 0x00, 0x10,                         // ld ix, $1001
         0xFD, 0x21, 0x03, 0x10,                         // ld iy, $1003
@@ -712,27 +672,26 @@ fn sla_wide() {
         0xFD, 0xCB, 0xFF, 0x26,                         // sla (iy-1)
         0xFD, 0x7E, 0xFF,                               // ld a, (iy-1)
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
-    bus[0x1000] = 0x01;
-    bus[0x1001] = 0x80;
-    bus[0x1002] = 0xAA;
+    ]);
+    bus.mem_mut()[0x1000] = 0x01;
+    bus.mem_mut()[0x1001] = 0x80;
+    bus.mem_mut()[0x1002] = 0xAA;
     let mut cpu = Cpu::default();
     assert_eq!(10, cpu.step(&mut bus));
     assert_eq!(14, cpu.step(&mut bus));
     assert_eq!(14, cpu.step(&mut bus));
     assert_eq!(15, cpu.step(&mut bus));
-    assert_eq!(0x02, bus[0x1000]);
+    assert_eq!(0x02, bus.mem()[0x1000]);
     assert!(flags(&cpu, &[]));
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(0x02, cpu.register(Register::A));
     assert_eq!(23, cpu.step(&mut bus));
-    assert_eq!(0x00, bus[0x1001]);
+    assert_eq!(0x00, bus.mem()[0x1001]);
     assert!(flags(&cpu, &[Flag::Z, Flag::PV, Flag::C]));
     assert_eq!(19, cpu.step(&mut bus));
     assert_eq!(0x00, cpu.register(Register::A));
     assert_eq!(23, cpu.step(&mut bus));
-    assert_eq!(0x54, bus[0x1002]);
+    assert_eq!(0x54, bus.mem()[0x1002]);
     assert!(flags(&cpu, &[Flag::C]));
     assert_eq!(19, cpu.step(&mut bus));
     assert_eq!(0x54, cpu.register(Register::A));
@@ -741,7 +700,7 @@ fn sla_wide() {
 #[test]
 fn sra() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x06, 0x80,                                     // ld b, $80
         0x0E, 0xAA,                                     // ld c, $aa
@@ -757,8 +716,7 @@ fn sra() {
         0xCB, 0x2C,                                     // sra h
         0xCB, 0x2D,                                     // sra l
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(7, cpu.step(&mut bus));
@@ -793,7 +751,7 @@ fn sra() {
 #[test]
 fn srl() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x06, 0x80,                                     // ld b, $80
         0x0E, 0xAA,                                     // ld c, $aa
@@ -809,8 +767,7 @@ fn srl() {
         0xCB, 0x3C,                                     // srl h
         0xCB, 0x3D,                                     // srl l
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(7, cpu.step(&mut bus));
@@ -845,7 +802,7 @@ fn srl() {
 #[test]
 fn daa() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x3E, 0x15,                                     // ld a, $15
         0x06, 0x27,                                     // ld b, $27
         0x80,                                           // add a, b
@@ -859,8 +816,7 @@ fn daa() {
         0x90,                                           // sub b
         0x27,                                           // daa
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(7, cpu.step(&mut bus));
     assert_eq!(7, cpu.step(&mut bus));
@@ -895,7 +851,7 @@ fn daa() {
 #[test]
 fn cpl() {
     #[rustfmt::skip]
-    let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x97,                                           // sub a
         0x2F,                                           // cpl
         0x2F,                                           // cpl
@@ -903,8 +859,7 @@ fn cpl() {
         0x2F,                                           // cpl
         0x2F,                                           // cpl
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(4, cpu.step(&mut bus));
     assert_eq!(0x00, cpu.register(Register::A));
@@ -929,7 +884,7 @@ fn cpl() {
 #[test]
 fn ccf_scf() {
     #[rustfmt::skip]
-        let mut bus = vec![
+    let mut bus = TestBus::with_mem(vec![
         0x97,                                           // sub a
         0x37,                                           // scf
         0x3F,                                           // ccf
@@ -937,8 +892,7 @@ fn ccf_scf() {
         0x3F,                                           // ccf
         0x37,                                           // scf
         0x00,                                           // nop
-    ];
-    bus.resize(65536, 0);
+    ]);
     let mut cpu = Cpu::default();
     assert_eq!(4, cpu.step(&mut bus));
     assert_eq!(0x00, cpu.register(Register::A));

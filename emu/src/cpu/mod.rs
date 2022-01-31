@@ -1761,7 +1761,7 @@ impl Cpu {
     }
 
     #[inline]
-    pub fn reti(&self) -> bool {
+    pub fn returned_from_interrupt(&self) -> bool {
         self.reti
     }
 
@@ -2510,7 +2510,7 @@ impl Cpu {
             0xA2 => /* ini              */ self.ini(bus),
             0xA3 => /* outi             */ self.outi(bus),
             0xA8 => /* ldd              */ self.ldd(bus),
-            0xA9 => /* cpd              */ self.cpdr_wz(bus),
+            0xA9 => /* cpd              */ self.cpd_wz(bus),
             0xAA => /* ind              */ self.ind(bus),
             0xAB => /* outd             */ self.outd(bus),
 

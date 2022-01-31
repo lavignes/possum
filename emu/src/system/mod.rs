@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use crate::{
     cpu::Cpu,
     bus::Bus,
@@ -50,11 +49,11 @@ impl<'a> Bus for DmaView<'a> {
         self.ram[addr as usize] = data
     }
 
-    fn input(&mut self, port: u16) -> u8 {
+    fn input(&mut self, _: u16) -> u8 {
         unimplemented!()
     }
 
-    fn output(&mut self, port: u16, data: u8) {
+    fn output(&mut self, _: u16, _: u8) {
         unimplemented!()
     }
 }
@@ -70,7 +69,7 @@ impl System {
         let System { cpu, dma, ram, .. } = self;
         let cycles = cpu.step(&mut CpuView { dma, ram });
 
-        let mut reti = cpu.reti();
+        let mut reti = cpu.returned_from_interrupt();
         for _ in 0..cycles {
             // note: only 1 DMA device can run at a time.
             //   If I want to add support for more, then I need to put them in the daisy chain
