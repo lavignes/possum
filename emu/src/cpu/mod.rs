@@ -2,6 +2,7 @@
 mod tests;
 
 use std::mem;
+
 use crate::bus::Bus;
 
 #[derive(Copy, Clone, Debug)]
@@ -1304,7 +1305,11 @@ impl Cpu {
     }
 
     #[inline]
-    fn write_immediate_index_indirect_wz(&mut self, index: WideRegister, bus: &mut impl Bus) -> usize {
+    fn write_immediate_index_indirect_wz(
+        &mut self,
+        index: WideRegister,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
@@ -1315,7 +1320,12 @@ impl Cpu {
     }
 
     #[inline]
-    fn read_index_indirect_wz(&mut self, reg: Register, index: WideRegister, bus: &mut impl Bus) -> usize {
+    fn read_index_indirect_wz(
+        &mut self,
+        reg: Register,
+        index: WideRegister,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
@@ -1326,7 +1336,12 @@ impl Cpu {
     }
 
     #[inline]
-    fn write_index_indirect_wz(&mut self, index: WideRegister, reg: Register, bus: &mut impl Bus) -> usize {
+    fn write_index_indirect_wz(
+        &mut self,
+        index: WideRegister,
+        reg: Register,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
@@ -1336,7 +1351,12 @@ impl Cpu {
     }
 
     #[inline]
-    fn add_carry_index_indirect_wz(&mut self, index: WideRegister, carry: bool, bus: &mut impl Bus) -> usize {
+    fn add_carry_index_indirect_wz(
+        &mut self,
+        index: WideRegister,
+        carry: bool,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
@@ -1347,7 +1367,12 @@ impl Cpu {
     }
 
     #[inline]
-    fn sub_carry_index_indirect_wz(&mut self, index: WideRegister, carry: bool, bus: &mut impl Bus) -> usize {
+    fn sub_carry_index_indirect_wz(
+        &mut self,
+        index: WideRegister,
+        carry: bool,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
         let addr = addr.carrying_add(offset as u16, false).0;
@@ -1431,9 +1456,15 @@ impl Cpu {
         self.set_wide_register(dst, result);
         self.set_flag(Flag::C, carry);
         self.set_flag(Flag::N, true);
-        self.set_flag(Flag::PV, ((((rhs ^ lhs) & (lhs ^ result) & 0x8000) >> 13) & (Flag::PV as u16)) != 0);
+        self.set_flag(
+            Flag::PV,
+            ((((rhs ^ lhs) & (lhs ^ result) & 0x8000) >> 13) & (Flag::PV as u16)) != 0,
+        );
         self.set_flag(Flag::X, ((result >> 8) & (Flag::X as u16)) != 0);
-        self.set_flag(Flag::H, (((lhs ^ result ^ rhs) >> 8) & (Flag::H as u16)) != 0);
+        self.set_flag(
+            Flag::H,
+            (((lhs ^ result ^ rhs) >> 8) & (Flag::H as u16)) != 0,
+        );
         self.set_flag(Flag::Y, ((result >> 8) & (Flag::Y as u16)) != 0);
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::S, ((result >> 8) & (Flag::S as u16)) != 0);
@@ -1476,9 +1507,15 @@ impl Cpu {
         self.set_wide_register(dst, result);
         self.set_flag(Flag::C, carry);
         self.set_flag(Flag::N, false);
-        self.set_flag(Flag::PV, ((((rhs ^ lhs ^ 0x8000) & (rhs ^ result) & 0x8000) >> 13) & (Flag::PV as u16)) != 0);
+        self.set_flag(
+            Flag::PV,
+            ((((rhs ^ lhs ^ 0x8000) & (rhs ^ result) & 0x8000) >> 13) & (Flag::PV as u16)) != 0,
+        );
         self.set_flag(Flag::X, ((result >> 8) & (Flag::X as u16)) != 0);
-        self.set_flag(Flag::H, (((lhs ^ result ^ rhs) >> 8) & (Flag::H as u16)) != 0);
+        self.set_flag(
+            Flag::H,
+            (((lhs ^ result ^ rhs) >> 8) & (Flag::H as u16)) != 0,
+        );
         self.set_flag(Flag::Y, ((result >> 8) & (Flag::Y as u16)) != 0);
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::S, ((result >> 8) & (Flag::S as u16)) != 0);
@@ -1606,7 +1643,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn rlc_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn rlc_index_indirect_wz(
+        &mut self,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1620,7 +1663,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn rrc_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn rrc_index_indirect_wz(
+        &mut self,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1634,7 +1683,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn rl_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn rl_index_indirect_wz(
+        &mut self,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1648,7 +1703,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn rr_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn rr_index_indirect_wz(
+        &mut self,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1662,7 +1723,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn sla_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn sla_index_indirect_wz(
+        &mut self,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1676,7 +1743,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn sra_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn sra_index_indirect_wz(
+        &mut self,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1690,7 +1763,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn sll_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn sll_index_indirect_wz(
+        &mut self,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1704,7 +1783,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn srl_index_indirect_wz(&mut self, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn srl_index_indirect_wz(
+        &mut self,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1718,7 +1803,13 @@ impl Cpu {
     }
 
     #[inline]
-    fn bit_index_indirect_wz(&mut self, mask: u8, offset: i16, index: WideRegister, bus: &mut impl Bus) -> usize {
+    fn bit_index_indirect_wz(
+        &mut self,
+        mask: u8,
+        offset: i16,
+        index: WideRegister,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1735,7 +1826,14 @@ impl Cpu {
     }
 
     #[inline]
-    fn reset_bit_index_indirect_wz(&mut self, mask: u8, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn reset_bit_index_indirect_wz(
+        &mut self,
+        mask: u8,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1748,7 +1846,14 @@ impl Cpu {
     }
 
     #[inline]
-    fn set_bit_index_indirect_wz(&mut self, mask: u8, offset: i16, index: WideRegister, reg: Option<Register>, bus: &mut impl Bus) -> usize {
+    fn set_bit_index_indirect_wz(
+        &mut self,
+        mask: u8,
+        offset: i16,
+        index: WideRegister,
+        reg: Option<Register>,
+        bus: &mut impl Bus,
+    ) -> usize {
         let addr = self.wide_register(index);
         let addr = addr.carrying_add(offset as u16, false).0;
         self.wz = addr;
@@ -1772,6 +1877,7 @@ impl Cpu {
         // TODO: service interrupts here
 
         let opcode = self.fetch(bus);
+        #[rustfmt::skip]
         match opcode {
             0x00 => /* nop              */ self.nop(),
             0x01 => /* ld bc, **        */ self.read_wide_immediate(WideRegister::BC, bus),
@@ -2049,8 +2155,8 @@ impl Cpu {
 
     fn cb_prefix(&mut self, bus: &mut impl Bus) -> usize {
         let opcode = self.fetch(bus);
-        // assume 4 cycles taken to fetch prefix
-        4 + match opcode {
+        #[rustfmt::skip]
+        (4 + match opcode {
             0x00 => /* rlc b            */ self.rlc_register(Register::B),
             0x01 => /* rlc c            */ self.rlc_register(Register::C),
             0x02 => /* rlc d            */ self.rlc_register(Register::D),
@@ -2322,13 +2428,13 @@ impl Cpu {
             0xFD => /* set 7, l         */ self.set_bit_register(0x80, Register::L),
             0xFE => /* set 7, (hl)      */ self.set_bit_hl_indirect(0x80, bus),
             0xFF => /* set 7, a         */ self.set_bit_register(0x80, Register::A),
-        }
+        })
     }
 
     fn dd_prefix(&mut self, bus: &mut impl Bus) -> usize {
         let opcode = self.fetch(bus);
-        // assume 4 cycles taken to fetch prefix
-        4 + match opcode {
+        #[rustfmt::skip]
+        (4 + match opcode {
             0x09 => /* add ix, bc       */ self.add_wide_wz(WideRegister::IX, WideRegister::BC),
 
             0x19 => /* add ix, de       */ self.add_wide_wz(WideRegister::IX, WideRegister::DE),
@@ -2432,13 +2538,13 @@ impl Cpu {
 
             // Any other opcode seems to act as if the prefix was a nop
             _ => self.step(bus),
-        }
+        })
     }
 
     fn ed_prefix(&mut self, bus: &mut impl Bus) -> usize {
         let opcode = self.fetch(bus);
-        // assume 4 cycles taken to fetch prefix
-        4 + match opcode {
+        #[rustfmt::skip]
+        (4 + match opcode {
             0x40 => /* in b, (c)        */ self.input(Register::B, bus),
             0x41 => /* out (c), b       */ self.output(Register::B, bus),
             0x42 => /* sbc hl, bc       */ self.sub_carry_wide_wz(WideRegister::HL, WideRegister::BC),
@@ -2525,13 +2631,13 @@ impl Cpu {
 
             // Any other opcode seems to act as if the prefix was a nop
             _ => self.step(bus),
-        }
+        })
     }
 
     fn fd_prefix(&mut self, bus: &mut impl Bus) -> usize {
         let opcode = self.fetch(bus);
-        // assume 4 cycles taken to fetch prefix
-        4 + match opcode {
+        #[rustfmt::skip]
+        (4 + match opcode {
             0x09 => /* add iy, bc       */ self.add_wide_wz(WideRegister::IY, WideRegister::BC),
 
             0x19 => /* add iy, de       */ self.add_wide_wz(WideRegister::IY, WideRegister::DE),
@@ -2635,14 +2741,14 @@ impl Cpu {
 
             // Any other opcode seems to act as if the prefix was a nop
             _ => self.step(bus),
-        }
+        })
     }
 
     fn ddcb_prefix(&mut self, bus: &mut impl Bus) -> usize {
         let offset = self.immediate(bus) as i8 as i16;
         let opcode = self.fetch(bus);
-        // assume 4 cycles taken to fetch prefix
-        4 + match opcode {
+        #[rustfmt::skip]
+        (4 + match opcode {
             0x00 => /* rlc (ix+*), b    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::B), bus),
             0x01 => /* rlc (ix+*), c    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::C), bus),
             0x02 => /* rlc (ix+*), d    */ self.rlc_index_indirect_wz(offset, WideRegister::IX, Some(Register::D), bus),
@@ -2914,14 +3020,14 @@ impl Cpu {
             0xFD => /* set 7, (ix+*), l */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::L), bus),
             0xFE => /* set 7, (ix+*)    */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, None, bus),
             0xFF => /* set 7, (ix+*), a */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IX, Some(Register::A), bus),
-        }
+        })
     }
 
     fn fdcb_prefix(&mut self, bus: &mut impl Bus) -> usize {
         let offset = self.immediate(bus) as i8 as i16;
         let opcode = self.fetch(bus);
-        // assume 4 cycles taken to fetch prefix
-        4 + match opcode {
+        #[rustfmt::skip]
+        (4 + match opcode {
             0x00 => /* rlc (iy+*), b    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::B), bus),
             0x01 => /* rlc (iy+*), c    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::C), bus),
             0x02 => /* rlc (iy+*), d    */ self.rlc_index_indirect_wz(offset, WideRegister::IY, Some(Register::D), bus),
@@ -3193,6 +3299,6 @@ impl Cpu {
             0xFD => /* set 7, (iy+*), l */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::L), bus),
             0xFE => /* set 7, (iy+*)    */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, None, bus),
             0xFF => /* set 7, (iy+*), a */ self.set_bit_index_indirect_wz(0x80, offset, WideRegister::IY, Some(Register::A), bus),
-        }
+        })
     }
 }

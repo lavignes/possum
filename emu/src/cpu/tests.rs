@@ -1,6 +1,7 @@
-use std::time::{Instant};
-use crate::bus::TestBus;
+use std::time::Instant;
+
 use super::*;
+use crate::bus::TestBus;
 
 const ZEXDOC: (&'static str, &'static [u8]) = ("zexdoc", include_bytes!("zexdoc.com"));
 const ZEXALL: (&'static str, &'static [u8]) = ("zexall", include_bytes!("zexall.com"));
@@ -52,7 +53,7 @@ fn zextests() {
             match cpu.pc {
                 0x0000 => break,
                 0x0005 => bios_call(&mut cpu, &mut bus),
-                _ => {},
+                _ => {}
             }
         }
         let duration = Instant::now().duration_since(start).as_nanos() as usize;

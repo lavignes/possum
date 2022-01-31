@@ -99,7 +99,7 @@ bitflags::bitflags! {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum ReadRegister {
     Status,
     ByteCounterLow,
@@ -136,7 +136,7 @@ enum WriteRegister {
 #[derive(Copy, Clone, Debug)]
 enum Direction {
     PortBToA,
-    PortAToB
+    PortAToB,
 }
 
 impl Default for Direction {
@@ -149,7 +149,7 @@ impl Default for Direction {
 enum IncrementMode {
     Decrement,
     Increment,
-    Fixed
+    Fixed,
 }
 
 impl Default for IncrementMode {
@@ -162,7 +162,7 @@ impl Default for IncrementMode {
 enum AccessMode {
     Byte,
     Continuous,
-    Burst
+    Burst,
 }
 
 impl Default for AccessMode {
@@ -208,11 +208,21 @@ pub struct Dma {
     port_b_is_memory: bool,
     port_b_increment_mode: IncrementMode,
 
+    // NOTE: Its fascinating but reads and writes to internal registers
+    // are controlled by a sort of list of registers to write
+    // that are popped off a stack. In reality, this is likely done
+    // using some sort of shifter in the real DMA.
+
+    // TODO: The implementation of the read and write register order tracking is *too* simple :-)
+    //   We do need to emulate the real behavior by using `u8::trailing_zeros` to get the
+    //   index of the lowest set bit in a `u8` and use that to look up the correct register.
+    //   The added benefit there is that the code below that sets up the read/write stack doesnt
+    //   need to be written in reverse order anymore.
     write_order: Vec<WriteRegister>,
 }
 
 impl Device for Dma {
-    fn tick(&mut self, bus: &mut impl DeviceBus) {
+    fn tick(&mut self, bus: &mut dyn DeviceBus) {
         if !self.enabled {
             return;
         }
@@ -237,28 +247,24 @@ impl Device for Dma {
 
         // Step 2: Increment source counter
         match self.direction {
-            Direction::PortAToB => {
-                match self.port_a_increment_mode {
-                    IncrementMode::Increment => {
-                        self.port_a_counter = self.port_a_counter.wrapping_add(1);
-                    }
-                    IncrementMode::Decrement => {
-                        self.port_a_counter = self.port_a_counter.wrapping_sub(1);
-                    }
-                    _ => {}
+            Direction::PortAToB => match self.port_a_increment_mode {
+                IncrementMode::Increment => {
+                    self.port_a_counter = self.port_a_counter.wrapping_add(1);
                 }
-            }
-            Direction::PortBToA => {
-                match self.port_b_increment_mode {
-                    IncrementMode::Increment => {
-                        self.port_b_counter = self.port_b_counter.wrapping_add(1);
-                    }
-                    IncrementMode::Decrement => {
-                        self.port_b_counter = self.port_b_counter.wrapping_sub(1);
-                    }
-                    _ => {}
+                IncrementMode::Decrement => {
+                    self.port_a_counter = self.port_a_counter.wrapping_sub(1);
                 }
-            }
+                _ => {}
+            },
+            Direction::PortBToA => match self.port_b_increment_mode {
+                IncrementMode::Increment => {
+                    self.port_b_counter = self.port_b_counter.wrapping_add(1);
+                }
+                IncrementMode::Decrement => {
+                    self.port_b_counter = self.port_b_counter.wrapping_sub(1);
+                }
+                _ => {}
+            },
         }
 
         // Step 3: Load destination counter
@@ -305,28 +311,24 @@ impl Device for Dma {
 
         // Step 5: Increment destination counter
         match self.direction {
-            Direction::PortAToB => {
-                match self.port_b_increment_mode {
-                    IncrementMode::Increment => {
-                        self.port_b_counter = self.port_b_counter.wrapping_add(1);
-                    }
-                    IncrementMode::Decrement => {
-                        self.port_b_counter = self.port_b_counter.wrapping_sub(1);
-                    }
-                    _ => {}
+            Direction::PortAToB => match self.port_b_increment_mode {
+                IncrementMode::Increment => {
+                    self.port_b_counter = self.port_b_counter.wrapping_add(1);
                 }
-            }
-            Direction::PortBToA => {
-                match self.port_a_increment_mode {
-                    IncrementMode::Increment => {
-                        self.port_a_counter = self.port_a_counter.wrapping_add(1);
-                    }
-                    IncrementMode::Decrement => {
-                        self.port_a_counter = self.port_a_counter.wrapping_sub(1);
-                    }
-                    _ => {}
+                IncrementMode::Decrement => {
+                    self.port_b_counter = self.port_b_counter.wrapping_sub(1);
                 }
-            }
+                _ => {}
+            },
+            Direction::PortBToA => match self.port_a_increment_mode {
+                IncrementMode::Increment => {
+                    self.port_a_counter = self.port_a_counter.wrapping_add(1);
+                }
+                IncrementMode::Decrement => {
+                    self.port_a_counter = self.port_a_counter.wrapping_sub(1);
+                }
+                _ => {}
+            },
         }
 
         // Step 6: Check for match
@@ -367,10 +369,8 @@ impl Device for Dma {
     }
 
     fn read(&mut self, _: u16) -> u8 {
-        // NOTE: Its fascinating but reads and writes to internal registers
-        // are controlled by a sort of list of registers to write
-        // that are popped off a stack. In reality, this is likely done
-        // using some sort of shifter in the real DMA.
+        debug_assert!(self.read_order.len() <= 8);
+
         match self.read_order.pop() {
             Some(ReadRegister::Status) => self.status,
 
@@ -388,6 +388,8 @@ impl Device for Dma {
     }
 
     fn write(&mut self, _: u16, data: u8) {
+        debug_assert!(self.write_order.len() <= 8);
+
         if self.enabled {
             return;
         }
@@ -400,36 +402,36 @@ impl Device for Dma {
                 if (data & WR1Mask::SELECT_MASK.bits()) == WR1Mask::SELECT_BITS.bits() {
                     self.port_a_is_memory = (data & WR1Mask::MEMORY_OR_IO.bits()) == 0;
 
-                    self.port_a_increment_mode = match (data & WR1Mask::INCREMENT_DECREMENT_MODE.bits()) >> 4 {
-                        0 => IncrementMode::Decrement,
-                        1 => IncrementMode::Increment,
-                        2 | 3 => IncrementMode::Fixed,
-                        _ => unreachable!()
-                    };
+                    self.port_a_increment_mode =
+                        match (data & WR1Mask::INCREMENT_DECREMENT_MODE.bits()) >> 4 {
+                            0 => IncrementMode::Decrement,
+                            1 => IncrementMode::Increment,
+                            2 | 3 => IncrementMode::Fixed,
+                            _ => unreachable!(),
+                        };
 
                     // Which ports will be written to?
                     if (data & 0x40) != 0 {
                         self.write_order.push(WriteRegister::PortATiming);
                     }
                 }
-
                 // Register 2 => 0XXX X000
                 else if (data & WR2Mask::SELECT_MASK.bits()) == WR2Mask::SELECT_BITS.bits() {
                     self.port_b_is_memory = (data & WR2Mask::MEMORY_OR_IO.bits()) == 0;
 
-                    self.port_b_increment_mode = match (data & WR2Mask::INCREMENT_DECREMENT_MODE.bits()) >> 4 {
-                        0 => IncrementMode::Decrement,
-                        1 => IncrementMode::Increment,
-                        2 | 3 => IncrementMode::Fixed,
-                        _ => unreachable!()
-                    };
+                    self.port_b_increment_mode =
+                        match (data & WR2Mask::INCREMENT_DECREMENT_MODE.bits()) >> 4 {
+                            0 => IncrementMode::Decrement,
+                            1 => IncrementMode::Increment,
+                            2 | 3 => IncrementMode::Fixed,
+                            _ => unreachable!(),
+                        };
 
                     // Which ports will be written to?
                     if (data & 0x40) != 0 {
                         self.write_order.push(WriteRegister::PortBTiming);
                     }
                 }
-
                 // Register 0 => 0XXX XXXX
                 else if (data & WR0Mask::SELECT_MASK.bits()) == WR0Mask::SELECT_BITS.bits() {
                     match data & WR0Mask::SEARCH_OR_TRANSFER.bits() {
@@ -439,7 +441,7 @@ impl Device for Dma {
                             self.transfer = true;
                             self.search = true;
                         }
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     }
 
                     if (data & WR0Mask::DIRECTION.bits()) == 0 {
@@ -462,7 +464,6 @@ impl Device for Dma {
                         self.write_order.push(WriteRegister::PortAAddressLow);
                     }
                 }
-
                 // Register 3 => 1XXX XX00
                 else if (data & WR3Mask::SELECT_MASK.bits()) == WR3Mask::SELECT_BITS.bits() {
                     self.stop_on_match = (data & WR3Mask::STOP_ON_MATCH.bits()) != 0;
@@ -485,7 +486,6 @@ impl Device for Dma {
                         self.write_order.push(WriteRegister::MaskByte);
                     }
                 }
-
                 // Register 4 => 1XXX XX01
                 else if (data & WR4Mask::SELECT_MASK.bits()) == WR4Mask::SELECT_BITS.bits() {
                     self.access_mode = match (data & WR4Mask::ACCESS_MODE.bits()) >> 5 {
@@ -506,23 +506,21 @@ impl Device for Dma {
                         self.write_order.push(WriteRegister::PortBAddressLow);
                     }
                 }
-
                 // Register 5 => 10XX X010
                 else if (data & WR5Mask::SELECT_MASK.bits()) == WR5Mask::SELECT_BITS.bits() {
                     if (data & WR5Mask::CHIP_ENABLE_ONLY_WAIT.bits()) != 0 {
                         unimplemented!()
                     }
 
-                    self.restart_at_end_of_block = (data & WR5Mask::STOP_RESTART_ON_END_OF_BLOCK.bits()) != 0;
+                    self.restart_at_end_of_block =
+                        (data & WR5Mask::STOP_RESTART_ON_END_OF_BLOCK.bits()) != 0;
                 }
-
                 // Register 6 => 1XXX XX11
                 else if (data & WR6Mask::SELECT_MASK.bits()) == WR6Mask::SELECT_BITS.bits() {
                     // All control bytes disable the DMA... except the enable DMA byte ;-)
                     self.enabled = false;
 
                     match data {
-
                         // Reset
                         0xC3 => {
                             self.interrupts_enabled = false;
@@ -627,7 +625,7 @@ impl Device for Dma {
                             self.enabled = false;
                         }
 
-                        _ => unimplemented!()
+                        _ => unimplemented!(),
                     }
                 }
             }
@@ -637,7 +635,8 @@ impl Device for Dma {
             }
 
             Some(WriteRegister::PortAAddressHigh) => {
-                self.port_a_start_address = (self.port_a_start_address & 0x0F) | ((data as u16) << 8);
+                self.port_a_start_address =
+                    (self.port_a_start_address & 0x0F) | ((data as u16) << 8);
             }
 
             Some(WriteRegister::BlockLengthLow) => {
@@ -656,13 +655,15 @@ impl Device for Dma {
             }
 
             Some(WriteRegister::PortBAddressHigh) => {
-                self.port_b_start_address = (self.port_b_start_address & 0x0F) | ((data as u16) << 8);
+                self.port_b_start_address =
+                    (self.port_b_start_address & 0x0F) | ((data as u16) << 8);
             }
 
             Some(WriteRegister::InterruptControl) => {
                 self.interrupt_on_match = (data & WR4Mask::INTERRUPT_ON_MATCH.bits()) != 0;
 
-                self.interrupt_at_end_of_block = (data & WR4Mask::INTERRUPT_AT_END_OF_BLOCK.bits()) != 0;
+                self.interrupt_at_end_of_block =
+                    (data & WR4Mask::INTERRUPT_AT_END_OF_BLOCK.bits()) != 0;
 
                 if (data & WR4Mask::PULSE_GENERATED.bits()) != 0 {
                     unimplemented!();

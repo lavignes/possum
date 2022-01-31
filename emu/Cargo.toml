@@ -5,3 +5,7 @@ edition = "2021"
 
 [dependencies]
 bitflags = "1"
+
+# used by the binary
+termion = "1"
+clap = { version = "3", features = ["derive"] }

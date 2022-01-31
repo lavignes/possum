@@ -13,7 +13,7 @@ pub trait DeviceBus: Bus {
 }
 
 pub trait Device {
-    fn tick(&mut self, bus: &mut impl DeviceBus);
+    fn tick(&mut self, bus: &mut dyn DeviceBus);
 
     fn read(&mut self, port: u16) -> u8;
 
