@@ -523,6 +523,8 @@ impl Device for Dma {
                     match data {
                         // Reset
                         0xC3 => {
+                            // TODO: Do I need to reset other status bits?
+                            //   like the found/end and transfer bits?
                             self.interrupts_enabled = false;
                             self.restart_at_end_of_block = false;
                             self.status &= !RR0Mask::INTERRUPT_PENDING.bits();
