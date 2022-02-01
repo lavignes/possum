@@ -45,7 +45,7 @@ impl Device for Stdio {
         0
     }
 
-    fn clear_interrupt(&mut self) {}
+    fn ack_interrupt(&mut self) {}
 }
 
 #[derive(Parser, Debug)]

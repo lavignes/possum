@@ -2,6 +2,7 @@
 #![feature(stmt_expr_attributes)]
 
 mod bus;
+mod cf;
 mod cpu;
 mod dma;
 mod system;

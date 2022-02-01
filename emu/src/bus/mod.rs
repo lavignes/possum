@@ -23,7 +23,7 @@ pub trait Device {
 
     fn interrupt_vector(&self) -> u8;
 
-    fn clear_interrupt(&mut self);
+    fn ack_interrupt(&mut self);
 }
 
 pub struct TestBus {

@@ -1,3 +1,5 @@
+//! z80 CPU emulation
+
 #[cfg(test)]
 mod tests;
 
@@ -1491,7 +1493,7 @@ impl Cpu {
 
     #[inline]
     fn retn(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]
@@ -1635,12 +1637,12 @@ impl Cpu {
 
     #[inline]
     fn ini(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]
     fn outi(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]
@@ -1682,12 +1684,12 @@ impl Cpu {
 
     #[inline]
     fn ind(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]
     fn outd(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]
@@ -1718,12 +1720,12 @@ impl Cpu {
 
     #[inline]
     fn inir(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]
     fn otir(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]
@@ -1754,12 +1756,12 @@ impl Cpu {
 
     #[inline]
     fn indr(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]
     fn otdr(&mut self, _: &mut impl Bus) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     #[inline]

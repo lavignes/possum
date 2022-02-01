@@ -1,3 +1,5 @@
+//! z8410 DMA emulation
+
 #[cfg(test)]
 mod tests;
 
@@ -359,7 +361,7 @@ impl Device for Dma {
 
             if self.restart_at_end_of_block {
                 // TODO: Do I need to stay enabled when I restart?
-                unimplemented!()
+                todo!()
             }
         }
 
@@ -492,7 +494,7 @@ impl Device for Dma {
                         0 => AccessMode::Byte,
                         1 => AccessMode::Continuous,
                         3 => AccessMode::Burst,
-                        _ => unimplemented!(),
+                        _ => unimplemented!("Attempted to set an impossible DMA access mode: 4"),
                     };
 
                     // Which ports will be written to?
@@ -509,7 +511,7 @@ impl Device for Dma {
                 // Register 5 => 10XX X010
                 else if (data & WR5Mask::SELECT_MASK.bits()) == WR5Mask::SELECT_BITS.bits() {
                     if (data & WR5Mask::CHIP_ENABLE_ONLY_WAIT.bits()) != 0 {
-                        unimplemented!()
+                        todo!()
                     }
 
                     self.restart_at_end_of_block =
@@ -531,10 +533,10 @@ impl Device for Dma {
                         }
 
                         // Reset Port A Timing
-                        0xC7 => unimplemented!(),
+                        0xC7 => todo!(),
 
                         // Reset Port B Timing
-                        0xCB => unimplemented!(),
+                        0xCB => todo!(),
 
                         // Load
                         0xCF => {
@@ -560,7 +562,7 @@ impl Device for Dma {
                         }
 
                         // Disable interrupts
-                        0xAF => unimplemented!(),
+                        0xAF => todo!(),
 
                         // Enable interrupts
                         0xAB => {
@@ -568,10 +570,10 @@ impl Device for Dma {
                         }
 
                         // Reset and disable interrupts
-                        0xA3 => unimplemented!(),
+                        0xA3 => todo!(),
 
                         // Enable after reti
-                        0xB7 => unimplemented!(),
+                        0xB7 => todo!(),
 
                         // Read status byte
                         0xBF => {
@@ -615,7 +617,7 @@ impl Device for Dma {
                         }
 
                         // Force ready
-                        0xB3 => unimplemented!(),
+                        0xB3 => todo!(),
 
                         // Enable DMA
                         0x87 => {
@@ -627,7 +629,10 @@ impl Device for Dma {
                             self.enabled = false;
                         }
 
-                        _ => unimplemented!(),
+                        _ => unimplemented!(
+                            "Unrecognized DMA command: {}. It wasn't in the data sheet for z8410.",
+                            data
+                        ),
                     }
                 }
             }
@@ -649,8 +654,8 @@ impl Device for Dma {
                 self.block_length = (self.block_length & 0x0F) | ((data as u16) << 8);
             }
 
-            Some(WriteRegister::PortATiming) => unimplemented!(),
-            Some(WriteRegister::PortBTiming) => unimplemented!(),
+            Some(WriteRegister::PortATiming) => todo!(),
+            Some(WriteRegister::PortBTiming) => todo!(),
 
             Some(WriteRegister::PortBAddressLow) => {
                 self.port_b_start_address = (self.port_b_start_address & 0xF0) | data as u16;
@@ -668,7 +673,7 @@ impl Device for Dma {
                     (data & WR4Mask::INTERRUPT_AT_END_OF_BLOCK.bits()) != 0;
 
                 if (data & WR4Mask::PULSE_GENERATED.bits()) != 0 {
-                    unimplemented!();
+                    todo!();
                 }
 
                 self.status_affects_vector = (data & WR4Mask::STATUS_AFFECTS_VECTOR.bits()) != 0;
@@ -684,7 +689,7 @@ impl Device for Dma {
                 }
             }
 
-            Some(WriteRegister::PulseControl) => unimplemented!(),
+            Some(WriteRegister::PulseControl) => todo!(),
 
             Some(WriteRegister::InterruptVector) => {
                 self.interrupt_vector = data;
@@ -723,7 +728,7 @@ impl Device for Dma {
         result
     }
 
-    fn clear_interrupt(&mut self) {
+    fn ack_interrupt(&mut self) {
         self.status &= !RR0Mask::INTERRUPT_PENDING.bits();
     }
 }
