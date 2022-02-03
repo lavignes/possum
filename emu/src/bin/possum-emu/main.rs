@@ -1,12 +1,16 @@
+mod mmap;
+
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::{self, Read, Stdin, Stdout, Write},
     path::PathBuf,
 };
 
 use clap::Parser;
-use possum_emu::{Device, DeviceBus, System};
+use possum_emu::{CFCard, Device, DeviceBus, System};
 use termion::raw::{IntoRawMode, RawTerminal};
+
+use crate::mmap::MemoryMapWrapper;
 
 struct Stdio {
     stdin: Stdin,
@@ -51,19 +55,30 @@ impl Device for Stdio {
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Path to ROM file to load.
+    /// Path to ROM file to load
     #[clap(parse(from_os_str), value_name = "ROM")]
     file: PathBuf,
+
+    /// Path to disk image for the primary drive
+    #[clap(parse(from_os_str), long)]
+    hd0: Option<PathBuf>,
 }
 
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
-    let mut file = File::open(args.file)?;
     let mut rom = Vec::new();
-    file.read_to_end(&mut rom)?;
+    File::open(args.file)?.read_to_end(&mut rom)?;
 
-    let mut system = System::new(Box::new(Stdio::new()?));
+    let hd0: Option<Box<dyn Device>> = if let Some(path) = args.hd0 {
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
+        let mmap = MemoryMapWrapper::new(file)?;
+        Some(Box::new(CFCard::primary(mmap)))
+    } else {
+        None
+    };
+
+    let mut system = System::new(Box::new(Stdio::new()?), hd0);
     system.write_ram(&rom, 0);
 
     loop {

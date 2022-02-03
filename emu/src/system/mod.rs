@@ -8,6 +8,8 @@ pub struct System {
     cpu: Cpu,
     dma: Dma,
     ram: Vec<u8>,
+    hd0: Option<Box<dyn Device>>,
+    hd1: Option<Box<dyn Device>>,
     pipe: Box<dyn Device>,
 }
 
@@ -81,11 +83,14 @@ impl<'a> DeviceBus for DmaView<'a> {
 }
 
 impl System {
-    pub fn new(pipe: Box<dyn Device>) -> Self {
+    // TODO: builder?
+    pub fn new(pipe: Box<dyn Device>, hd0: Option<Box<dyn Device>>) -> Self {
         Self {
             cpu: Cpu::default(),
             dma: Dma::default(),
             ram: vec![0; 65536],
+            hd0,
+            hd1: None,
             pipe,
         }
     }
