@@ -297,10 +297,10 @@ impl<M: MemoryMap> Device for CFCard<M> {
                 // Latch the LBA and sector count
                 #[rustfmt::skip]
                 {
-                    self.lba_latch = (self.lba_latch & 0xFFFFFF00) | ((self.sector_number as u32) << 0);  // [0:7]
-                    self.lba_latch = (self.lba_latch & 0xFFFF00FF) | ((self.cylinder_low as u32) << 8);   // [8:15]
-                    self.lba_latch = (self.lba_latch & 0xFF00FFFF) | ((self.cylinder_high as u32) << 16); // [16:23]
-                    self.lba_latch = (self.lba_latch & 0xF0FFFFFF) | ((self.drive_head as u32) << 24);    // [24:27]
+                    self.lba_latch = (self.lba_latch & 0xFFFFFF00) | ((self.sector_number as u32) << 0);         // [0:7]
+                    self.lba_latch = (self.lba_latch & 0xFFFF00FF) | ((self.cylinder_low as u32) << 8);          // [8:15]
+                    self.lba_latch = (self.lba_latch & 0xFF00FFFF) | ((self.cylinder_high as u32) << 16);        // [16:23]
+                    self.lba_latch = (self.lba_latch & 0x00FFFFFF) | (((self.drive_head & 0x0F) as u32) << 24);  // [24:27]
                 }
 
                 // Clear errors :-)
