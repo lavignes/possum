@@ -1999,6 +1999,10 @@ impl Cpu {
         // TODO: service interrupts here
 
         let opcode = self.fetch(bus);
+        self.do_opcode(opcode, bus)
+    }
+
+    fn do_opcode(&mut self, opcode: u8, bus: &mut impl Bus) -> usize {
         #[rustfmt::skip]
         match opcode {
             0x00 => /* nop              */ self.nop(),
@@ -2659,7 +2663,7 @@ impl Cpu {
             0xF9 => /* ld sp, ix        */ self.copy_wide_register(WideRegister::SP, WideRegister::IX),
 
             // Any other opcode seems to act as if the prefix was a nop
-            _ => self.step(bus),
+            _ => self.do_opcode(opcode, bus),
         })
     }
 
@@ -2752,7 +2756,7 @@ impl Cpu {
             0xBB => /* otdr             */ self.otdr(bus),
 
             // Any other opcode seems to act as if the prefix was a nop
-            _ => self.step(bus),
+            _ => self.do_opcode(opcode, bus),
         })
     }
 
@@ -2862,7 +2866,7 @@ impl Cpu {
             0xF9 => /* ld sp, iy        */ self.copy_wide_register(WideRegister::SP, WideRegister::IY),
 
             // Any other opcode seems to act as if the prefix was a nop
-            _ => self.step(bus),
+            _ => self.do_opcode(opcode, bus),
         })
     }
 
