@@ -11,6 +11,8 @@ HD_PORT_CMD:		equ $87
 
 HD_FEAT_8BIT_ON:	equ $01
 HD_STAT_BSY:		equ $80
+HD_DRIVE0:		equ $e0
+HD_DRIVE1:		equ $f0
 
 HD_CMD_DIAG:		equ $90
 HD_CMD_ERASE:		equ $c0
@@ -24,6 +26,7 @@ HD_IDENT_SERIAL:	equ $14
 HD_IDENT_SERIAL_LEN:	equ 20
 HD_IDENT_MODEL:		equ $36
 HD_IDENT_MODEL_LEN:	equ 40
+HD_IDENT_SIZE:		equ $0e
 
 PIPE_PORT: equ $f0
 
@@ -32,25 +35,48 @@ start:
 	ld sp, $ffff
 
 	call hd_8bit
-	jr c, err
+	call c, err
 	call hd_ident
-	jr c, err
+	call c, err
 
 	ld hl, HD_MSG_MODEL
 	ld b, HD_MSG_MODEL_END - HD_MSG_MODEL
-	call str_print
+	call pip_wr
 
 	ld hl, SECTOR_BUF + HD_IDENT_MODEL
 	ld b, HD_IDENT_MODEL_LEN
-	call str_println
+	call pip_wrln
 
 	ld hl, HD_MSG_SERIAL
 	ld b, HD_MSG_SERIAL_END - HD_MSG_SERIAL
-	call str_print
+	call pip_wr
 
 	ld hl, SECTOR_BUF + HD_IDENT_SERIAL
 	ld b, HD_IDENT_SERIAL_LEN
-	call str_println
+	call pip_wrln
+
+	ld hl, HD_MSG_SIZE
+	ld b, HD_MSG_SIZE_END - HD_MSG_SIZE
+	call pip_wr
+
+	ld a, '$'
+	call pip_wrc
+	ld de, SECTOR_BUF + HD_IDENT_SIZE + 3
+	ld a, (de)
+	call pip_wrx
+	dec de
+	ld a, (de)
+	call pip_wrx
+	dec de
+	ld a, (de)
+	call pip_wrx
+	dec de
+	ld a, (de)
+	call pip_wrx
+	ld a, '\r'
+	call pip_wrc
+	ld a, '\n'
+	call pip_wrc
 
 	ld de, $0000
 	ld hl, $0000
@@ -78,14 +104,18 @@ start:
 
 	ld hl, HELLO_MSG
 	ld b, HELLO_MSG_END - HELLO_MSG
-	call str_println
+	call pip_wrln
 
 	jr exit
 
 err:
+	push af
 	ld hl, HD_ERR_MSG
 	ld b, HD_ERR_MSG_END - HD_ERR_MSG
-	call str_print
+	call pip_wr
+	ld a, '$'
+	pop af
+	call pip_wrx
 
 exit:
 	halt
@@ -128,7 +158,6 @@ hd_wr:
 	jp hd_bufout
 
 hd_lba:
-	call hd_wait
 	ld c, HD_PORT_SEC_NUM
 	out (c), e
 	inc c
@@ -138,7 +167,7 @@ hd_lba:
 	inc c
 	ld a, h
 	and $0f
-	or $e0			; $f0 would select drive 1
+	or HD_DRIVE0
 	out (c), a
 	ret
 
@@ -192,18 +221,52 @@ hd_wait:
 	jr nz, .bsy_wt
 	ret
 
-str_print:
+HEX_DIGITS:
+	db "0123456789abcdef"
+
+pip_wrx:
+	push af
+	ld c, a
+	srl c
+	srl c
+	srl c
+	srl c
+	xor b, b
+	ld hl, HEX_DIGITS
+	add hl, bc
 	ld c, PIPE_PORT
-.next_char:
+	ld a, (hl)
+	out (c), a
+	pop af
+	and $0f
+	ld c, a
+	xor b, b
+	ld hl, HEX_DIGITS
+	add hl, bc
+	ld c, PIPE_PORT
+	ld a, (hl)
+	out (c), a
+	ret
+
+pip_wrc:
+	ld c, PIPE_PORT
+	out (c), a
+	ret
+
+pip_wr:
+	ld c, PIPE_PORT
+.nbyte:
 	ld a, (hl)
 	out (c), a
 	inc hl
-	djnz .next_char
+	djnz .nbyte
 	ret
 
-str_println:
-	call str_print
-	ld a, $0a
+pip_wrln:
+	call pip_wr
+	ld a, '\r'
+	out (c), a
+	ld a, '\n'
 	out (c), a
 	ret
 
@@ -212,15 +275,19 @@ HELLO_MSG:
 HELLO_MSG_END:
 
 HD_MSG_MODEL:
-	db "Model Name: "
+	db "Model Name:\t"
 HD_MSG_MODEL_END:
 
 HD_MSG_SERIAL:
-	db "Serial #: "
+	db "Serial #:\t"
 HD_MSG_SERIAL_END:
 
+HD_MSG_SIZE:
+	db "Disk Size:\t"
+HD_MSG_SIZE_END:
+
 HD_ERR_MSG:
-	db "Disk error"
+	db "Disk error:\t"
 HD_ERR_MSG_END:
 
 	org $A000

@@ -19,18 +19,23 @@ machine.
 ### Hardware Emulation
  
 - [ ] z80 CPU: *nearly complete, very usable*
-- [ ] z8410 DMA: *usable*
+- [ ] z8410 DMA: *usable (though not used yet since the timing emulation is a little sketchy)*
 - [ ] z80 SIO: *not started*
 - [ ] z80 CTC: *not started*
-- [ ] 8-bit ATA drive (Compact Flash technically, but it's 80s tech): *nearly complete*
-- [ ] CGA-like graphics adapter (a stretch, probably. It's trivial to emulate though)
+- [X] 8-bit ATA drive(s)*
+- [ ] TMS9918 VDC**: *not started*
+
+\**2 disk images can be mounted on the ATA bus.
+The interface ATA is Compact Flash actually, but it is 80s tech.*
+
+\*\**Considering the VDC from the Commodore 128 instead.*
 
 ### Software
 
-- [ ] Monitor ROM with disk driver that can load the kernel
-- [ ] Filesystem (let's make a custom one!)
+- [ ] Monitor ROM with disk driver that can load the kernel: *WIP*
+- [ ] Filesystem (let's make a custom one!): *WIP*
 - [ ] Fuse driver for host access to the mount the filesystem
-- [ ] Banked memory mapped IO
+- [ ] Banked memory-mapped IO
 - [ ] Preemptive multitasking (yes, really)
 - [ ] IPC
 - [ ] CP/M-compatability mode (a dream)
@@ -40,3 +45,15 @@ machine.
 - [ ] TCP/IP stack
 - [ ] ???
 
+## What's working
+
+```
+cargo run --release --bin possum-emu -- /roms/hello_hd.bin --hd0 ../img/blank.img
+```
+
+```
+Model Name:	POSSUM-CF-CARD-EMULATOR-01
+Serial #:	0-12345-67890-123456
+Disk Size:	$00000080
+Hello! Successfully wrote to the disk!
+```

@@ -166,7 +166,7 @@ impl System {
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> usize {
         let Self {
             cpu,
             dma,
@@ -199,6 +199,8 @@ impl System {
             // TODO: I think the accurate impl would be to only check reti on final cycle
             reti = false;
         }
+
+        cycles
     }
 
     pub fn halted(&self) -> bool {

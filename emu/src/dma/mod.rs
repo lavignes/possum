@@ -224,6 +224,9 @@ pub struct Dma {
 }
 
 impl Device for Dma {
+    // TODO: The timing for the DMA is probably jank. We are reading and writing on every cycle,
+    //   which is obviously impossible. Need to double-check the timing of the chip to figure out
+    //   how many steps in the DMA pipeline can be run per cycle. (probably read/inc/write?)
     fn tick(&mut self, bus: &mut dyn DeviceBus) {
         if !self.enabled {
             return;
