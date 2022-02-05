@@ -1641,7 +1641,7 @@ impl Cpu {
     }
 
     #[inline]
-    fn outi(&mut self, _: &mut impl Bus) -> usize {
+    fn outi_wz(&mut self, _: &mut impl Bus) -> usize {
         todo!()
     }
 
@@ -1760,7 +1760,7 @@ impl Cpu {
     }
 
     #[inline]
-    fn otdr(&mut self, _: &mut impl Bus) -> usize {
+    fn otdr_wz(&mut self, _: &mut impl Bus) -> usize {
         todo!()
     }
 
@@ -1990,6 +1990,11 @@ impl Cpu {
     #[inline]
     pub fn returned_from_interrupt(&self) -> bool {
         self.reti
+    }
+
+    #[inline]
+    pub fn halted(&self) -> bool {
+        self.halted
     }
 
     pub fn step(&mut self, bus: &mut impl Bus) -> usize {
@@ -2740,7 +2745,7 @@ impl Cpu {
             0xA0 => /* ldi              */ self.ldi(bus),
             0xA1 => /* cpi              */ self.cpi_wz(bus),
             0xA2 => /* ini              */ self.ini(bus),
-            0xA3 => /* outi             */ self.outi(bus),
+            0xA3 => /* outi             */ self.outi_wz(bus),
             0xA8 => /* ldd              */ self.ldd(bus),
             0xA9 => /* cpd              */ self.cpd_wz(bus),
             0xAA => /* ind              */ self.ind(bus),
@@ -2753,7 +2758,7 @@ impl Cpu {
             0xB8 => /* lddr             */ self.lddr(bus),
             0xB9 => /* cpdr             */ self.cpdr_wz(bus),
             0xBA => /* indr             */ self.indr(bus),
-            0xBB => /* otdr             */ self.otdr(bus),
+            0xBB => /* otdr             */ self.otdr_wz(bus),
 
             // Any other opcode seems to act as if the prefix was a nop
             _ => self.do_opcode(opcode, bus),

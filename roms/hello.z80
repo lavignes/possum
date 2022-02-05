@@ -1,0 +1,23 @@
+PIPE_PORT: equ $f0
+
+org $0000
+
+start:
+	ld hl, HELLO
+	ld b, HELLO_END - HELLO
+	call print_string
+	halt
+
+print_string:
+	ld c, PIPE_PORT
+.next_char:
+	ld a, (hl)
+	out (c), a
+	inc hl
+	dec b
+	jr nz, .next_char
+	ret
+
+HELLO:
+	db "Howdy Cowboy\n"
+HELLO_END:

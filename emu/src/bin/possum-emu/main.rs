@@ -2,25 +2,28 @@ mod mmap;
 
 use std::{
     fs::{File, OpenOptions},
-    io::{self, Read, Stdin, Stdout, Write},
+    io::{self, Read, Stdout, Write},
     path::PathBuf,
 };
 
 use clap::Parser;
-use possum_emu::{CFCard, Device, DeviceBus, System};
-use termion::raw::{IntoRawMode, RawTerminal};
+use possum_emu::{CardBus, Device, DeviceBus, System};
+use termion::{
+    raw::{IntoRawMode, RawTerminal},
+    AsyncReader,
+};
 
 use crate::mmap::MemoryMapWrapper;
 
 struct Stdio {
-    stdin: Stdin,
+    stdin: AsyncReader,
     stdout: RawTerminal<Stdout>,
 }
 
 impl Stdio {
     fn new() -> io::Result<Self> {
         Ok(Self {
-            stdin: io::stdin(),
+            stdin: termion::async_stdin(),
             stdout: io::stdout().into_raw_mode()?,
         })
     }
@@ -41,7 +44,7 @@ impl Device for Stdio {
         self.stdout.write(&[data]).unwrap();
     }
 
-    fn interrupt(&self) -> bool {
+    fn interrupting(&self) -> bool {
         false
     }
 
@@ -70,18 +73,20 @@ fn main() -> io::Result<()> {
     let mut rom = Vec::new();
     File::open(args.file)?.read_to_end(&mut rom)?;
 
-    let hd0: Option<Box<dyn Device>> = if let Some(path) = args.hd0 {
+    let hd: Option<Box<dyn Device>> = if let Some(path) = args.hd0 {
         let file = OpenOptions::new().read(true).write(true).open(path)?;
         let mmap = MemoryMapWrapper::new(file)?;
-        Some(Box::new(CFCard::primary(mmap)))
+        Some(Box::new(CardBus::single(mmap)))
     } else {
         None
     };
 
-    let mut system = System::new(Box::new(Stdio::new()?), hd0);
+    let mut system = System::new(Box::new(Stdio::new()?), hd);
     system.write_ram(&rom, 0);
 
-    loop {
+    while !system.halted() {
         system.step();
     }
+
+    Ok(())
 }

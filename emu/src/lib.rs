@@ -9,5 +9,5 @@ mod dma;
 mod system;
 
 pub use bus::{Device, DeviceBus};
-pub use cf::{CFCard, MemoryMap};
+pub use cf::{CardBus, MemoryMap};
 pub use system::System;

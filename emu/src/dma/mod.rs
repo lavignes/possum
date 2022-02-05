@@ -709,7 +709,7 @@ impl Device for Dma {
         }
     }
 
-    fn interrupt(&self) -> bool {
+    fn interrupting(&self) -> bool {
         (self.status & RR0Mask::INTERRUPT_PENDING.bits()) != 0
     }
 

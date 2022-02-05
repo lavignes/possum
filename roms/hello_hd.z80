@@ -1,0 +1,143 @@
+HD_PORT_DATA:           equ $80
+HD_PORT_ERR:            equ $81
+HD_PORT_FEAT:           equ $81
+HD_PORT_SEC_CNT:        equ $82
+HD_PORT_SEC_NUM:        equ $83
+HD_PORT_CYL_LO:         equ $84
+HD_PORT_CYL_HI:         equ $85
+HD_PORT_HEAD:           equ $86
+HD_PORT_STAT:           equ $87
+HD_PORT_CMD:            equ $87
+
+HD_FEAT_8BIT_ON:        equ $01
+HD_STAT_BSY:            equ $80
+
+HD_CMD_FEAT:            equ $ef
+HD_CMD_IDENT:           equ $ec
+
+HD_IDENT_SERIAL:        equ $14
+HD_IDENT_SERIAL_LEN:    equ 20
+HD_IDENT_MODEL:         equ $36
+HD_IDENT_MODEL_LEN:     equ 40
+
+PIPE_PORT: equ $f0
+
+org $0000
+
+start:
+    call hd_8bit
+    jr c, err
+    call hd_ident
+    jr c, err
+
+    ld hl, HD_MSG_MODEL
+    ld b, HD_MSG_MODEL_END - HD_MSG_MODEL
+    call str_print
+
+    ld hl, SECTOR_BUF + HD_IDENT_MODEL
+    ld b, HD_IDENT_MODEL_LEN
+    call str_println
+
+    ld hl, HD_MSG_SERIAL
+    ld b, HD_MSG_SERIAL_END - HD_MSG_SERIAL
+    call str_print
+
+    ld hl, SECTOR_BUF + HD_IDENT_SERIAL
+    ld b, HD_IDENT_SERIAL_LEN
+    call str_println
+
+    jr exit
+
+err:
+    ld hl, HD_ERR_MSG
+    ld b, HD_ERR_MSG_END - HD_ERR_MSG
+    call str_print
+
+exit:
+    halt
+
+hd_8bit:
+    call hd_wait
+    ld c, HD_PORT_FEAT
+    ld a, HD_FEAT_8BIT_ON
+    out (c), a
+    ld c, HD_PORT_CMD
+    ld a, HD_CMD_FEAT
+    out (c), a
+    jp hd_err
+
+hd_ident:
+    call hd_wait
+    ld c, HD_PORT_CMD
+    ld a, HD_CMD_IDENT
+    out (c), a
+    call hd_err
+    ret c
+    jp hd_rd
+
+hd_rd:
+    ld de, 512
+    ld hl, SECTOR_BUF
+.rd_byt:
+    call hd_wait
+    ld c, HD_PORT_DATA
+    in a, (c)
+    ld (hl), a
+    inc hl
+    dec de
+    ld a, d
+    or e
+    jp nz, .rd_byt
+    jp hd_err
+
+hd_err:
+    call hd_wait
+    ld c, HD_PORT_STAT
+    in a, (c)
+    bit 0, a
+    ret z
+    scf
+    ld c, HD_PORT_ERR
+    in a, (c)
+    ret
+
+hd_wait:
+    ld c, HD_PORT_STAT
+    ld b, HD_STAT_BSY
+.bsy_wt:
+    in a, (c)
+    and b
+    jr nz, .bsy_wt
+    ret
+
+str_print:
+    ld c, PIPE_PORT
+.next_char:
+    ld a, (hl)
+    out (c), a
+    inc hl
+    dec b
+    jr nz, .next_char
+    ret
+
+str_println:
+    call str_print
+    ld a, $0a
+    out (c), a
+    ret
+
+HD_MSG_MODEL:
+    db "Model Name: "
+HD_MSG_MODEL_END:
+
+HD_MSG_SERIAL:
+    db "Serial #: "
+HD_MSG_SERIAL_END:
+
+HD_ERR_MSG:
+    db "Disk error"
+HD_ERR_MSG_END:
+
+SECTOR_BUF:
+    ds 512
+SECTOR_BUF_END:

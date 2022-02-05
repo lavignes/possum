@@ -8,6 +8,14 @@ pub trait Bus {
     fn output(&mut self, port: u16, data: u8);
 }
 
+pub trait InterruptHandler: Bus {
+    fn interrupted(&mut self) -> bool;
+
+    fn interrupt_vector(&mut self) -> u8;
+
+    fn ack_interrupt(&mut self);
+}
+
 pub trait DeviceBus: Bus {
     fn reti(&self) -> bool;
 }
@@ -19,19 +27,21 @@ pub trait Device {
 
     fn write(&mut self, port: u16, data: u8);
 
-    fn interrupt(&self) -> bool;
+    fn interrupting(&self) -> bool;
 
     fn interrupt_vector(&self) -> u8;
 
     fn ack_interrupt(&mut self);
 }
 
+#[cfg(test)]
 pub struct TestBus {
     mem: Vec<u8>,
     io: Vec<u8>,
     reti: bool,
 }
 
+#[cfg(test)]
 impl TestBus {
     pub fn new() -> Self {
         Self {
@@ -69,6 +79,7 @@ impl TestBus {
     }
 }
 
+#[cfg(test)]
 impl Bus for TestBus {
     fn read(&mut self, addr: u16) -> u8 {
         self.mem[addr as usize]
@@ -87,6 +98,7 @@ impl Bus for TestBus {
     }
 }
 
+#[cfg(test)]
 impl DeviceBus for TestBus {
     fn reti(&self) -> bool {
         self.reti

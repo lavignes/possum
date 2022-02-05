@@ -27,7 +27,7 @@ fn simple_transfer() {
     dma.write(0, 0xAB); // Enable interrupts
     dma.write(0, 0x87); // Enable DMA
 
-    while !dma.interrupt() {
+    while !dma.interrupting() {
         dma.tick(&mut bus);
     }
     assert_eq!(0x06, dma.interrupt_vector());
