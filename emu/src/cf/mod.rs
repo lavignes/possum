@@ -116,7 +116,7 @@ impl<M: MemoryMap> Card<M> {
             info[46 + i] = *b;
         }
 
-        let model_number = b"POSSUM-CF-CARD-01";
+        let model_number = b"POSSUM-CF-CARD-EMULATOR-01";
         for (i, b) in model_number.iter().enumerate() {
             info[54 + i] = *b;
         }

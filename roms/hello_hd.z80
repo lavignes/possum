@@ -1,143 +1,229 @@
-HD_PORT_DATA:           equ $80
-HD_PORT_ERR:            equ $81
-HD_PORT_FEAT:           equ $81
-HD_PORT_SEC_CNT:        equ $82
-HD_PORT_SEC_NUM:        equ $83
-HD_PORT_CYL_LO:         equ $84
-HD_PORT_CYL_HI:         equ $85
-HD_PORT_HEAD:           equ $86
-HD_PORT_STAT:           equ $87
-HD_PORT_CMD:            equ $87
+HD_PORT_DATA:		equ $80
+HD_PORT_ERR:		equ $81
+HD_PORT_FEAT:		equ $81
+HD_PORT_SEC_CNT:	equ $82
+HD_PORT_SEC_NUM:	equ $83
+HD_PORT_CYL_LO:		equ $84
+HD_PORT_CYL_HI:		equ $85
+HD_PORT_HEAD:		equ $86
+HD_PORT_STAT:		equ $87
+HD_PORT_CMD:		equ $87
 
-HD_FEAT_8BIT_ON:        equ $01
-HD_STAT_BSY:            equ $80
+HD_FEAT_8BIT_ON:	equ $01
+HD_STAT_BSY:		equ $80
 
-HD_CMD_FEAT:            equ $ef
-HD_CMD_IDENT:           equ $ec
+HD_CMD_DIAG:		equ $90
+HD_CMD_ERASE:		equ $c0
+HD_CMD_IDENT:		equ $ec
+HD_CMD_NOP:		equ $00
+HD_CMD_RD:		equ $20
+HD_CMD_FEAT:		equ $ef
+HD_CMD_WR:		equ $30
 
-HD_IDENT_SERIAL:        equ $14
-HD_IDENT_SERIAL_LEN:    equ 20
-HD_IDENT_MODEL:         equ $36
-HD_IDENT_MODEL_LEN:     equ 40
+HD_IDENT_SERIAL:	equ $14
+HD_IDENT_SERIAL_LEN:	equ 20
+HD_IDENT_MODEL:		equ $36
+HD_IDENT_MODEL_LEN:	equ 40
 
 PIPE_PORT: equ $f0
 
-org $0000
-
+	org $0000
 start:
-    call hd_8bit
-    jr c, err
-    call hd_ident
-    jr c, err
+	ld sp, $ffff
 
-    ld hl, HD_MSG_MODEL
-    ld b, HD_MSG_MODEL_END - HD_MSG_MODEL
-    call str_print
+	call hd_8bit
+	jr c, err
+	call hd_ident
+	jr c, err
 
-    ld hl, SECTOR_BUF + HD_IDENT_MODEL
-    ld b, HD_IDENT_MODEL_LEN
-    call str_println
+	ld hl, HD_MSG_MODEL
+	ld b, HD_MSG_MODEL_END - HD_MSG_MODEL
+	call str_print
 
-    ld hl, HD_MSG_SERIAL
-    ld b, HD_MSG_SERIAL_END - HD_MSG_SERIAL
-    call str_print
+	ld hl, SECTOR_BUF + HD_IDENT_MODEL
+	ld b, HD_IDENT_MODEL_LEN
+	call str_println
 
-    ld hl, SECTOR_BUF + HD_IDENT_SERIAL
-    ld b, HD_IDENT_SERIAL_LEN
-    call str_println
+	ld hl, HD_MSG_SERIAL
+	ld b, HD_MSG_SERIAL_END - HD_MSG_SERIAL
+	call str_print
 
-    jr exit
+	ld hl, SECTOR_BUF + HD_IDENT_SERIAL
+	ld b, HD_IDENT_SERIAL_LEN
+	call str_println
+
+	ld de, $0000
+	ld hl, $0000
+	call hd_lba
+	call hd_rd
+	jr c, err
+
+	ld hl, HELLO_MSG
+	ld de, SECTOR_BUF
+	ld b, HELLO_MSG_END - HELLO_MSG
+.cpy:
+	ld a, (hl)
+	ex de, hl
+	ld (hl), a
+	ex de, hl
+	inc hl
+	inc de
+	djnz .cpy
+
+	ld de, $0000
+	ld hl, $0000
+	call hd_lba
+	call hd_wr
+	jr c, err
+
+	ld hl, HELLO_MSG
+	ld b, HELLO_MSG_END - HELLO_MSG
+	call str_println
+
+	jr exit
 
 err:
-    ld hl, HD_ERR_MSG
-    ld b, HD_ERR_MSG_END - HD_ERR_MSG
-    call str_print
+	ld hl, HD_ERR_MSG
+	ld b, HD_ERR_MSG_END - HD_ERR_MSG
+	call str_print
 
 exit:
-    halt
+	halt
 
 hd_8bit:
-    call hd_wait
-    ld c, HD_PORT_FEAT
-    ld a, HD_FEAT_8BIT_ON
-    out (c), a
-    ld c, HD_PORT_CMD
-    ld a, HD_CMD_FEAT
-    out (c), a
-    jp hd_err
+	call hd_wait
+	ld c, HD_PORT_FEAT
+	ld a, HD_FEAT_8BIT_ON
+	out (c), a
+	ld c, HD_PORT_CMD
+	ld a, HD_CMD_FEAT
+	out (c), a
+	jp hd_err
 
 hd_ident:
-    call hd_wait
-    ld c, HD_PORT_CMD
-    ld a, HD_CMD_IDENT
-    out (c), a
-    call hd_err
-    ret c
-    jp hd_rd
+	call hd_wait
+	ld c, HD_PORT_CMD
+	ld a, HD_CMD_IDENT
+	out (c), a
+	call hd_err
+	ret c
+	jp hd_bufin
 
 hd_rd:
-    ld de, 512
-    ld hl, SECTOR_BUF
-.rd_byt:
-    call hd_wait
-    ld c, HD_PORT_DATA
-    in a, (c)
-    ld (hl), a
-    inc hl
-    dec de
-    ld a, d
-    or e
-    jp nz, .rd_byt
-    jp hd_err
+	call hd_wait
+	ld c, HD_PORT_CMD
+	ld a, HD_CMD_RD
+	out (c), a
+	call hd_err
+	ret c
+	jp hd_bufin
+
+hd_wr:
+	call hd_wait
+	ld c, HD_PORT_CMD
+	ld a, HD_CMD_WR
+	out (c), a
+	call hd_err
+	ret c
+	jp hd_bufout
+
+hd_lba:
+	call hd_wait
+	ld c, HD_PORT_SEC_NUM
+	out (c), e
+	inc c
+	out (c), d
+	inc c
+	out (c), l
+	inc c
+	ld a, h
+	and $0f
+	or $e0			; $f0 would select drive 1
+	out (c), a
+	ret
+
+hd_bufin:
+	ld de, 512
+	ld hl, SECTOR_BUF
+.in_byt:
+	call hd_wait
+	ld c, HD_PORT_DATA
+	in a, (c)
+	ld (hl), a
+	inc hl
+	dec de
+	ld a, d
+	or e
+	jp nz, .in_byt
+	jp hd_err
+
+hd_bufout:
+	ld de, 512
+	ld hl, SECTOR_BUF
+.ot_byt:
+	call hd_wait
+	ld c, HD_PORT_DATA
+	ld a, (hl)
+	out (c), a
+	inc hl
+	dec de
+	ld a, d
+	or e
+	jp nz, .ot_byt
+	jp hd_err
 
 hd_err:
-    call hd_wait
-    ld c, HD_PORT_STAT
-    in a, (c)
-    bit 0, a
-    ret z
-    scf
-    ld c, HD_PORT_ERR
-    in a, (c)
-    ret
+	call hd_wait
+	ld c, HD_PORT_STAT
+	in a, (c)
+	bit 0, a
+	ret z
+	scf
+	ld c, HD_PORT_ERR
+	in a, (c)
+	ret
 
 hd_wait:
-    ld c, HD_PORT_STAT
-    ld b, HD_STAT_BSY
+	ld c, HD_PORT_STAT
+	ld b, HD_STAT_BSY
 .bsy_wt:
-    in a, (c)
-    and b
-    jr nz, .bsy_wt
-    ret
+	in a, (c)
+	and b
+	jr nz, .bsy_wt
+	ret
 
 str_print:
-    ld c, PIPE_PORT
+	ld c, PIPE_PORT
 .next_char:
-    ld a, (hl)
-    out (c), a
-    inc hl
-    dec b
-    jr nz, .next_char
-    ret
+	ld a, (hl)
+	out (c), a
+	inc hl
+	djnz .next_char
+	ret
 
 str_println:
-    call str_print
-    ld a, $0a
-    out (c), a
-    ret
+	call str_print
+	ld a, $0a
+	out (c), a
+	ret
+
+HELLO_MSG:
+	db "Hello! Successfully wrote to the disk!"
+HELLO_MSG_END:
 
 HD_MSG_MODEL:
-    db "Model Name: "
+	db "Model Name: "
 HD_MSG_MODEL_END:
 
 HD_MSG_SERIAL:
-    db "Serial #: "
+	db "Serial #: "
 HD_MSG_SERIAL_END:
 
 HD_ERR_MSG:
-    db "Disk error"
+	db "Disk error"
 HD_ERR_MSG_END:
 
+	org $A000
 SECTOR_BUF:
-    ds 512
+	org $A100
 SECTOR_BUF_END:
