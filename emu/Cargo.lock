@@ -26,6 +26,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
+name = "cfg-if"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
 name = "clap"
 version = "3.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -114,12 +120,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "numtoa"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8f8bdf33df195859076e54ab11ee78a1b208382d3a26ec40d142ffc1ecc49ef"
-
-[[package]]
 name = "os_str_bytes"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,7 +135,7 @@ dependencies = [
  "bitflags",
  "clap",
  "memmap2",
- "termion",
+ "sdl2",
 ]
 
 [[package]]
@@ -181,21 +181,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "redox_syscall"
-version = "0.2.10"
+name = "sdl2"
+version = "0.35.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
+checksum = "f035f8e87735fa3a8437292be49fe6056450f7cbb13c230b4bcd1bdd7279421f"
 dependencies = [
  "bitflags",
+ "lazy_static",
+ "libc",
+ "sdl2-sys",
 ]
 
 [[package]]
-name = "redox_termios"
-version = "0.1.2"
+name = "sdl2-sys"
+version = "0.35.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8440d8acb4fd3d277125b4bd01a6f38aee8d814b3b5fc09b3f2b825d37d3fe8f"
+checksum = "94cb479353c0603785c834e2307440d83d196bf255f204f7f6741358de8d6a2f"
 dependencies = [
- "redox_syscall",
+ "cfg-if",
+ "libc",
+ "version-compare",
 ]
 
 [[package]]
@@ -225,18 +230,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "termion"
-version = "1.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "077185e2eac69c3f8379a4298e1e07cd36beb962290d4a51199acf0fdc10607e"
-dependencies = [
- "libc",
- "numtoa",
- "redox_syscall",
- "redox_termios",
-]
-
-[[package]]
 name = "textwrap"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -247,6 +240,12 @@ name = "unicode-xid"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
+
+[[package]]
+name = "version-compare"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe88247b92c1df6b6de80ddc290f3976dbdf2f5f5d3fd049a9fb598c6dd5ca73"
 
 [[package]]
 name = "version_check"

@@ -23,12 +23,10 @@ machine.
 - [ ] z80 SIO: *not started*
 - [ ] z80 CTC: *not started*
 - [X] 8-bit ATA drive(s)*
-- [ ] TMS9918 VDC**: *not started*
+- [ ] MOS 8563 VDC: *WIP*
 
 \**2 disk images can be mounted on the ATA bus.
 The interface ATA is Compact Flash actually, but it is 80s tech.*
-
-\*\**Considering the VDC from the Commodore 128 instead.*
 
 ### Software
 

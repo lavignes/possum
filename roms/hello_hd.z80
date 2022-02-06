@@ -10,6 +10,7 @@ HD_PORT_STAT:		equ $87
 HD_PORT_CMD:		equ $87
 
 HD_FEAT_8BIT_ON:	equ $01
+HD_STAT_ERR:		equ $01
 HD_STAT_BSY:		equ $80
 HD_DRIVE0:		equ $e0
 HD_DRIVE1:		equ $f0
@@ -118,57 +119,56 @@ err:
 	call pip_wrx
 
 exit:
+	in a, (PIPE_PORT)
+	out (PIPE_PORT), a
+	cp 'Q'
+	jr nz, exit
+
 	halt
 
 hd_8bit:
 	call hd_wait
-	ld c, HD_PORT_FEAT
 	ld a, HD_FEAT_8BIT_ON
-	out (c), a
-	ld c, HD_PORT_CMD
+	out (HD_PORT_FEAT), a
 	ld a, HD_CMD_FEAT
-	out (c), a
+	out (HD_PORT_CMD), a
 	jp hd_err
 
 hd_ident:
 	call hd_wait
-	ld c, HD_PORT_CMD
 	ld a, HD_CMD_IDENT
-	out (c), a
+	out (HD_PORT_CMD), a
 	call hd_err
 	ret c
 	jp hd_bufin
 
 hd_rd:
 	call hd_wait
-	ld c, HD_PORT_CMD
 	ld a, HD_CMD_RD
-	out (c), a
+	out (HD_PORT_CMD), a
 	call hd_err
 	ret c
 	jp hd_bufin
 
 hd_wr:
 	call hd_wait
-	ld c, HD_PORT_CMD
 	ld a, HD_CMD_WR
-	out (c), a
+	out (HD_PORT_CMD), a
 	call hd_err
 	ret c
 	jp hd_bufout
 
 hd_lba:
-	ld c, HD_PORT_SEC_NUM
-	out (c), e
-	inc c
-	out (c), d
-	inc c
-	out (c), l
-	inc c
+	ld a, e
+	out (HD_PORT_SEC_NUM), a
+        ld a, d
+	out (HD_PORT_CYL_LO), a
+	ld a, l
+	out (HD_PORT_CYL_HI), a
 	ld a, h
 	and $0f
 	or HD_DRIVE0
-	out (c), a
+	out (HD_PORT_HEAD), a
 	ret
 
 hd_bufin:
@@ -176,8 +176,7 @@ hd_bufin:
 	ld hl, SECTOR_BUF
 .in_byt:
 	call hd_wait
-	ld c, HD_PORT_DATA
-	in a, (c)
+	in a, (HD_PORT_DATA)
 	ld (hl), a
 	inc hl
 	dec de
@@ -191,9 +190,8 @@ hd_bufout:
 	ld hl, SECTOR_BUF
 .ot_byt:
 	call hd_wait
-	ld c, HD_PORT_DATA
 	ld a, (hl)
-	out (c), a
+	out (HD_PORT_DATA), a
 	inc hl
 	dec de
 	ld a, d
@@ -203,71 +201,55 @@ hd_bufout:
 
 hd_err:
 	call hd_wait
-	ld c, HD_PORT_STAT
-	in a, (c)
-	bit 0, a
+	in a, (HD_PORT_STAT)
+	and HD_STAT_ERR
 	ret z
 	scf
-	ld c, HD_PORT_ERR
-	in a, (c)
+	in a, (HD_PORT_ERR)
 	ret
 
 hd_wait:
-	ld c, HD_PORT_STAT
 	ld b, HD_STAT_BSY
 .bsy_wt:
-	in a, (c)
+	in a, (HD_PORT_STAT)
 	and b
 	jr nz, .bsy_wt
 	ret
 
-HEX_DIGITS:
-	db "0123456789abcdef"
-
 pip_wrx:
-	push af
 	ld c, a
-	srl c
-	srl c
-	srl c
-	srl c
-	xor b, b
-	ld hl, HEX_DIGITS
-	add hl, bc
-	ld c, PIPE_PORT
-	ld a, (hl)
-	out (c), a
-	pop af
+	rra
+	rra
+	rra
+	rra
+	call .hex_conv
+	ld a, c
+.hex_conv:
 	and $0f
-	ld c, a
-	xor b, b
-	ld hl, HEX_DIGITS
-	add hl, bc
-	ld c, PIPE_PORT
-	ld a, (hl)
-	out (c), a
+	add a, $90
+	daa
+	adc a, $40
+	daa
+	out (PIPE_PORT), a
 	ret
 
 pip_wrc:
-	ld c, PIPE_PORT
-	out (c), a
+	out (PIPE_PORT), a
 	ret
 
 pip_wr:
-	ld c, PIPE_PORT
-.nbyte:
 	ld a, (hl)
-	out (c), a
+	out (PIPE_PORT), a
 	inc hl
-	djnz .nbyte
+	djnz pip_wr
 	ret
 
 pip_wrln:
 	call pip_wr
 	ld a, '\r'
-	out (c), a
+	out (PIPE_PORT), a
 	ld a, '\n'
-	out (c), a
+	out (PIPE_PORT), a
 	ret
 
 HELLO_MSG:

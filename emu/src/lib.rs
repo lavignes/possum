@@ -7,6 +7,7 @@ mod cf;
 mod cpu;
 mod dma;
 mod system;
+mod vdc;
 
 pub use bus::{Device, DeviceBus};
 pub use cf::{CardBus, MemoryMap};

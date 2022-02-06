@@ -34,6 +34,28 @@ pub trait Device {
     fn ack_interrupt(&mut self);
 }
 
+pub struct NullBus;
+
+impl Bus for NullBus {
+    fn read(&mut self, _: u16) -> u8 {
+        0
+    }
+
+    fn write(&mut self, _: u16, _: u8) {}
+
+    fn input(&mut self, _: u16) -> u8 {
+        0
+    }
+
+    fn output(&mut self, _: u16, _: u8) {}
+}
+
+impl DeviceBus for NullBus {
+    fn reti(&self) -> bool {
+        false
+    }
+}
+
 #[cfg(test)]
 pub struct TestBus {
     mem: Vec<u8>,

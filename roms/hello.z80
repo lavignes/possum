@@ -1,6 +1,6 @@
 PIPE_PORT: equ $f0
 
-org $0000
+	org $0000
 
 start:
 	ld hl, HELLO
@@ -9,13 +9,11 @@ start:
 	halt
 
 print_string:
-	ld c, PIPE_PORT
-.next_char:
 	ld a, (hl)
-	out (c), a
+	out (PIPE_PORT), a
 	inc hl
 	dec b
-	jr nz, .next_char
+	djnz, print_string
 	ret
 
 HELLO:

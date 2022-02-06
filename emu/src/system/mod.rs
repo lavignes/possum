@@ -1,7 +1,8 @@
 use crate::{
-    bus::{Bus, Device, DeviceBus, InterruptHandler},
+    bus::{Bus, Device, DeviceBus, InterruptHandler, NullBus},
     cpu::Cpu,
     dma::Dma,
+    vdc::Vdc,
 };
 
 pub struct System {
@@ -9,6 +10,7 @@ pub struct System {
     dma: Dma,
     ram: Vec<u8>,
     hd: Option<Box<dyn Device>>,
+    vdc: Vdc,
     pipe: Box<dyn Device>,
 }
 
@@ -16,6 +18,7 @@ struct CpuView<'a> {
     dma: &'a mut Dma,
     ram: &'a mut Vec<u8>,
     hd: &'a mut Option<&'a mut Box<dyn Device>>,
+    vdc: &'a mut Vdc,
     pipe: &'a mut dyn Device,
 }
 
@@ -37,6 +40,8 @@ impl<'a> Bus for CpuView<'a> {
                 _ => 0,
             },
 
+            0x90 | 0x91 => self.vdc.read(port),
+
             0xF0 => self.pipe.read(port),
 
             _ => 0,
@@ -52,6 +57,8 @@ impl<'a> Bus for CpuView<'a> {
                     hd.write(port, data)
                 }
             }
+
+            0x90 | 0x91 => self.vdc.write(port, data),
 
             0xF0 => self.pipe.write(port, data),
 
@@ -70,6 +77,9 @@ impl<'a> InterruptHandler for CpuView<'a> {
             Some(hd) if hd.interrupting() => return true,
             _ => {}
         }
+        if self.vdc.interrupting() {
+            return true;
+        }
         if self.pipe.interrupting() {
             return true;
         }
@@ -83,6 +93,9 @@ impl<'a> InterruptHandler for CpuView<'a> {
         match self.hd {
             Some(hd) if hd.interrupting() => return hd.interrupt_vector(),
             _ => {}
+        }
+        if self.vdc.interrupting() {
+            return self.vdc.interrupt_vector();
         }
         if self.pipe.interrupting() {
             return self.pipe.interrupt_vector();
@@ -98,6 +111,9 @@ impl<'a> InterruptHandler for CpuView<'a> {
             Some(hd) if hd.interrupting() => hd.ack_interrupt(),
             _ => {}
         }
+        if self.vdc.interrupting() {
+            return self.vdc.ack_interrupt();
+        }
         if self.pipe.interrupting() {
             return self.pipe.ack_interrupt();
         }
@@ -107,6 +123,7 @@ impl<'a> InterruptHandler for CpuView<'a> {
 struct DmaView<'a> {
     ram: &'a mut Vec<u8>,
     hd: &'a mut Option<&'a mut Box<dyn Device>>,
+    vdc: &'a mut Vdc,
     pipe: &'a mut dyn Device,
     reti: bool,
 }
@@ -127,6 +144,8 @@ impl<'a> Bus for DmaView<'a> {
                 _ => 0,
             },
 
+            0x90 | 0x91 => self.vdc.read(port),
+
             0xF0 => self.pipe.read(port),
 
             _ => 0,
@@ -140,6 +159,8 @@ impl<'a> Bus for DmaView<'a> {
                     hd.write(port, data)
                 }
             }
+
+            0x90 | 0x91 => self.vdc.write(port, data),
 
             0xF0 => self.pipe.write(port, data),
 
@@ -162,6 +183,7 @@ impl System {
             dma: Dma::default(),
             ram: vec![0; 65536],
             hd,
+            vdc: Vdc::new(),
             pipe,
         }
     }
@@ -172,6 +194,7 @@ impl System {
             dma,
             ram,
             hd,
+            vdc,
             pipe,
             ..
         } = self;
@@ -180,6 +203,7 @@ impl System {
             dma,
             ram,
             hd: &mut hd.as_mut(),
+            vdc,
             pipe: pipe.as_mut(),
         });
 
@@ -191,9 +215,12 @@ impl System {
             dma.tick(&mut DmaView {
                 ram,
                 hd: &mut hd.as_mut(),
+                vdc,
                 pipe: pipe.as_mut(),
                 reti,
             });
+
+            vdc.tick(&mut NullBus {});
 
             // clear reti since it should only impact us for 1 cycle, right?
             // TODO: I think the accurate impl would be to only check reti on final cycle
