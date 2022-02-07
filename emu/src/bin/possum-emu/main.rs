@@ -96,7 +96,9 @@ fn main() -> io::Result<()> {
 
         let now = Instant::now();
         if now.duration_since(start) > Duration::from_secs(1) {
-            println!("{frames} fps");
+            canvas
+                .window_mut()
+                .set_title(&format!("pussum-emu :: {frames} fps"));
             start = now;
             frames = 0;
         }
