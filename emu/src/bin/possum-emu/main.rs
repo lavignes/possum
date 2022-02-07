@@ -13,7 +13,7 @@ use std::{
 
 use clap::Parser;
 use possum_emu::{CardBus, Device, System};
-use sdl2::pixels::PixelFormatEnum;
+use sdl2::{pixels::PixelFormatEnum, rect::Rect};
 
 use crate::{kb::AsciiKeyboard, mmap::MemoryMapWrapper};
 
@@ -52,7 +52,7 @@ fn main() -> io::Result<()> {
     system.write_ram(&rom, 0);
 
     let window = video
-        .window("possum-emu", 952, 260 * 2)
+        .window("possum-emu", 1024, 576)
         .allow_highdpi()
         .position_centered()
         .resizable()
@@ -64,6 +64,9 @@ fn main() -> io::Result<()> {
         .build()
         .map_err(io::Error::other)?;
     let texture_creator = canvas.texture_creator();
+    let mut texture = texture_creator
+        .create_texture_streaming(PixelFormatEnum::RGBA32, 1024, 1024)
+        .map_err(io::Error::other)?;
 
     let mut start = Instant::now();
     let mut frames = 0;
@@ -71,22 +74,21 @@ fn main() -> io::Result<()> {
         system.step();
         if system.vblank() {
             let framebuffer = system.framebuffer();
-            let mut texture = texture_creator
-                .create_texture_static(
-                    PixelFormatEnum::RGBA32,
-                    framebuffer.width() as u32,
-                    framebuffer.height() as u32,
-                )
-                .map_err(io::Error::other)?;
+            let rect = Rect::new(
+                0,
+                0,
+                framebuffer.width() as u32,
+                framebuffer.height() as u32,
+            );
             texture
                 .update(
-                    None,
+                    rect,
                     bytemuck::cast_slice(framebuffer.data()),
                     framebuffer.width() * mem::size_of::<u32>(),
                 )
                 .map_err(io::Error::other)?;
             canvas
-                .copy(&texture, None, None)
+                .copy(&texture, rect, None)
                 .map_err(io::Error::other)?;
             canvas.present();
             frames += 1;
