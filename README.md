@@ -1,5 +1,7 @@
 # Possum Computer
 
+![hello](hello.png)
+
 Possum is a z80-based 8-bit micro-computer emulator.
 
 All peripherals are emulations of real-world hardware

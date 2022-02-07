@@ -50,7 +50,8 @@ fn main() -> io::Result<()> {
     system.write_ram(&rom, 0);
 
     let window = video
-        .window("possum-emu", 720 * 2, 264 * 4)
+        // .window("possum-emu", 720, 264 * 2)
+        .window("possum-emu", 952, 260 * 2)
         .allow_highdpi()
         .position_centered()
         .resizable()
@@ -63,7 +64,8 @@ fn main() -> io::Result<()> {
         .map_err(io::Error::other)?;
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator
-        .create_texture_streaming(PixelFormatEnum::RGBA32, 720, 264)
+        // .create_texture_streaming(PixelFormatEnum::RGBA32, 720, 264)
+        .create_texture_streaming(PixelFormatEnum::RGBA32, 952, 260)
         .map_err(io::Error::other)?;
 
     while !system.halted() {

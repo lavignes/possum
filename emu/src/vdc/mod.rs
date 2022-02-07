@@ -2,8 +2,10 @@
 
 use crate::{Device, DeviceBus};
 
-const CRT_WIDTH: usize = 720;
-const CRT_HEIGHT: usize = 264;
+// const CRT_WIDTH: usize = 720;
+const CRT_WIDTH: usize = 952;
+// const CRT_HEIGHT: usize = 264;
+const CRT_HEIGHT: usize = 260;
 
 bitflags::bitflags! {
     struct Status: u8 {
@@ -257,7 +259,7 @@ impl Device for Vdc {
 
                 // lets find what row we are in
                 let cell_y = (self.raster_y - self.top_border_height) / self.cell_height;
-                let cell_yrem = (self.raster_y - self.top_border_height) % self.cell_height;
+                let cell_yoffset = (self.raster_y - self.top_border_height) % self.cell_height;
                 let cells_x = (self.horiz_total as usize) + 1;
 
                 // and where it starts in the display memory
@@ -266,14 +268,16 @@ impl Device for Vdc {
                 // now, start drawing...
                 let mut px = (self.left_border_width as f64) * self.division_x;
                 for c in &self.vram[row_start_addr..(row_start_addr + cells_x)] {
-                    let mut char_line =
-                        self.vram[(self.char_base as usize) + ((*c as usize) * 8) + cell_yrem];
+                    // get the 8 pixels for this cell
+                    let mut pix =
+                        self.vram[(self.char_base as usize) + ((*c as usize) * 8) + cell_yoffset];
+                    // for each bit, blit the pixel
                     for _ in 0..self.cell_width {
-                        if (char_line & 0x80) != 0 {
+                        if (pix & 0x80) != 0 {
                             self.framebuffer[(px as usize) + (py * CRT_WIDTH)] = 0xFFFFFFFF;
                         }
                         px += self.division_x;
-                        char_line <<= 1;
+                        pix <<= 1;
                     }
                 }
 
