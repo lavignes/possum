@@ -28,7 +28,7 @@ machine.
 - [ ] MOS 8563 VDC: *WIP*
 
 \**2 disk images can be mounted on the ATA bus.
-The interface ATA is Compact Flash actually, but it is 80s tech.*
+The interface is Compact Flash actually, but it is 80s tech.*
 
 ### Software
 
