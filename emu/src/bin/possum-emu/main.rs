@@ -6,7 +6,9 @@ mod mmap;
 use std::{
     fs::{File, OpenOptions},
     io::{self, Read},
+    mem,
     path::PathBuf,
+    time::{Duration, Instant},
 };
 
 use clap::Parser;
@@ -50,7 +52,6 @@ fn main() -> io::Result<()> {
     system.write_ram(&rom, 0);
 
     let window = video
-        // .window("possum-emu", 720, 264 * 2)
         .window("possum-emu", 952, 260 * 2)
         .allow_highdpi()
         .position_centered()
@@ -63,23 +64,39 @@ fn main() -> io::Result<()> {
         .build()
         .map_err(io::Error::other)?;
     let texture_creator = canvas.texture_creator();
-    let mut texture = texture_creator
-        // .create_texture_streaming(PixelFormatEnum::RGBA32, 720, 264)
-        .create_texture_streaming(PixelFormatEnum::RGBA32, 952, 260)
-        .map_err(io::Error::other)?;
 
+    let mut start = Instant::now();
+    let mut frames = 0;
     while !system.halted() {
         system.step();
         if system.vblank() {
+            let framebuffer = system.framebuffer();
+            let mut texture = texture_creator
+                .create_texture_static(
+                    PixelFormatEnum::RGBA32,
+                    framebuffer.width() as u32,
+                    framebuffer.height() as u32,
+                )
+                .map_err(io::Error::other)?;
             texture
-                .with_lock(None, |pixels, _| {
-                    pixels.copy_from_slice(bytemuck::cast_slice(system.framebuffer()));
-                })
+                .update(
+                    None,
+                    bytemuck::cast_slice(framebuffer.data()),
+                    framebuffer.width() * mem::size_of::<u32>(),
+                )
                 .map_err(io::Error::other)?;
             canvas
                 .copy(&texture, None, None)
                 .map_err(io::Error::other)?;
             canvas.present();
+            frames += 1;
+        }
+
+        let now = Instant::now();
+        if now.duration_since(start) > Duration::from_secs(1) {
+            println!("{frames} fps");
+            start = now;
+            frames = 0;
         }
     }
 

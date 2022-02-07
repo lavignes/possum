@@ -2,7 +2,7 @@ use crate::{
     bus::{Bus, Device, DeviceBus, InterruptHandler, NullBus},
     cpu::Cpu,
     dma::Dma,
-    vdc::Vdc,
+    vdc::{Framebuffer, Vdc},
 };
 
 pub struct System {
@@ -245,7 +245,7 @@ impl System {
         self.vblank
     }
 
-    pub fn framebuffer(&self) -> &[u32] {
+    pub fn framebuffer(&self) -> &Framebuffer {
         self.vdc.framebuffer()
     }
 

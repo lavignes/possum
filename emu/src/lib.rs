@@ -12,3 +12,4 @@ mod vdc;
 pub use bus::{Device, DeviceBus};
 pub use cf::{CardBus, MemoryMap};
 pub use system::System;
+pub use vdc::Framebuffer;

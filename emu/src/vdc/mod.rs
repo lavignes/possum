@@ -2,11 +2,6 @@
 
 use crate::{Device, DeviceBus};
 
-// const CRT_WIDTH: usize = 720;
-const CRT_WIDTH: usize = 952;
-// const CRT_HEIGHT: usize = 264;
-const CRT_HEIGHT: usize = 260;
-
 bitflags::bitflags! {
     struct Status: u8 {
         // VDC hardware version bits
@@ -24,8 +19,39 @@ bitflags::bitflags! {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct Framebuffer {
+    pixels: Vec<u32>,
+    width: usize,
+    height: usize,
+}
+
+impl Framebuffer {
+    fn resize(&mut self, width: usize, height: usize) {
+        self.pixels.resize(width * height, 0);
+        self.width = width;
+        self.height = height;
+    }
+
+    #[inline]
+    pub fn data(&self) -> &[u32] {
+        &self.pixels
+    }
+
+    #[inline]
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    #[inline]
+    pub fn height(&self) -> usize {
+        self.height
+    }
+}
+
 pub struct Vdc {
-    framebuffer: Vec<u32>,
+    framebuffer_full: bool,
+    framebuffer: Framebuffer,
     vram: Vec<u8>,
 
     // Rendering/CRT state
@@ -46,8 +72,6 @@ pub struct Vdc {
     cell_visible_height: usize,
     raster_x: usize,
     raster_y: usize,
-    division_x: f64,
-    division_y: f64,
 
     // Registers
     status: u8,
@@ -86,7 +110,8 @@ pub struct Vdc {
 impl Vdc {
     pub fn new() -> Self {
         Self {
-            framebuffer: vec![0; CRT_WIDTH * CRT_HEIGHT],
+            framebuffer_full: false,
+            framebuffer: Framebuffer::default(),
             vram: vec![0; 16384],
 
             parameters_dirty: true,
@@ -106,8 +131,6 @@ impl Vdc {
             cell_visible_height: 0,
             raster_x: 0,
             raster_y: 0,
-            division_x: 0.0,
-            division_y: 0.0,
 
             status: 0,
             register_select: 0,
@@ -148,14 +171,12 @@ impl Vdc {
         }
     }
 
-    pub fn framebuffer(&self) -> &[u32] {
+    pub fn framebuffer(&self) -> &Framebuffer {
         &self.framebuffer
     }
 
     pub fn vblank(&self) -> bool {
-        // TODO: Should only set this on 1 cycle
-        //   so we dont redraw the screen on every vblank pulse
-        (self.status & Status::VBLANK.bits()) != 0
+        self.framebuffer_full
     }
 
     fn recompute_parameters(&mut self) {
@@ -186,8 +207,9 @@ impl Vdc {
         self.right_border_width =
             self.signal_width - self.left_border_width - self.visible_width - self.hsync_width;
 
-        self.division_x = (CRT_WIDTH as f64) / ((self.signal_width - self.hsync_width) as f64);
-        self.division_y = (CRT_HEIGHT as f64) / ((self.signal_height - self.vsync_height) as f64);
+        self.framebuffer_full = false;
+        self.framebuffer
+            .resize(self.signal_width, self.signal_height);
     }
 }
 
@@ -243,18 +265,15 @@ impl Device for Vdc {
 
         // in hblank
         if self.raster_x == (self.signal_width - self.hsync_width) {
-            let py = ((self.raster_y as f64) * self.division_y) as usize;
-
             if self.raster_y < self.top_border_height {
                 // top border
-                for x in 0..CRT_WIDTH {
-                    self.framebuffer[x + (py * CRT_WIDTH)] = 0;
+                for x in 0..self.framebuffer.width {
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
                 }
             } else if self.raster_y < (self.top_border_height + self.visible_height) {
                 // visible
                 for x in 0..self.left_border_width {
-                    let px = ((x as f64) * self.division_x) as usize;
-                    self.framebuffer[px + (py * CRT_WIDTH)] = 0;
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
                 }
 
                 // lets find what row we are in
@@ -266,7 +285,7 @@ impl Device for Vdc {
                 let row_start_addr = (self.disp_start as usize) + (cell_y * cells_x);
 
                 // now, start drawing...
-                let mut px = (self.left_border_width as f64) * self.division_x;
+                let mut x = self.left_border_width;
                 for c in &self.vram[row_start_addr..(row_start_addr + cells_x)] {
                     // get the 8 pixels for this cell
                     let mut pix =
@@ -274,9 +293,10 @@ impl Device for Vdc {
                     // for each bit, blit the pixel
                     for _ in 0..self.cell_width {
                         if (pix & 0x80) != 0 {
-                            self.framebuffer[(px as usize) + (py * CRT_WIDTH)] = 0xFFFFFFFF;
+                            self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
+                                0xFFFFFFFF;
                         }
-                        px += self.division_x;
+                        x += 1;
                         pix <<= 1;
                     }
                 }
@@ -284,13 +304,12 @@ impl Device for Vdc {
                 for x in (self.left_border_width + self.visible_width)
                     ..(self.signal_width - self.hsync_width)
                 {
-                    let px = ((x as f64) * self.division_x) as usize;
-                    self.framebuffer[px + (py * CRT_WIDTH)] = 0;
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
                 }
             } else if self.raster_y < (self.signal_height - self.vsync_height) {
                 // bottom border
-                for x in 0..CRT_WIDTH {
-                    self.framebuffer[x + (py * CRT_WIDTH)] = 0;
+                for x in 0..self.framebuffer.width {
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
                 }
             } else {
                 // in vblank
@@ -302,6 +321,7 @@ impl Device for Vdc {
         if self.raster_x == self.signal_width {
             self.raster_x = 0;
             self.raster_y += 1;
+            self.framebuffer_full = self.raster_y == (self.signal_height - self.vsync_height);
             if self.raster_y == self.signal_height {
                 self.raster_y = 0;
             }
