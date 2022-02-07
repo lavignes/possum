@@ -52,7 +52,7 @@ fn main() -> io::Result<()> {
     system.write_ram(&rom, 0);
 
     let window = video
-        .window("possum-emu", 1024, 576)
+        .window("possum-emu", 952, 260 * 2)
         .allow_highdpi()
         .position_centered()
         .resizable()
@@ -98,7 +98,8 @@ fn main() -> io::Result<()> {
         if now.duration_since(start) > Duration::from_secs(1) {
             canvas
                 .window_mut()
-                .set_title(&format!("pussum-emu :: {frames} fps"));
+                .set_title(&format!("pussum-emu :: {frames} fps"))
+                .map_err(io::Error::other)?;
             start = now;
             frames = 0;
         }

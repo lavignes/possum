@@ -99,7 +99,7 @@ pub struct Vdc {
     horiz_scroll_ctrl: u8,
     fg_bg_color: u8,
     addr_inc: u8,
-    char_base: u16,
+    char_start: u16,
     underline_ctrl: u8,
     word_count: u8,
     block_start: u16,
@@ -158,7 +158,7 @@ impl Vdc {
             horiz_scroll_ctrl: 0,
             fg_bg_color: 0,
             addr_inc: 0,
-            char_base: 0x2000,
+            char_start: 0x2000,
             underline_ctrl: 0,
             word_count: 0,
             block_start: 0,
@@ -208,8 +208,10 @@ impl Vdc {
             self.signal_width - self.left_border_width - self.visible_width - self.hsync_width;
 
         self.framebuffer_full = false;
-        self.framebuffer
-            .resize(self.signal_width, self.signal_height);
+        self.framebuffer.resize(
+            self.signal_width - self.hsync_width,
+            self.signal_height - self.vsync_height,
+        );
     }
 }
 
@@ -220,47 +222,50 @@ impl Device for Vdc {
         if self.parameters_dirty {
             self.recompute_parameters();
 
-            self.vram[(self.char_base as usize) + 8] = 0b11111110;
-            self.vram[(self.char_base as usize) + 9] = 0b10000000;
-            self.vram[(self.char_base as usize) + 10] = 0b10000000;
-            self.vram[(self.char_base as usize) + 11] = 0b11111110;
-            self.vram[(self.char_base as usize) + 12] = 0b10000000;
-            self.vram[(self.char_base as usize) + 13] = 0b10000000;
-            self.vram[(self.char_base as usize) + 14] = 0b11111110;
-            self.vram[(self.char_base as usize) + 15] = 0b00000000;
+            self.vram[(self.char_start as usize) + 8] = 0b11111110;
+            self.vram[(self.char_start as usize) + 9] = 0b10000000;
+            self.vram[(self.char_start as usize) + 10] = 0b10000000;
+            self.vram[(self.char_start as usize) + 11] = 0b11111110;
+            self.vram[(self.char_start as usize) + 12] = 0b10000000;
+            self.vram[(self.char_start as usize) + 13] = 0b10000000;
+            self.vram[(self.char_start as usize) + 14] = 0b11111110;
+            self.vram[(self.char_start as usize) + 15] = 0b00000000;
 
-            self.vram[(self.char_base as usize) + 16] = 0b10000000;
-            self.vram[(self.char_base as usize) + 17] = 0b10000000;
-            self.vram[(self.char_base as usize) + 18] = 0b10000000;
-            self.vram[(self.char_base as usize) + 19] = 0b10000000;
-            self.vram[(self.char_base as usize) + 20] = 0b10000000;
-            self.vram[(self.char_base as usize) + 21] = 0b10000000;
-            self.vram[(self.char_base as usize) + 22] = 0b11111110;
-            self.vram[(self.char_base as usize) + 23] = 0b00000000;
+            self.vram[(self.char_start as usize) + 16] = 0b10000000;
+            self.vram[(self.char_start as usize) + 17] = 0b10000000;
+            self.vram[(self.char_start as usize) + 18] = 0b10000000;
+            self.vram[(self.char_start as usize) + 19] = 0b10000000;
+            self.vram[(self.char_start as usize) + 20] = 0b10000000;
+            self.vram[(self.char_start as usize) + 21] = 0b10000000;
+            self.vram[(self.char_start as usize) + 22] = 0b11111110;
+            self.vram[(self.char_start as usize) + 23] = 0b00000000;
 
-            self.vram[(self.char_base as usize) + 24] = 0b01111100;
-            self.vram[(self.char_base as usize) + 25] = 0b10000010;
-            self.vram[(self.char_base as usize) + 26] = 0b10000010;
-            self.vram[(self.char_base as usize) + 27] = 0b10000010;
-            self.vram[(self.char_base as usize) + 28] = 0b10000010;
-            self.vram[(self.char_base as usize) + 29] = 0b10000010;
-            self.vram[(self.char_base as usize) + 30] = 0b01111100;
-            self.vram[(self.char_base as usize) + 31] = 0b00000000;
+            self.vram[(self.char_start as usize) + 24] = 0b01111100;
+            self.vram[(self.char_start as usize) + 25] = 0b10000010;
+            self.vram[(self.char_start as usize) + 26] = 0b10000010;
+            self.vram[(self.char_start as usize) + 27] = 0b10000010;
+            self.vram[(self.char_start as usize) + 28] = 0b10000010;
+            self.vram[(self.char_start as usize) + 29] = 0b10000010;
+            self.vram[(self.char_start as usize) + 30] = 0b01111100;
+            self.vram[(self.char_start as usize) + 31] = 0b00000000;
 
-            self.vram[(self.char_base as usize) + 32] = 0b10000010;
-            self.vram[(self.char_base as usize) + 33] = 0b10000010;
-            self.vram[(self.char_base as usize) + 34] = 0b10000010;
-            self.vram[(self.char_base as usize) + 35] = 0b11111110;
-            self.vram[(self.char_base as usize) + 36] = 0b10000010;
-            self.vram[(self.char_base as usize) + 37] = 0b10000010;
-            self.vram[(self.char_base as usize) + 38] = 0b10000010;
-            self.vram[(self.char_base as usize) + 39] = 0b00000000;
+            self.vram[(self.char_start as usize) + 32] = 0b10000010;
+            self.vram[(self.char_start as usize) + 33] = 0b10000010;
+            self.vram[(self.char_start as usize) + 34] = 0b10000010;
+            self.vram[(self.char_start as usize) + 35] = 0b11111110;
+            self.vram[(self.char_start as usize) + 36] = 0b10000010;
+            self.vram[(self.char_start as usize) + 37] = 0b10000010;
+            self.vram[(self.char_start as usize) + 38] = 0b10000010;
+            self.vram[(self.char_start as usize) + 39] = 0b00000000;
 
             self.vram[(self.disp_start as usize) + 0] = 4;
             self.vram[(self.disp_start as usize) + 1] = 1;
             self.vram[(self.disp_start as usize) + 2] = 2;
             self.vram[(self.disp_start as usize) + 3] = 2;
             self.vram[(self.disp_start as usize) + 4] = 3;
+
+            self.vram[(self.disp_start as usize) + 79] = 3;
+            self.vram[(self.disp_start as usize) + 81] = 3;
         }
 
         // in hblank
@@ -279,7 +284,7 @@ impl Device for Vdc {
                 // lets find what row we are in
                 let cell_y = (self.raster_y - self.top_border_height) / self.cell_height;
                 let cell_yoffset = (self.raster_y - self.top_border_height) % self.cell_height;
-                let cells_x = (self.horiz_total as usize) + 1;
+                let cells_x = self.horiz_displayed as usize;
 
                 // and where it starts in the display memory
                 let row_start_addr = (self.disp_start as usize) + (cell_y * cells_x);
@@ -289,7 +294,7 @@ impl Device for Vdc {
                 for c in &self.vram[row_start_addr..(row_start_addr + cells_x)] {
                     // get the 8 pixels for this cell
                     let mut pix =
-                        self.vram[(self.char_base as usize) + ((*c as usize) * 8) + cell_yoffset];
+                        self.vram[(self.char_start as usize) + ((*c as usize) * 8) + cell_yoffset];
                     // for each bit, blit the pixel
                     for _ in 0..self.cell_width {
                         if (pix & 0x80) != 0 {
@@ -321,6 +326,7 @@ impl Device for Vdc {
         if self.raster_x == self.signal_width {
             self.raster_x = 0;
             self.raster_y += 1;
+            // check if we're ready to present the framebuffer to the outside world
             self.framebuffer_full = self.raster_y == (self.signal_height - self.vsync_height);
             if self.raster_y == self.signal_height {
                 self.raster_y = 0;
@@ -384,7 +390,7 @@ impl Device for Vdc {
 
                     0x1B => self.addr_inc,
 
-                    0x1C => (self.char_base >> 8) as u8,
+                    0x1C => (self.char_start >> 8) as u8,
 
                     0x1D => self.underline_ctrl | 0xEF,
 
@@ -469,7 +475,7 @@ impl Device for Vdc {
 
                 0x1B => self.addr_inc = data,
 
-                0x1C => self.char_base = ((data & 0xE0) as u16) << 8,
+                0x1C => self.char_start = ((data & 0xE0) as u16) << 8,
 
                 0x1D => self.underline_ctrl = data & 0x1F,
 
