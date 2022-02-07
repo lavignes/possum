@@ -12,6 +12,8 @@ pub struct System {
     hd: Option<Box<dyn Device>>,
     vdc: Vdc,
     pipe: Box<dyn Device>,
+
+    vblank: bool,
 }
 
 struct CpuView<'a> {
@@ -185,6 +187,7 @@ impl System {
             hd,
             vdc: Vdc::new(),
             pipe,
+            vblank: false,
         }
     }
 
@@ -208,6 +211,7 @@ impl System {
         });
 
         let mut reti = cpu.returned_from_interrupt();
+        let mut vblank = false;
         for _ in 0..cycles {
             // note: only 1 DMA device can run at a time.
             //   If I want to add support for more, then I need to put them in the daisy chain
@@ -221,17 +225,28 @@ impl System {
             });
 
             vdc.tick(&mut NullBus {});
+            if vdc.vblank() {
+                vblank = true;
+            }
 
             // clear reti since it should only impact us for 1 cycle, right?
             // TODO: I think the accurate impl would be to only check reti on final cycle
             reti = false;
         }
-
+        self.vblank = vblank;
         cycles
     }
 
     pub fn halted(&self) -> bool {
         self.cpu.halted()
+    }
+
+    pub fn vblank(&self) -> bool {
+        self.vblank
+    }
+
+    pub fn framebuffer(&self) -> &[u32] {
+        self.vdc.framebuffer()
     }
 
     pub fn write_ram(&mut self, data: &[u8], offset: usize) {

@@ -17,7 +17,6 @@ start:
 
 .loop:
 	in a, (PIPE_PORT)
-	out (PIPE_PORT), a
 	cp 'Q'
 	jr nz, .loop
 

@@ -2,6 +2,9 @@
 
 use crate::{Device, DeviceBus};
 
+const CRT_WIDTH: usize = 720;
+const CRT_HEIGHT: usize = 264;
+
 bitflags::bitflags! {
     struct Status: u8 {
         // VDC hardware version bits
@@ -11,7 +14,7 @@ bitflags::bitflags! {
 
         const VBLANK = 0x20;
 
-        // Light pen position updated
+        // lol. light pen
         const LP = 0x40;
 
         // Register a11y status
@@ -20,80 +23,285 @@ bitflags::bitflags! {
 }
 
 pub struct Vdc {
-    ram: Vec<u8>,
+    framebuffer: Vec<u32>,
+    vram: Vec<u8>,
 
+    // Rendering/CRT state
+    parameters_dirty: bool,
+    signal_width: usize,
+    signal_height: usize,
+    top_border_height: usize,
+    left_border_width: usize,
+    visible_width: usize,
+    visible_height: usize,
+    right_border_width: usize,
+    bottom_border_height: usize,
+    hsync_width: usize,
+    vsync_height: usize,
+    cell_width: usize,
+    cell_height: usize,
+    cell_visible_width: usize,
+    cell_visible_height: usize,
+    raster_x: usize,
+    raster_y: usize,
+    division_x: f64,
+    division_y: f64,
+
+    // Registers
     status: u8,
     register_select: u8,
 
     horiz_total: u8,
     horiz_displayed: u8,
     horiz_sync: u8,
-    sync_width: u8,
+    sync_widths: u8,
     vert_total: u8,
     vert_adjust: u8,
     vert_displayed: u8,
     vert_sync: u8,
     interlace_mode: u8,
-    char_total_vertical: u8,
+    char_total_vert: u8,
     cursor_mode_start_scan: u8,
     cursor_end_scan_line: u8,
-    display_start: u16,
+    disp_start: u16,
     cursor_pos: u16,
     update_addr: u16,
-    attr_addr: u16,
-    char_total_display_horiz: u8,
-    char_display_vert: u8,
-    vert_scroll: u8,
-    horiz_scroll: u8,
+    attr_start: u16,
+    char_total_disp_horiz: u8,
+    char_disp_vert: u8,
+    vert_scroll_ctrl: u8,
+    horiz_scroll_ctrl: u8,
     fg_bg_color: u8,
     addr_inc: u8,
-    char_base: u8,
+    char_base: u16,
+    underline_ctrl: u8,
     word_count: u8,
     block_start: u16,
-    disp_enable: u16,
+    disp_enable_end: u8,
+    disp_enable_begin: u8,
 }
 
 impl Vdc {
     pub fn new() -> Self {
         Self {
-            ram: vec![0; 16384],
+            framebuffer: vec![0; CRT_WIDTH * CRT_HEIGHT],
+            vram: vec![0; 16384],
+
+            parameters_dirty: true,
+            signal_width: 0,
+            signal_height: 0,
+            top_border_height: 0,
+            left_border_width: 0,
+            visible_width: 0,
+            visible_height: 0,
+            right_border_width: 0,
+            bottom_border_height: 0,
+            hsync_width: 0,
+            vsync_height: 0,
+            cell_width: 0,
+            cell_height: 0,
+            cell_visible_width: 0,
+            cell_visible_height: 0,
+            raster_x: 0,
+            raster_y: 0,
+            division_x: 0.0,
+            division_y: 0.0,
 
             status: 0,
             register_select: 0,
 
-            horiz_total: 0,
-            horiz_displayed: 0,
-            horiz_sync: 0,
-            sync_width: 0,
-            vert_total: 0,
+            // TODO: remove these hard-codes (stolen from C= 128 docs)
+            horiz_total: 126,
+            horiz_displayed: 80,
+            horiz_sync: 102,
+            sync_widths: 0b0100_1001,
+            vert_total: 32,
             vert_adjust: 0,
-            vert_displayed: 0,
-            vert_sync: 0,
+            vert_displayed: 25,
+            vert_sync: 29,
             interlace_mode: 0,
-            char_total_vertical: 0,
+            char_total_vert: 7,
             cursor_mode_start_scan: 0,
             cursor_end_scan_line: 0,
-            display_start: 0,
+            disp_start: 0x0000,
             cursor_pos: 0,
             update_addr: 0,
-            attr_addr: 0,
-            char_total_display_horiz: 0,
-            char_display_vert: 0,
-            vert_scroll: 0,
-            horiz_scroll: 0,
+            attr_start: 0x0800,
+            char_total_disp_horiz: 0b0111_1000,
+            char_disp_vert: 0b0000_1000,
+            vert_scroll_ctrl: 0,
+            horiz_scroll_ctrl: 0,
             fg_bg_color: 0,
             addr_inc: 0,
-            char_base: 0,
+            char_base: 0x2000,
+            underline_ctrl: 0,
             word_count: 0,
             block_start: 0,
-            disp_enable: 0,
+
+            // The screen must turn off for some portion of the scan-line in RGBi.
+            // These control when that period starts and ends (measured in char columns)
+            // TODO: implement
+            disp_enable_end: 0,
+            disp_enable_begin: 0,
         }
+    }
+
+    pub fn framebuffer(&self) -> &[u32] {
+        &self.framebuffer
+    }
+
+    pub fn vblank(&self) -> bool {
+        // TODO: Should only set this on 1 cycle
+        //   so we dont redraw the screen on every vblank pulse
+        (self.status & Status::VBLANK.bits()) != 0
+    }
+
+    fn recompute_parameters(&mut self) {
+        self.parameters_dirty = false;
+
+        let cells_x = (self.horiz_total as usize) + 1;
+        let cells_y = (self.vert_total as usize) + 1;
+        self.cell_width = ((self.char_total_disp_horiz >> 4) as usize) + 1;
+        self.cell_height = (self.char_total_vert as usize) + 1;
+        self.cell_visible_width = (self.char_total_disp_horiz & 0x0F) as usize;
+        self.cell_visible_height = self.char_disp_vert as usize;
+        self.signal_width = cells_x * self.cell_width;
+        self.signal_height = cells_y * self.cell_height;
+
+        self.visible_width = (self.horiz_displayed as usize) * self.cell_width;
+        self.visible_height = (self.vert_displayed as usize) * self.cell_height;
+
+        self.hsync_width = (((self.sync_widths & 0x0F) as usize) - 1) * self.cell_width;
+        self.vsync_height = (self.sync_widths >> 4) as usize;
+
+        let vert_sync_pos = (self.vert_sync as usize - 1) * self.cell_height;
+        self.top_border_height = self.signal_height - vert_sync_pos - self.vsync_height;
+        self.bottom_border_height =
+            self.signal_height - self.top_border_height - self.visible_height - self.vsync_height;
+
+        let horiz_sync_pos = self.horiz_sync as usize * self.cell_width;
+        self.left_border_width = self.signal_width - horiz_sync_pos - self.hsync_width;
+        self.right_border_width =
+            self.signal_width - self.left_border_width - self.visible_width - self.hsync_width;
+
+        self.division_x = (CRT_WIDTH as f64) / ((self.signal_width - self.hsync_width) as f64);
+        self.division_y = (CRT_HEIGHT as f64) / ((self.signal_height - self.vsync_height) as f64);
     }
 }
 
 impl Device for Vdc {
     fn tick(&mut self, _: &mut dyn DeviceBus) {
-        // todo!()
+        self.status &= !Status::VBLANK.bits();
+
+        if self.parameters_dirty {
+            self.recompute_parameters();
+
+            self.vram[(self.char_base as usize) + 8] = 0b11111110;
+            self.vram[(self.char_base as usize) + 9] = 0b10000000;
+            self.vram[(self.char_base as usize) + 10] = 0b10000000;
+            self.vram[(self.char_base as usize) + 11] = 0b11111110;
+            self.vram[(self.char_base as usize) + 12] = 0b10000000;
+            self.vram[(self.char_base as usize) + 13] = 0b10000000;
+            self.vram[(self.char_base as usize) + 14] = 0b11111110;
+            self.vram[(self.char_base as usize) + 15] = 0b00000000;
+
+            self.vram[(self.char_base as usize) + 16] = 0b10000000;
+            self.vram[(self.char_base as usize) + 17] = 0b10000000;
+            self.vram[(self.char_base as usize) + 18] = 0b10000000;
+            self.vram[(self.char_base as usize) + 19] = 0b10000000;
+            self.vram[(self.char_base as usize) + 20] = 0b10000000;
+            self.vram[(self.char_base as usize) + 21] = 0b10000000;
+            self.vram[(self.char_base as usize) + 22] = 0b11111110;
+            self.vram[(self.char_base as usize) + 23] = 0b00000000;
+
+            self.vram[(self.char_base as usize) + 24] = 0b01111100;
+            self.vram[(self.char_base as usize) + 25] = 0b10000010;
+            self.vram[(self.char_base as usize) + 26] = 0b10000010;
+            self.vram[(self.char_base as usize) + 27] = 0b10000010;
+            self.vram[(self.char_base as usize) + 28] = 0b10000010;
+            self.vram[(self.char_base as usize) + 29] = 0b10000010;
+            self.vram[(self.char_base as usize) + 30] = 0b01111100;
+            self.vram[(self.char_base as usize) + 31] = 0b00000000;
+
+            self.vram[(self.char_base as usize) + 32] = 0b10000010;
+            self.vram[(self.char_base as usize) + 33] = 0b10000010;
+            self.vram[(self.char_base as usize) + 34] = 0b10000010;
+            self.vram[(self.char_base as usize) + 35] = 0b11111110;
+            self.vram[(self.char_base as usize) + 36] = 0b10000010;
+            self.vram[(self.char_base as usize) + 37] = 0b10000010;
+            self.vram[(self.char_base as usize) + 38] = 0b10000010;
+            self.vram[(self.char_base as usize) + 39] = 0b00000000;
+
+            self.vram[(self.disp_start as usize) + 0] = 4;
+            self.vram[(self.disp_start as usize) + 1] = 1;
+            self.vram[(self.disp_start as usize) + 2] = 2;
+            self.vram[(self.disp_start as usize) + 3] = 2;
+            self.vram[(self.disp_start as usize) + 4] = 3;
+        }
+
+        // in hblank
+        if self.raster_x == (self.signal_width - self.hsync_width) {
+            let py = ((self.raster_y as f64) * self.division_y) as usize;
+
+            if self.raster_y < self.top_border_height {
+                // top border
+                for x in 0..CRT_WIDTH {
+                    self.framebuffer[x + (py * CRT_WIDTH)] = 0;
+                }
+            } else if self.raster_y < (self.top_border_height + self.visible_height) {
+                // visible
+                for x in 0..self.left_border_width {
+                    let px = ((x as f64) * self.division_x) as usize;
+                    self.framebuffer[px + (py * CRT_WIDTH)] = 0;
+                }
+
+                // lets find what row we are in
+                let cell_y = (self.raster_y - self.top_border_height) / self.cell_height;
+                let cell_yrem = (self.raster_y - self.top_border_height) % self.cell_height;
+                let cells_x = (self.horiz_total as usize) + 1;
+
+                // and where it starts in the display memory
+                let row_start_addr = (self.disp_start as usize) + (cell_y * cells_x);
+
+                // now, start drawing...
+                let mut px = (self.left_border_width as f64) * self.division_x;
+                for c in &self.vram[row_start_addr..(row_start_addr + cells_x)] {
+                    let mut char_line =
+                        self.vram[(self.char_base as usize) + ((*c as usize) * 8) + cell_yrem];
+                    for _ in 0..self.cell_width {
+                        if (char_line & 0x80) != 0 {
+                            self.framebuffer[(px as usize) + (py * CRT_WIDTH)] = 0xFFFFFFFF;
+                        }
+                        px += self.division_x;
+                        char_line <<= 1;
+                    }
+                }
+
+                for x in (self.left_border_width + self.visible_width)
+                    ..(self.signal_width - self.hsync_width)
+                {
+                    let px = ((x as f64) * self.division_x) as usize;
+                    self.framebuffer[px + (py * CRT_WIDTH)] = 0;
+                }
+            } else if self.raster_y < (self.signal_height - self.vsync_height) {
+                // bottom border
+                for x in 0..CRT_WIDTH {
+                    self.framebuffer[x + (py * CRT_WIDTH)] = 0;
+                }
+            } else {
+                // in vblank
+                self.status |= Status::VBLANK.bits();
+            }
+        }
+
+        self.raster_x += 1;
+        if self.raster_x == self.signal_width {
+            self.raster_x = 0;
+            self.raster_y += 1;
+            if self.raster_y == self.signal_height {
+                self.raster_y = 0;
+            }
+        }
     }
 
     fn read(&mut self, port: u16) -> u8 {
@@ -103,7 +311,77 @@ impl Device for Vdc {
 
             // read data
             1 => {
-                todo!()
+                match self.register_select {
+                    0x00 => self.horiz_total,
+
+                    0x01 => self.horiz_displayed,
+
+                    0x02 => self.horiz_sync,
+
+                    0x03 => self.sync_widths,
+
+                    0x04 => self.vert_total,
+
+                    0x05 => self.vert_adjust | 0xE0,
+
+                    0x06 => self.vert_displayed,
+
+                    0x07 => self.vert_sync,
+
+                    0x08 => self.interlace_mode | 0xFC,
+
+                    0x09 => self.char_total_vert | 0xE0,
+
+                    0x0A => self.cursor_mode_start_scan | 0x80,
+
+                    0x0B => self.cursor_end_scan_line | 0xE0,
+
+                    0x0C => (self.disp_start >> 8) as u8,
+                    0x0D => (self.disp_start >> 0) as u8,
+
+                    0x0E => (self.cursor_pos >> 8) as u8,
+                    0x0F => (self.cursor_pos >> 0) as u8,
+
+                    0x12 => (self.update_addr >> 8) as u8,
+                    0x13 => (self.update_addr >> 0) as u8,
+
+                    0x14 => (self.attr_start >> 8) as u8,
+                    0x15 => (self.attr_start >> 0) as u8,
+
+                    0x16 => self.char_total_disp_horiz,
+
+                    0x17 => self.char_disp_vert | 0xE0,
+
+                    0x18 => self.vert_scroll_ctrl,
+
+                    0x19 => self.horiz_scroll_ctrl,
+
+                    0x1A => self.fg_bg_color,
+
+                    0x1B => self.addr_inc,
+
+                    0x1C => (self.char_base >> 8) as u8,
+
+                    0x1D => self.underline_ctrl | 0xEF,
+
+                    0x1E => self.word_count,
+
+                    0x1F => {
+                        // reads automatically increment the address to update :-)
+                        let data = self.vram[(self.update_addr & 0x3FFF) as usize];
+                        self.update_addr = (self.update_addr + 1) & 0x3FFF;
+                        data
+                    }
+
+                    0x20 => (self.block_start >> 8) as u8,
+                    0x21 => (self.block_start >> 0) as u8,
+
+                    0x22 => self.disp_enable_end,
+                    0x23 => self.disp_enable_begin,
+
+                    // unused bits seem to read high?
+                    _ => 0xFF,
+                }
             }
 
             _ => unreachable!(),
@@ -111,13 +389,82 @@ impl Device for Vdc {
     }
 
     fn write(&mut self, port: u16, data: u8) {
+        // TODO: Don't need to do this on every write
+        self.parameters_dirty = true;
+
         match port & 0x01 {
             // select register
-            0 => self.register_select = data,
+            0 => self.register_select = data & 0x1F,
 
-            1 => {
-                todo!()
-            }
+            1 => match self.register_select {
+                0x00 => self.horiz_total = data,
+
+                0x01 => self.horiz_displayed = data,
+
+                0x02 => self.horiz_sync = data,
+
+                0x03 => self.sync_widths = data,
+
+                0x04 => self.vert_total = data,
+
+                0x05 => self.vert_adjust = data & 0x1F,
+
+                0x06 => self.vert_displayed = data,
+
+                0x07 => self.vert_sync = data,
+
+                0x08 => self.interlace_mode = data & 0x03,
+
+                0x09 => self.char_total_vert = data & 0x1F,
+
+                0x0A => self.cursor_mode_start_scan = data & 0x7F,
+
+                0x0B => self.cursor_end_scan_line = data & 0x1F,
+
+                0x0C => self.disp_start = (self.disp_start & 0x00FF) | ((data as u16) << 8),
+                0x0D => self.disp_start = (self.disp_start & 0xFF00) | ((data as u16) << 0),
+
+                0x0E => self.cursor_pos = (self.cursor_pos & 0x00FF) | ((data as u16) << 8),
+                0x0F => self.cursor_pos = (self.cursor_pos & 0xFF00) | ((data as u16) << 0),
+
+                0x12 => self.update_addr = (self.update_addr & 0x00FF) | ((data as u16) << 8),
+                0x13 => self.update_addr = (self.update_addr & 0xFF00) | ((data as u16) << 0),
+
+                0x14 => self.attr_start = (self.attr_start & 0x00FF) | ((data as u16) << 8),
+                0x15 => self.attr_start = (self.attr_start & 0xFF00) | ((data as u16) << 0),
+
+                0x16 => self.char_total_disp_horiz = data,
+
+                0x17 => self.char_disp_vert = data & 0x1F,
+
+                0x18 => self.vert_scroll_ctrl = data,
+
+                0x19 => self.horiz_scroll_ctrl = data,
+
+                0x1A => self.fg_bg_color = data,
+
+                0x1B => self.addr_inc = data,
+
+                0x1C => self.char_base = ((data & 0xE0) as u16) << 8,
+
+                0x1D => self.underline_ctrl = data & 0x1F,
+
+                0x1E => self.word_count = data,
+
+                0x1F => {
+                    // writes automatically increment the address to update :-)
+                    self.vram[(self.update_addr & 0x3FFF) as usize] = data;
+                    self.update_addr = (self.update_addr + 1) & 0x3FFF;
+                }
+
+                0x20 => self.block_start = (self.block_start & 0x00FF) | ((data as u16) << 8),
+                0x21 => self.block_start = (self.block_start & 0xFF00) | ((data as u16) << 0),
+
+                0x22 => self.disp_enable_end = data,
+                0x23 => self.disp_enable_begin = data,
+
+                _ => {}
+            },
 
             _ => unreachable!(),
         }
