@@ -527,8 +527,8 @@ impl Device for Vdc {
 
                     0x1F => {
                         // reads automatically increment the address to update :-)
-                        let data = self.vram[(self.update_addr & 0x3FFF) as usize];
-                        self.update_addr = (self.update_addr + 1) & 0x3FFF;
+                        let data = self.vram[(self.update_addr & VRAM_ADDR_MAX) as usize];
+                        self.update_addr = (self.update_addr + 1) & VRAM_ADDR_MAX;
                         data
                     }
 
@@ -612,8 +612,8 @@ impl Device for Vdc {
 
                 0x1F => {
                     // writes automatically increment the address to update :-)
-                    self.vram[(self.update_addr & 0x3FFF) as usize] = data;
-                    self.update_addr = (self.update_addr + 1) & 0x3FFF;
+                    self.vram[(self.update_addr & VRAM_ADDR_MAX) as usize] = data;
+                    self.update_addr = (self.update_addr + 1) & VRAM_ADDR_MAX;
                 }
 
                 0x20 => self.block_start = (self.block_start & 0x00FF) | ((data as u16) << 8),
