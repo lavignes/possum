@@ -53,7 +53,7 @@ The interface is Compact Flash actually, but it is 80s tech.*
 ```
 z80asm ../rom/hello_hd.z80 -o ../rom/hello_hd.bin
 
-cargo run --release --bin possum-emu -- /rom/hello_hd.bin --hd0 ../img/blank.img
+cargo run --release --bin possum-emu -- ../rom/hello_hd.bin --hd0 ../img/blank.img
 ```
 
 ```
