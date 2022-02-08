@@ -106,7 +106,7 @@ impl Framebuffer {
 }
 
 pub struct Vdc {
-    framebuffer_full: bool,
+    framebuffer_ready: bool,
     framebuffer: Framebuffer,
     vram: Vec<u8>,
 
@@ -121,6 +121,7 @@ pub struct Vdc {
     right_border_width: usize,
     bottom_border_height: usize,
     hsync_start: usize,
+    vsync_start: usize,
     hsync_width: usize,
     vsync_height: usize,
     cell_width: usize,
@@ -169,7 +170,7 @@ pub struct Vdc {
 impl Vdc {
     pub fn new() -> Self {
         Self {
-            framebuffer_full: false,
+            framebuffer_ready: false,
             framebuffer: Framebuffer::default(),
             vram: vec![0; VRAM_SIZE],
 
@@ -183,6 +184,7 @@ impl Vdc {
             right_border_width: 0,
             bottom_border_height: 0,
             hsync_start: 0,
+            vsync_start: 0,
             hsync_width: 0,
             vsync_height: 0,
             cell_width: 0,
@@ -264,7 +266,7 @@ impl Vdc {
     }
 
     pub fn framebuffer_ready(&self) -> bool {
-        self.framebuffer_full
+        self.framebuffer_ready
     }
 
     fn recompute_parameters(&mut self) {
@@ -287,6 +289,7 @@ impl Vdc {
         self.vsync_height = (self.sync_widths >> 4) as usize;
 
         self.hsync_start = self.signal_width.wrapping_sub(self.hsync_width) & 0x3FF;
+        self.vsync_start = self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF;
 
         let vert_sync_pos = ((self.vert_sync.wrapping_sub(1) as usize) & 0xFF) * self.cell_height;
         self.top_border_height = self
@@ -317,7 +320,7 @@ impl Vdc {
         self.cursor_start_line = (self.cursor_mode_start_scan & 0x0F) as usize;
         self.cursor_end_line = (self.cursor_end_scan_line.wrapping_sub(1) as usize) & 0x1F;
 
-        self.framebuffer_full = false;
+        self.framebuffer_ready = false;
 
         // limit size to 1024x1024
         self.framebuffer.resize(
@@ -437,7 +440,7 @@ impl Device for Vdc {
                         }
                     }
                 }
-            } else if self.raster_y < (self.signal_height - self.vsync_height) {
+            } else if self.raster_y < self.vsync_start {
                 // bottom border
                 for x in 0..self.framebuffer.width {
                     self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
@@ -453,7 +456,7 @@ impl Device for Vdc {
             self.raster_x = 0;
             self.raster_y += 1;
             // check if we're ready to present the framebuffer to the outside world
-            self.framebuffer_full = self.raster_y == (self.signal_height - self.vsync_height);
+            self.framebuffer_ready = self.raster_y == self.vsync_start;
             if self.raster_y == self.signal_height {
                 self.raster_y = 0;
             }
