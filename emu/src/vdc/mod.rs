@@ -333,30 +333,6 @@ impl Device for Vdc {
 
         if self.parameters_dirty {
             self.recompute_parameters();
-
-            self.vram[(self.char_start as usize) + 16] = 0b11111110;
-            self.vram[(self.char_start as usize) + 17] = 0b10000000;
-            self.vram[(self.char_start as usize) + 18] = 0b10000000;
-            self.vram[(self.char_start as usize) + 19] = 0b11111110;
-            self.vram[(self.char_start as usize) + 20] = 0b10000000;
-            self.vram[(self.char_start as usize) + 21] = 0b10000000;
-            self.vram[(self.char_start as usize) + 22] = 0b11111110;
-            self.vram[(self.char_start as usize) + 23] = 0b00000000;
-
-            self.vram[(self.char_start as usize) + 24] = 0b11111110;
-            self.vram[(self.char_start as usize) + 25] = 0b11000110;
-            self.vram[(self.char_start as usize) + 26] = 0b11000110;
-            self.vram[(self.char_start as usize) + 27] = 0b11000110;
-            self.vram[(self.char_start as usize) + 28] = 0b11000110;
-            self.vram[(self.char_start as usize) + 29] = 0b11000110;
-            self.vram[(self.char_start as usize) + 30] = 0b11111110;
-            self.vram[(self.char_start as usize) + 31] = 0b00000000;
-
-            self.vram[(self.disp_start as usize) + 0] = 1;
-            self.vram[(self.attr_start as usize) + 1] = 0x02;
-
-            self.vram[(self.disp_start as usize) + (80 * 24)] = 1;
-            self.vram[(self.attr_start as usize) + (80 * 24)] = 0x48;
         }
 
         // in hblank
