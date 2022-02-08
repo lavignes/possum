@@ -1,3 +1,5 @@
+//! Common traits exposed to devices on the system bus.
+
 pub trait Bus {
     fn read(&mut self, addr: u16) -> u8;
 

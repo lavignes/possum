@@ -1,3 +1,5 @@
+//! The whole system tied together. Implements the shared bus.
+
 use crate::{
     bus::{Bus, Device, DeviceBus, InterruptHandler, NullBus},
     cpu::Cpu,
