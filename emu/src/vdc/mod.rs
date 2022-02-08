@@ -20,20 +20,35 @@ bitflags::bitflags! {
 
 fn color_lookup(bits: u8) -> u32 {
     match bits & 0x0F {
+        // black
         0b0000 => 0xFF000000,
         0b0001 => 0xFF555555,
+
+        // blue
         0b0010 => 0xFF0000AA,
         0b0011 => 0xFF5555FF,
+
+        // green
         0b0100 => 0xFF00AA00,
         0b0101 => 0xFF55FF55,
+
+        // cyan
         0b0110 => 0xFF00AAAA,
         0b0111 => 0xFF55FFFF,
+
+        // red
         0b1000 => 0xFFAA0000,
         0b1001 => 0xFFFF5555,
+
+        // purple
         0b1010 => 0xFFAA00AA,
         0b1011 => 0xFFFF55FF,
-        0b1100 => 0xFFAA5500,
+
+        // yellow
+        0b1100 => 0xFFAAAA00,
         0b1101 => 0xFFFFFF55,
+
+        // white
         0b1110 => 0xFFAAAAAA,
         0b1111 => 0xFFFFFFFF,
         _ => unreachable!(),
@@ -279,10 +294,10 @@ impl Device for Vdc {
             self.vram[(self.char_start as usize) + 31] = 0b00000000;
 
             self.vram[(self.disp_start as usize) + 0] = 1;
-            self.vram[(self.disp_start as usize) + 1] = 2;
+            self.vram[(self.attr_start as usize) + 1] = 0x02;
 
-            self.vram[(self.attr_start as usize) + 1] = 0x43;
-            self.vram[(self.attr_start as usize) + 2] = 0x02;
+            self.vram[(self.disp_start as usize) + (80 * 24)] = 1;
+            self.vram[(self.attr_start as usize) + (80 * 24)] = 0x48;
         }
 
         // in hblank
@@ -305,58 +320,79 @@ impl Device for Vdc {
                     self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
                 }
 
-                // lets find what row we are in
-                let cell_y = (self.raster_y - self.top_border_height) / self.cell_height;
-                let cell_yoffset = (self.raster_y - self.top_border_height) % self.cell_height;
+                // Adjust the line the vertical scroll
+                let scroll_y = (self.vert_scroll_ctrl & 0x0F) as usize;
+                let scrolled_y = self.raster_y - self.top_border_height + scroll_y;
+
+                // Lets find what cell row we want to render
+                let cell_y = scrolled_y / self.cell_height;
+                let cell_yoffset = scrolled_y % self.cell_height;
                 let cell_stride = self.horiz_displayed as usize;
 
-                // and where it starts in the display memory
-                let row_start_addr = (self.disp_start as usize) + (cell_y * cell_stride);
+                // and make sure we aren't clipping the bottom of the cell
+                if cell_yoffset <= self.cell_visible_height {
+                    // and where it starts in the display memory
+                    let row_start_addr = (self.disp_start as usize) + (cell_y * cell_stride);
 
-                // now, start drawing...
-                let mut x = self.left_border_width;
-                for (cell_x, ch) in self.vram[row_start_addr..(row_start_addr + cell_stride)]
-                    .iter()
-                    .enumerate()
-                {
-                    // get the attrs for this cell
-                    let attr = self.vram[(self.attr_start as usize) + (*ch as usize)];
-                    let mut fg_color = color_lookup(attr);
-                    let mut bg_color = color_lookup(self.fg_bg_color);
+                    // now, start drawing...
+                    let mut x = self.left_border_width;
+                    for (cell_x, ch) in self.vram[row_start_addr..(row_start_addr + cell_stride)]
+                        .iter()
+                        .enumerate()
+                    {
+                        // get the attrs for this cell
+                        let attr = self.vram[(self.attr_start as usize) + (*ch as usize)];
+                        let mut fg_color = color_lookup(attr);
+                        let mut bg_color = color_lookup(self.fg_bg_color);
 
-                    if (attr & Attribute::REVERSE.bits()) != 0 {
-                        mem::swap(&mut fg_color, &mut bg_color);
-                    }
-
-                    // Reverse the video if this is the cursor
-                    let is_cursor = (cell_x + (cell_y * cell_stride)) == (self.cursor_pos as usize);
-                    if is_cursor {
-                        let cursor_start_line = (self.cursor_mode_start_scan & 0x0F) as usize;
-                        let cursor_end_line = (self.cursor_end_scan_line as usize) - 1;
-                        if cell_yoffset >= cursor_start_line && cell_yoffset <= cursor_end_line {
+                        if (attr & Attribute::REVERSE.bits()) != 0 {
                             mem::swap(&mut fg_color, &mut bg_color);
                         }
-                    }
 
-                    // note: there are 16 rows of 8 bytes for each char
-                    // regardless of the character width, only 8 bytes can be used.
-                    // And for an 8x8 character, the bottom half is effectively wasted space :-(
-                    const PIX_STRIDE: usize = 16;
+                        // underline
+                        if (attr & Attribute::UNDERLINE.bits() != 0)
+                            && cell_yoffset == (self.underline_ctrl & 0x0F) as usize
+                        {
+                            mem::swap(&mut fg_color, &mut bg_color);
+                        }
 
-                    // get the 8 pixels for
-                    let mut pix = self.vram
-                        [(self.char_start as usize) + ((*ch as usize) * PIX_STRIDE) + cell_yoffset];
+                        // Reverse the video if this is the cursor
+                        let is_cursor =
+                            (cell_x + (cell_y * cell_stride)) == (self.cursor_pos as usize);
+                        if is_cursor {
+                            let cursor_start_line = (self.cursor_mode_start_scan & 0x0F) as usize;
+                            let cursor_end_line = (self.cursor_end_scan_line as usize) - 1;
+                            if cell_yoffset >= cursor_start_line && cell_yoffset <= cursor_end_line
+                            {
+                                mem::swap(&mut fg_color, &mut bg_color);
+                            }
+                        }
 
-                    // for each bit, blit the pixel
-                    for _ in 0..self.cell_width {
-                        self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
-                            if (pix & 0x80) != 0 {
-                                fg_color
-                            } else {
-                                bg_color
-                            };
-                        x += 1;
-                        pix <<= 1;
+                        // note: there are 16 rows of 8 bytes for each char
+                        // regardless of the character width, only 8 bytes can be used.
+                        // And for an 8x8 character, the bottom half is effectively wasted space :-(
+                        const PIX_STRIDE: usize = 16;
+
+                        // get the 8 pixels for
+                        let mut pix = self.vram[(self.char_start as usize)
+                            + ((*ch as usize) * PIX_STRIDE)
+                            + cell_yoffset];
+
+                        // for each visible bit, blit the pixel
+                        for _ in 0..self.cell_visible_width {
+                            self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
+                                if (pix & 0x80) != 0 {
+                                    fg_color
+                                } else {
+                                    bg_color
+                                };
+                            x += 1;
+                            pix <<= 1;
+                        }
+                        // continue right to account for the total width
+                        for _ in 0..(self.cell_width - self.cell_visible_width) {
+                            x += 1;
+                        }
                     }
                 }
             } else if self.raster_y < (self.signal_height - self.vsync_height) {
