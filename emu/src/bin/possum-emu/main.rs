@@ -77,7 +77,7 @@ fn main() -> io::Result<()> {
     let mut cycles = 0;
     while !system.halted() {
         cycles += system.step();
-        if system.vblank() {
+        if system.framebuffer_ready() {
             frame_idle -= 1;
             if frame_idle == 0 {
                 frame_idle = 200;

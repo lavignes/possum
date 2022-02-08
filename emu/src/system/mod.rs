@@ -5,18 +5,44 @@ use crate::{
     vdc::{Framebuffer, Vdc},
 };
 
+const BANK_SIZE: usize = 0x10000;
+const BANK_MAX: usize = 0x1F;
+
 pub struct System {
     cpu: Cpu,
+    bank: BankSelect,
     dma: Dma,
     ram: Vec<u8>,
     hd: Option<Box<dyn Device>>,
     vdc: Vdc,
     pipe: Box<dyn Device>,
+}
 
-    vblank: bool,
+#[derive(Default)]
+pub struct BankSelect {
+    bank: usize,
+    offset: usize,
+}
+
+impl BankSelect {
+    #[inline]
+    pub fn select(&mut self, bank: u8) {
+        self.bank = (bank as usize) & BANK_MAX;
+        self.offset = self.bank * BANK_SIZE;
+    }
+
+    pub fn bank(&self) -> u8 {
+        self.bank as u8
+    }
+
+    #[inline]
+    pub fn ram_offset(&self) -> usize {
+        self.offset
+    }
 }
 
 struct CpuView<'a> {
+    bank: &'a mut BankSelect,
     dma: &'a mut Dma,
     ram: &'a mut Vec<u8>,
     hd: &'a mut Option<&'a mut Box<dyn Device>>,
@@ -26,16 +52,18 @@ struct CpuView<'a> {
 
 impl<'a> Bus for CpuView<'a> {
     fn read(&mut self, addr: u16) -> u8 {
-        self.ram[addr as usize]
+        self.ram[addr as usize + self.bank.ram_offset()]
     }
 
     fn write(&mut self, addr: u16, data: u8) {
-        self.ram[addr as usize] = data
+        self.ram[addr as usize + self.bank.ram_offset()] = data
     }
 
     fn input(&mut self, port: u16) -> u8 {
         match port & 0xF0 {
             0x00 => self.dma.read(port),
+
+            0x01 => self.bank.bank(),
 
             0x80 => match self.hd {
                 Some(hd) => hd.read(port),
@@ -53,6 +81,8 @@ impl<'a> Bus for CpuView<'a> {
     fn output(&mut self, port: u16, data: u8) {
         match port & 0xF0 {
             0x00 => self.dma.write(port, data),
+
+            0x01 => self.bank.select(data),
 
             0x80 => {
                 if let Some(hd) = self.hd {
@@ -123,6 +153,7 @@ impl<'a> InterruptHandler for CpuView<'a> {
 }
 
 struct DmaView<'a> {
+    bank: &'a mut BankSelect,
     ram: &'a mut Vec<u8>,
     hd: &'a mut Option<&'a mut Box<dyn Device>>,
     vdc: &'a mut Vdc,
@@ -132,15 +163,17 @@ struct DmaView<'a> {
 
 impl<'a> Bus for DmaView<'a> {
     fn read(&mut self, addr: u16) -> u8 {
-        self.ram[addr as usize]
+        self.ram[addr as usize + self.bank.ram_offset()]
     }
 
     fn write(&mut self, addr: u16, data: u8) {
-        self.ram[addr as usize] = data
+        self.ram[addr as usize + self.bank.ram_offset()] = data
     }
 
     fn input(&mut self, port: u16) -> u8 {
         match port & 0xF0 {
+            0x01 => self.bank.bank(),
+
             0x80 => match self.hd {
                 Some(hd) => hd.read(port),
                 _ => 0,
@@ -156,6 +189,8 @@ impl<'a> Bus for DmaView<'a> {
 
     fn output(&mut self, port: u16, data: u8) {
         match port & 0xF0 {
+            0x01 => self.bank.select(data),
+
             0x80 => {
                 if let Some(hd) = self.hd {
                     hd.write(port, data)
@@ -182,18 +217,19 @@ impl System {
     pub fn new(pipe: Box<dyn Device>, hd: Option<Box<dyn Device>>) -> Self {
         Self {
             cpu: Cpu::default(),
+            bank: BankSelect::default(),
             dma: Dma::default(),
-            ram: vec![0; 65536],
+            ram: vec![0; 0x10000 * 0x20],
             hd,
             vdc: Vdc::new(),
             pipe,
-            vblank: false,
         }
     }
 
     pub fn step(&mut self) -> usize {
         let Self {
             cpu,
+            bank,
             dma,
             ram,
             hd,
@@ -203,6 +239,7 @@ impl System {
         } = self;
 
         let cycles = cpu.step(&mut CpuView {
+            bank,
             dma,
             ram,
             hd: &mut hd.as_mut(),
@@ -211,12 +248,12 @@ impl System {
         });
 
         let mut reti = cpu.returned_from_interrupt();
-        let mut vblank = false;
         for _ in 0..cycles {
             // note: only 1 DMA device can run at a time.
             //   If I want to add support for more, then I need to put them in the daisy chain
             //   and only run the first DMA that is wishing to tick.
             dma.tick(&mut DmaView {
+                bank,
                 ram,
                 hd: &mut hd.as_mut(),
                 vdc,
@@ -225,15 +262,11 @@ impl System {
             });
 
             vdc.tick(&mut NullBus {});
-            if vdc.vblank() {
-                vblank = true;
-            }
 
             // clear reti since it should only impact us for 1 cycle, right?
             // TODO: I think the accurate impl would be to only check reti on final cycle
             reti = false;
         }
-        self.vblank = vblank;
         cycles
     }
 
@@ -241,8 +274,8 @@ impl System {
         self.cpu.halted()
     }
 
-    pub fn vblank(&self) -> bool {
-        self.vblank
+    pub fn framebuffer_ready(&self) -> bool {
+        self.vdc.framebuffer_ready()
     }
 
     pub fn framebuffer(&self) -> &Framebuffer {

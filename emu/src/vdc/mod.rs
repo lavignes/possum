@@ -263,7 +263,7 @@ impl Vdc {
         &self.framebuffer
     }
 
-    pub fn vblank(&self) -> bool {
+    pub fn framebuffer_ready(&self) -> bool {
         self.framebuffer_full
     }
 
