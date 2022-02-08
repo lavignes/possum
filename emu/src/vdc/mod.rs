@@ -355,7 +355,7 @@ impl Device for Vdc {
                     self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
                 }
 
-                // Adjust the line the vertical scroll
+                // Adjust the line to the vertical scroll
                 let scroll_y = (self.vert_scroll_ctrl & 0x0F) as usize;
                 let scrolled_y = self.raster_y - self.top_border_height + scroll_y;
 
@@ -366,7 +366,7 @@ impl Device for Vdc {
 
                 // and make sure we aren't clipping the bottom of the cell
                 if cell_yoffset <= self.cell_visible_height {
-                    // and where it starts in the display memory
+                    // find where it starts in the display memory
                     let row_start_addr = (self.disp_start as usize) + (cell_y * cell_stride);
 
                     // now, start drawing...
@@ -377,24 +377,27 @@ impl Device for Vdc {
                     {
                         let cell_index = self.vram[addr & VRAM_ADDR_MAX];
 
+                        // TODO: check for attr enabled bit
+
                         // get the attrs for this cell
                         let attr_index = (self.attr_start as usize) + (cell_index as usize);
                         let attr = self.vram[attr_index & VRAM_ADDR_MAX];
                         let mut fg_color = color_lookup(attr);
                         let mut bg_color = color_lookup(self.fg_bg_color);
 
+                        // reverse it
                         if (attr & Attribute::REVERSE.bits()) != 0 {
                             mem::swap(&mut fg_color, &mut bg_color);
                         }
 
-                        // underline
+                        // underline it
                         if (attr & Attribute::UNDERLINE.bits() != 0)
                             && cell_yoffset == (self.underline_ctrl & 0x0F) as usize
                         {
                             mem::swap(&mut fg_color, &mut bg_color);
                         }
 
-                        // Reverse the video if this is the cursor
+                        // Reverse the video *AGAIN* if this is the cursor
                         let is_cursor =
                             (cell_x + (cell_y * cell_stride)) == (self.cursor_pos as usize);
                         if is_cursor {
@@ -405,9 +408,10 @@ impl Device for Vdc {
                             }
                         }
 
-                        // note: there are 16 rows of 8 bytes for each char
-                        // regardless of the character width, only 8 bytes can be used.
+                        // note: there are *ONLY* up to 16 rows of 8 bytes for each char.
+                        // Regardless of the character width, only 8 bytes can be used per cell.
                         // And for an 8x8 character, the bottom half is effectively wasted space :-(
+                        // TODO: technically there is a double-height mode with 32 bytes
                         const PIX_STRIDE: usize = 16;
 
                         // get the 8 pixels for the char
