@@ -30,8 +30,8 @@ machine.
 \**2 disk images can be mounted on the ATA bus.
 The interface is Compact Flash actually, but it is 80s tech.*
 
-\*\* The 80-column display chip from the venerable Commodore 128!
-16KB video RAM installed ;-)
+\*\**The 80-column display chip from the venerable Commodore 128!
+16KB video RAM installed ;-)*
 
 ### Software
 
