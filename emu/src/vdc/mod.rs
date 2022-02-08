@@ -4,6 +4,9 @@ use std::mem;
 
 use crate::{Device, DeviceBus};
 
+const VRAM_SIZE: usize = 0x4000;
+const VRAM_ADDR_MAX: usize = 0x3FFF;
+
 bitflags::bitflags! {
     struct Attribute: u8 {
         const INTENSITY = 0x01;
@@ -117,12 +120,15 @@ pub struct Vdc {
     visible_height: usize,
     right_border_width: usize,
     bottom_border_height: usize,
+    hsync_start: usize,
     hsync_width: usize,
     vsync_height: usize,
     cell_width: usize,
     cell_height: usize,
     cell_visible_width: usize,
     cell_visible_height: usize,
+    cursor_start_line: usize,
+    cursor_end_line: usize,
     raster_x: usize,
     raster_y: usize,
 
@@ -165,7 +171,7 @@ impl Vdc {
         Self {
             framebuffer_full: false,
             framebuffer: Framebuffer::default(),
-            vram: vec![0; 16384],
+            vram: vec![0; VRAM_SIZE],
 
             parameters_dirty: true,
             signal_width: 0,
@@ -176,12 +182,15 @@ impl Vdc {
             visible_height: 0,
             right_border_width: 0,
             bottom_border_height: 0,
+            hsync_start: 0,
             hsync_width: 0,
             vsync_height: 0,
             cell_width: 0,
             cell_height: 0,
             cell_visible_width: 0,
             cell_visible_height: 0,
+            cursor_start_line: 0,
+            cursor_end_line: 0,
             raster_x: 0,
             raster_y: 0,
 
@@ -189,36 +198,62 @@ impl Vdc {
             register_select: 0,
 
             // TODO: remove these hard-codes (stolen from C= 128 docs)
-            horiz_total: 126,
-            horiz_displayed: 80,
-            horiz_sync: 102,
-            sync_widths: 0b0100_1001,
-            vert_total: 32,
+            // horiz_total: 126,
+            // horiz_displayed: 80,
+            // horiz_sync: 102,
+            // sync_widths: 0b0100_1001,
+            // vert_total: 32,
+            // vert_adjust: 0,
+            // vert_displayed: 25,
+            // vert_sync: 29,
+            // interlace_mode: 0,
+            // char_total_vert: 7,
+            // cursor_mode_start_scan: 0,
+            // cursor_end_scan_line: 7,
+            // disp_start: 0x0000,
+            // cursor_pos: 0,
+            // update_addr: 0,
+            // attr_start: 0x0800,
+            // char_total_disp_horiz: 0b0111_1000,
+            // char_disp_vert: 0b0000_1000,
+            // vert_scroll_ctrl: 0,
+            // horiz_scroll_ctrl: 0,
+            // fg_bg_color: 0,
+            // addr_inc: 0,
+            // char_start: 0x2000,
+            // underline_ctrl: 0,
+            // word_count: 0,
+            // block_start: 0,
+            horiz_total: 0,
+            horiz_displayed: 0,
+            horiz_sync: 0,
+            sync_widths: 0,
+            vert_total: 0,
             vert_adjust: 0,
-            vert_displayed: 25,
-            vert_sync: 29,
+            vert_displayed: 0,
+            vert_sync: 0,
             interlace_mode: 0,
-            char_total_vert: 7,
+            char_total_vert: 0,
             cursor_mode_start_scan: 0,
-            cursor_end_scan_line: 7,
-            disp_start: 0x0000,
+            cursor_end_scan_line: 0,
+            disp_start: 0,
             cursor_pos: 0,
             update_addr: 0,
-            attr_start: 0x0800,
-            char_total_disp_horiz: 0b0111_1000,
-            char_disp_vert: 0b0000_1000,
+            attr_start: 0,
+            char_total_disp_horiz: 0,
+            char_disp_vert: 0,
             vert_scroll_ctrl: 0,
             horiz_scroll_ctrl: 0,
             fg_bg_color: 0,
             addr_inc: 0,
-            char_start: 0x2000,
+            char_start: 0,
             underline_ctrl: 0,
             word_count: 0,
             block_start: 0,
 
             // The screen must turn off for some portion of the scan-line in RGBi.
             // These control when that period starts and ends (measured in char columns)
-            // TODO: implement
+            // TODO: implement?
             disp_enable_end: 0,
             disp_enable_begin: 0,
         }
@@ -235,10 +270,10 @@ impl Vdc {
     fn recompute_parameters(&mut self) {
         self.parameters_dirty = false;
 
-        let cells_x = (self.horiz_total as usize) + 1;
-        let cells_y = (self.vert_total as usize) + 1;
-        self.cell_width = ((self.char_total_disp_horiz >> 4) as usize) + 1;
-        self.cell_height = (self.char_total_vert as usize) + 1;
+        let cells_x = self.horiz_total.wrapping_add(1) as usize;
+        let cells_y = self.vert_total.wrapping_add(1) as usize;
+        self.cell_width = ((self.char_total_disp_horiz >> 4) as usize).wrapping_add(1) & 0x0F;
+        self.cell_height = (self.char_total_vert.wrapping_add(1) as usize) & 0x1F;
         self.cell_visible_width = (self.char_total_disp_horiz & 0x0F) as usize;
         self.cell_visible_height = self.char_disp_vert as usize;
         self.signal_width = cells_x * self.cell_width;
@@ -247,23 +282,47 @@ impl Vdc {
         self.visible_width = (self.horiz_displayed as usize) * self.cell_width;
         self.visible_height = (self.vert_displayed as usize) * self.cell_height;
 
-        self.hsync_width = (((self.sync_widths & 0x0F) as usize) - 1) * self.cell_width;
+        self.hsync_width =
+            (((self.sync_widths & 0x0F) as usize).wrapping_sub(1) & 0x0F) * self.cell_width;
         self.vsync_height = (self.sync_widths >> 4) as usize;
 
-        let vert_sync_pos = (self.vert_sync as usize - 1) * self.cell_height;
-        self.top_border_height = self.signal_height - vert_sync_pos - self.vsync_height;
-        self.bottom_border_height =
-            self.signal_height - self.top_border_height - self.visible_height - self.vsync_height;
+        self.hsync_start = self.signal_width.wrapping_sub(self.hsync_width) & 0x3FF;
 
-        let horiz_sync_pos = self.horiz_sync as usize * self.cell_width;
-        self.left_border_width = self.signal_width - horiz_sync_pos - self.hsync_width;
-        self.right_border_width =
-            self.signal_width - self.left_border_width - self.visible_width - self.hsync_width;
+        let vert_sync_pos = ((self.vert_sync.wrapping_sub(1) as usize) & 0xFF) * self.cell_height;
+        self.top_border_height = self
+            .signal_height
+            .wrapping_sub(vert_sync_pos)
+            .wrapping_sub(self.vsync_height)
+            & 0xFF;
+        self.bottom_border_height = self
+            .signal_height
+            .wrapping_sub(self.top_border_height)
+            .wrapping_sub(self.visible_height)
+            .wrapping_sub(self.vsync_height)
+            & 0xFF;
+
+        let horiz_sync_pos = (self.horiz_sync as usize) * self.cell_width;
+        self.left_border_width = self
+            .signal_width
+            .wrapping_sub(horiz_sync_pos)
+            .wrapping_sub(self.hsync_width)
+            & 0xFF;
+        self.right_border_width = self
+            .signal_width
+            .wrapping_sub(self.left_border_width)
+            .wrapping_sub(self.visible_width)
+            .wrapping_sub(self.hsync_width)
+            & 0xFF;
+
+        self.cursor_start_line = (self.cursor_mode_start_scan & 0x0F) as usize;
+        self.cursor_end_line = (self.cursor_end_scan_line.wrapping_sub(1) as usize) & 0x1F;
 
         self.framebuffer_full = false;
+
+        // limit size to 1024x1024
         self.framebuffer.resize(
-            self.signal_width - self.hsync_width,
-            self.signal_height - self.vsync_height,
+            self.signal_width.wrapping_sub(self.hsync_width) & 0x3FF,
+            self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF,
         );
     }
 }
@@ -301,7 +360,7 @@ impl Device for Vdc {
         }
 
         // in hblank
-        if self.raster_x == (self.signal_width - self.hsync_width) {
+        if self.raster_x == self.hsync_start {
             if self.raster_y < self.top_border_height {
                 // top border
                 for x in 0..self.framebuffer.width {
@@ -336,12 +395,15 @@ impl Device for Vdc {
 
                     // now, start drawing...
                     let mut x = self.left_border_width;
-                    for (cell_x, ch) in self.vram[row_start_addr..(row_start_addr + cell_stride)]
-                        .iter()
+                    for (cell_x, addr) in (row_start_addr..(row_start_addr + cell_stride))
+                        .into_iter()
                         .enumerate()
                     {
+                        let cell_index = self.vram[addr & VRAM_ADDR_MAX];
+
                         // get the attrs for this cell
-                        let attr = self.vram[(self.attr_start as usize) + (*ch as usize)];
+                        let attr_index = (self.attr_start as usize) + (cell_index as usize);
+                        let attr = self.vram[attr_index & VRAM_ADDR_MAX];
                         let mut fg_color = color_lookup(attr);
                         let mut bg_color = color_lookup(self.fg_bg_color);
 
@@ -360,9 +422,8 @@ impl Device for Vdc {
                         let is_cursor =
                             (cell_x + (cell_y * cell_stride)) == (self.cursor_pos as usize);
                         if is_cursor {
-                            let cursor_start_line = (self.cursor_mode_start_scan & 0x0F) as usize;
-                            let cursor_end_line = (self.cursor_end_scan_line as usize) - 1;
-                            if cell_yoffset >= cursor_start_line && cell_yoffset <= cursor_end_line
+                            if cell_yoffset >= self.cursor_start_line
+                                && cell_yoffset <= self.cursor_end_line
                             {
                                 mem::swap(&mut fg_color, &mut bg_color);
                             }
@@ -373,10 +434,11 @@ impl Device for Vdc {
                         // And for an 8x8 character, the bottom half is effectively wasted space :-(
                         const PIX_STRIDE: usize = 16;
 
-                        // get the 8 pixels for
-                        let mut pix = self.vram[(self.char_start as usize)
-                            + ((*ch as usize) * PIX_STRIDE)
-                            + cell_yoffset];
+                        // get the 8 pixels for the char
+                        let pix_index = (self.char_start as usize)
+                            + ((cell_index as usize) * PIX_STRIDE)
+                            + cell_yoffset;
+                        let mut pix = self.vram[pix_index & VRAM_ADDR_MAX];
 
                         // for each visible bit, blit the pixel
                         for _ in 0..self.cell_visible_width {
