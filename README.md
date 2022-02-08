@@ -25,10 +25,13 @@ machine.
 - [ ] z80 SIO: *not started*
 - [ ] z80 CTC: *not started*
 - [X] 8-bit ATA drive(s)*
-- [ ] MOS 8563 VDC: *WIP*
+- [ ] MOS 8563 VDC**: *nearly complete, very usable*
 
 \**2 disk images can be mounted on the ATA bus.
 The interface is Compact Flash actually, but it is 80s tech.*
+
+\*\* The 80-column display chip from the venerable Commodore 128!
+16KB video RAM installed ;-)
 
 ### Software
 

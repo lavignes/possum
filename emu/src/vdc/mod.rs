@@ -1,6 +1,44 @@
 //! MOS 8563 VDC Emulation
 
+use std::mem;
+
 use crate::{Device, DeviceBus};
+
+bitflags::bitflags! {
+    struct Attribute: u8 {
+        const INTENSITY = 0x01;
+        const BLUE = 0x02;
+        const GREEN = 0x04;
+        const RED = 0x08;
+
+        const BLINK = 0x10;
+        const UNDERLINE = 0x20;
+        const REVERSE = 0x40;
+        const ALTERNATE_CHARACTER = 0x80;
+    }
+}
+
+fn color_lookup(bits: u8) -> u32 {
+    match bits & 0x0F {
+        0b0000 => 0xFF000000,
+        0b0001 => 0xFF555555,
+        0b0010 => 0xFF0000AA,
+        0b0011 => 0xFF5555FF,
+        0b0100 => 0xFF00AA00,
+        0b0101 => 0xFF55FF55,
+        0b0110 => 0xFF00AAAA,
+        0b0111 => 0xFF55FFFF,
+        0b1000 => 0xFFAA0000,
+        0b1001 => 0xFFFF5555,
+        0b1010 => 0xFFAA00AA,
+        0b1011 => 0xFFFF55FF,
+        0b1100 => 0xFFAA5500,
+        0b1101 => 0xFFFFFF55,
+        0b1110 => 0xFFAAAAAA,
+        0b1111 => 0xFFFFFFFF,
+        _ => unreachable!(),
+    }
+}
 
 bitflags::bitflags! {
     struct Status: u8 {
@@ -147,7 +185,7 @@ impl Vdc {
             interlace_mode: 0,
             char_total_vert: 7,
             cursor_mode_start_scan: 0,
-            cursor_end_scan_line: 0,
+            cursor_end_scan_line: 7,
             disp_start: 0x0000,
             cursor_pos: 0,
             update_addr: 0,
@@ -222,50 +260,29 @@ impl Device for Vdc {
         if self.parameters_dirty {
             self.recompute_parameters();
 
-            self.vram[(self.char_start as usize) + 8] = 0b11111110;
-            self.vram[(self.char_start as usize) + 9] = 0b10000000;
-            self.vram[(self.char_start as usize) + 10] = 0b10000000;
-            self.vram[(self.char_start as usize) + 11] = 0b11111110;
-            self.vram[(self.char_start as usize) + 12] = 0b10000000;
-            self.vram[(self.char_start as usize) + 13] = 0b10000000;
-            self.vram[(self.char_start as usize) + 14] = 0b11111110;
-            self.vram[(self.char_start as usize) + 15] = 0b00000000;
-
-            self.vram[(self.char_start as usize) + 16] = 0b10000000;
+            self.vram[(self.char_start as usize) + 16] = 0b11111110;
             self.vram[(self.char_start as usize) + 17] = 0b10000000;
             self.vram[(self.char_start as usize) + 18] = 0b10000000;
-            self.vram[(self.char_start as usize) + 19] = 0b10000000;
+            self.vram[(self.char_start as usize) + 19] = 0b11111110;
             self.vram[(self.char_start as usize) + 20] = 0b10000000;
             self.vram[(self.char_start as usize) + 21] = 0b10000000;
             self.vram[(self.char_start as usize) + 22] = 0b11111110;
             self.vram[(self.char_start as usize) + 23] = 0b00000000;
 
-            self.vram[(self.char_start as usize) + 24] = 0b01111100;
-            self.vram[(self.char_start as usize) + 25] = 0b10000010;
-            self.vram[(self.char_start as usize) + 26] = 0b10000010;
-            self.vram[(self.char_start as usize) + 27] = 0b10000010;
-            self.vram[(self.char_start as usize) + 28] = 0b10000010;
-            self.vram[(self.char_start as usize) + 29] = 0b10000010;
-            self.vram[(self.char_start as usize) + 30] = 0b01111100;
+            self.vram[(self.char_start as usize) + 24] = 0b11111110;
+            self.vram[(self.char_start as usize) + 25] = 0b11000110;
+            self.vram[(self.char_start as usize) + 26] = 0b11000110;
+            self.vram[(self.char_start as usize) + 27] = 0b11000110;
+            self.vram[(self.char_start as usize) + 28] = 0b11000110;
+            self.vram[(self.char_start as usize) + 29] = 0b11000110;
+            self.vram[(self.char_start as usize) + 30] = 0b11111110;
             self.vram[(self.char_start as usize) + 31] = 0b00000000;
 
-            self.vram[(self.char_start as usize) + 32] = 0b10000010;
-            self.vram[(self.char_start as usize) + 33] = 0b10000010;
-            self.vram[(self.char_start as usize) + 34] = 0b10000010;
-            self.vram[(self.char_start as usize) + 35] = 0b11111110;
-            self.vram[(self.char_start as usize) + 36] = 0b10000010;
-            self.vram[(self.char_start as usize) + 37] = 0b10000010;
-            self.vram[(self.char_start as usize) + 38] = 0b10000010;
-            self.vram[(self.char_start as usize) + 39] = 0b00000000;
+            self.vram[(self.disp_start as usize) + 0] = 1;
+            self.vram[(self.disp_start as usize) + 1] = 2;
 
-            self.vram[(self.disp_start as usize) + 0] = 4;
-            self.vram[(self.disp_start as usize) + 1] = 1;
-            self.vram[(self.disp_start as usize) + 2] = 2;
-            self.vram[(self.disp_start as usize) + 3] = 2;
-            self.vram[(self.disp_start as usize) + 4] = 3;
-
-            self.vram[(self.disp_start as usize) + 79] = 3;
-            self.vram[(self.disp_start as usize) + 81] = 3;
+            self.vram[(self.attr_start as usize) + 1] = 0x43;
+            self.vram[(self.attr_start as usize) + 2] = 0x02;
         }
 
         // in hblank
@@ -277,39 +294,70 @@ impl Device for Vdc {
                 }
             } else if self.raster_y < (self.top_border_height + self.visible_height) {
                 // visible
+
+                // Draw left and right borders first, since we can spill out of them I think
                 for x in 0..self.left_border_width {
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
+                }
+                for x in (self.left_border_width + self.visible_width)
+                    ..(self.signal_width - self.hsync_width)
+                {
                     self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
                 }
 
                 // lets find what row we are in
                 let cell_y = (self.raster_y - self.top_border_height) / self.cell_height;
                 let cell_yoffset = (self.raster_y - self.top_border_height) % self.cell_height;
-                let cells_x = self.horiz_displayed as usize;
+                let cell_stride = self.horiz_displayed as usize;
 
                 // and where it starts in the display memory
-                let row_start_addr = (self.disp_start as usize) + (cell_y * cells_x);
+                let row_start_addr = (self.disp_start as usize) + (cell_y * cell_stride);
 
                 // now, start drawing...
                 let mut x = self.left_border_width;
-                for c in &self.vram[row_start_addr..(row_start_addr + cells_x)] {
-                    // get the 8 pixels for this cell
-                    let mut pix =
-                        self.vram[(self.char_start as usize) + ((*c as usize) * 8) + cell_yoffset];
+                for (cell_x, ch) in self.vram[row_start_addr..(row_start_addr + cell_stride)]
+                    .iter()
+                    .enumerate()
+                {
+                    // get the attrs for this cell
+                    let attr = self.vram[(self.attr_start as usize) + (*ch as usize)];
+                    let mut fg_color = color_lookup(attr);
+                    let mut bg_color = color_lookup(self.fg_bg_color);
+
+                    if (attr & Attribute::REVERSE.bits()) != 0 {
+                        mem::swap(&mut fg_color, &mut bg_color);
+                    }
+
+                    // Reverse the video if this is the cursor
+                    let is_cursor = (cell_x + (cell_y * cell_stride)) == (self.cursor_pos as usize);
+                    if is_cursor {
+                        let cursor_start_line = (self.cursor_mode_start_scan & 0x0F) as usize;
+                        let cursor_end_line = (self.cursor_end_scan_line as usize) - 1;
+                        if cell_yoffset >= cursor_start_line && cell_yoffset <= cursor_end_line {
+                            mem::swap(&mut fg_color, &mut bg_color);
+                        }
+                    }
+
+                    // note: there are 16 rows of 8 bytes for each char
+                    // regardless of the character width, only 8 bytes can be used.
+                    // And for an 8x8 character, the bottom half is effectively wasted space :-(
+                    const PIX_STRIDE: usize = 16;
+
+                    // get the 8 pixels for
+                    let mut pix = self.vram
+                        [(self.char_start as usize) + ((*ch as usize) * PIX_STRIDE) + cell_yoffset];
+
                     // for each bit, blit the pixel
                     for _ in 0..self.cell_width {
-                        if (pix & 0x80) != 0 {
-                            self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
-                                0xFFFFFFFF;
-                        }
+                        self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
+                            if (pix & 0x80) != 0 {
+                                fg_color
+                            } else {
+                                bg_color
+                            };
                         x += 1;
                         pix <<= 1;
                     }
-                }
-
-                for x in (self.left_border_width + self.visible_width)
-                    ..(self.signal_width - self.hsync_width)
-                {
-                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
                 }
             } else if self.raster_y < (self.signal_height - self.vsync_height) {
                 // bottom border
