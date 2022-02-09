@@ -183,22 +183,22 @@ pub struct Vdc {
     char_total_vert: u8,
     cursor_mode_start_scan: u8,
     cursor_end_scan_line: u8,
-    disp_start: u16,
+    disp_start_addr: u16,
     cursor_pos: u16,
     update_addr: u16,
-    attr_start: u16,
+    attr_addr: u16,
     char_total_disp_horiz: u8,
     char_disp_vert: u8,
     vert_scroll_ctrl: u8,
     horiz_scroll_ctrl: u8,
     fg_bg_color: u8,
     addr_inc: u8,
-    char_start: u16,
+    char_base_addr: u16,
     underline_ctrl: u8,
     word_count: u8,
-    block_start: u16,
-    disp_enable_end: u8,
+    block_start_addr: u16,
     disp_enable_begin: u8,
+    disp_enable_end: u8,
 }
 
 impl Vdc {
@@ -260,38 +260,69 @@ impl Vdc {
             // underline_ctrl: 0,
             // word_count: 0,
             // block_start: 0,
+
+            // Commented names are the short-hand from the C=128 docs:
+            // HT[0:7]
             horiz_total: 0,
+            // HD[0:7]
             horiz_displayed: 0,
+            // HP[0:7]
             horiz_sync: 0,
+            // HW[0:4] VW[5:7]
             sync_widths: 0,
+            // VT[0:7]
             vert_total: 0,
+            // VA[0:4]
             vert_adjust: 0,
+            // VD[0:7]
             vert_displayed: 0,
+            // VP[0:7]
             vert_sync: 0,
+            // IM[0:1]
             interlace_mode: 0,
+            // CTV[0:4]
             char_total_vert: 0,
+            // CS[0:4] CM[5:6]
             cursor_mode_start_scan: 0,
+            // CE[0:4]
             cursor_end_scan_line: 0,
-            disp_start: 0,
+            // DS[0:7]
+            disp_start_addr: 0,
+            // CP[0:15]
             cursor_pos: 0,
+            // UA[0:15]
             update_addr: 0,
-            attr_start: 0,
+            // AA[0:15]
+            attr_addr: 0,
+            // CDH[0:3] CTH[4:7]
             char_total_disp_horiz: 0,
+            // CDV[0:4]
             char_disp_vert: 0,
+            // VSS[0:4] CBRATE[5] RVS[6] COPY[7]
             vert_scroll_ctrl: 0,
+            // HSS[0:3] DBL[4] SEMI[5] ATR[6] TEXT[7]
             horiz_scroll_ctrl: 0,
+            // BG[0:4] FG[5:7]
             fg_bg_color: 0,
+            // AI[0:7]
             addr_inc: 0,
-            char_start: 0,
+            // RAM[4] CB[5:7]
+            char_base_addr: 0,
+            // UL[0:4]
             underline_ctrl: 0,
+            // WC[0:7]
             word_count: 0,
-            block_start: 0,
+            // BS[0:15]
+            block_start_addr: 0,
 
             // The screen must turn off for some portion of the scan-line in RGBi.
             // These control when that period starts and ends (measured in char columns)
             // TODO: implement?
-            disp_enable_end: 0,
+
+            // DEB[0:15]
             disp_enable_begin: 0,
+            // DEE[0:15]
+            disp_enable_end: 0,
         }
     }
 
@@ -407,7 +438,7 @@ impl Device for Vdc {
                 // and make sure we aren't clipping the bottom of the cell
                 if cell_yoffset <= self.cell_visible_height {
                     // find where it starts in the display memory
-                    let row_start_addr = (self.disp_start as usize) + (cell_y * cell_stride);
+                    let row_start_addr = (self.disp_start_addr as usize) + (cell_y * cell_stride);
 
                     // now, start drawing...
                     let mut x = self.left_border_width;
@@ -421,7 +452,7 @@ impl Device for Vdc {
                         let (mut fg_color, mut bg_color, char_set_offset) =
                             if (self.horiz_scroll_ctrl & HScrollControl::ATR.bits()) != 0 {
                                 // get the attrs for this cell
-                                let attr_index = (self.attr_start as usize) + (cell_index as usize);
+                                let attr_index = (self.attr_addr as usize) + (cell_index as usize);
                                 let attr = self.vram[attr_index & VRAM_ADDR_MAX];
                                 let mut fg_color = color_lookup(attr);
                                 let mut bg_color = color_lookup(self.fg_bg_color);
@@ -479,7 +510,7 @@ impl Device for Vdc {
                         const PIX_STRIDE: usize = 16;
 
                         // get the 8 pixels for the char
-                        let pix_index = (self.char_start as usize)
+                        let pix_index = (self.char_base_addr as usize)
                             + ((char_set_offset + (cell_index as usize)) * PIX_STRIDE)
                             + cell_yoffset;
                         let mut pix = self.vram[pix_index & VRAM_ADDR_MAX];
@@ -560,8 +591,8 @@ impl Device for Vdc {
 
                     0x0B => self.cursor_end_scan_line | 0xE0,
 
-                    0x0C => (self.disp_start >> 8) as u8,
-                    0x0D => (self.disp_start >> 0) as u8,
+                    0x0C => (self.disp_start_addr >> 8) as u8,
+                    0x0D => (self.disp_start_addr >> 0) as u8,
 
                     0x0E => (self.cursor_pos >> 8) as u8,
                     0x0F => (self.cursor_pos >> 0) as u8,
@@ -569,8 +600,8 @@ impl Device for Vdc {
                     0x12 => (self.update_addr >> 8) as u8,
                     0x13 => (self.update_addr >> 0) as u8,
 
-                    0x14 => (self.attr_start >> 8) as u8,
-                    0x15 => (self.attr_start >> 0) as u8,
+                    0x14 => (self.attr_addr >> 8) as u8,
+                    0x15 => (self.attr_addr >> 0) as u8,
 
                     0x16 => self.char_total_disp_horiz,
 
@@ -584,7 +615,7 @@ impl Device for Vdc {
 
                     0x1B => self.addr_inc,
 
-                    0x1C => (self.char_start >> 8) as u8,
+                    0x1C => (self.char_base_addr >> 8) as u8,
 
                     0x1D => self.underline_ctrl | 0xEF,
 
@@ -597,11 +628,11 @@ impl Device for Vdc {
                         data
                     }
 
-                    0x20 => (self.block_start >> 8) as u8,
-                    0x21 => (self.block_start >> 0) as u8,
+                    0x20 => (self.block_start_addr >> 8) as u8,
+                    0x21 => (self.block_start_addr >> 0) as u8,
 
-                    0x22 => self.disp_enable_end,
-                    0x23 => self.disp_enable_begin,
+                    0x22 => self.disp_enable_begin,
+                    0x23 => self.disp_enable_end,
 
                     // unused bits seem to read high?
                     _ => 0xFF,
@@ -645,8 +676,12 @@ impl Device for Vdc {
 
                 0x0B => self.cursor_end_scan_line = data & 0x1F,
 
-                0x0C => self.disp_start = (self.disp_start & 0x00FF) | ((data as u16) << 8),
-                0x0D => self.disp_start = (self.disp_start & 0xFF00) | ((data as u16) << 0),
+                0x0C => {
+                    self.disp_start_addr = (self.disp_start_addr & 0x00FF) | ((data as u16) << 8)
+                }
+                0x0D => {
+                    self.disp_start_addr = (self.disp_start_addr & 0xFF00) | ((data as u16) << 0)
+                }
 
                 0x0E => self.cursor_pos = (self.cursor_pos & 0x00FF) | ((data as u16) << 8),
                 0x0F => self.cursor_pos = (self.cursor_pos & 0xFF00) | ((data as u16) << 0),
@@ -654,8 +689,8 @@ impl Device for Vdc {
                 0x12 => self.update_addr = (self.update_addr & 0x00FF) | ((data as u16) << 8),
                 0x13 => self.update_addr = (self.update_addr & 0xFF00) | ((data as u16) << 0),
 
-                0x14 => self.attr_start = (self.attr_start & 0x00FF) | ((data as u16) << 8),
-                0x15 => self.attr_start = (self.attr_start & 0xFF00) | ((data as u16) << 0),
+                0x14 => self.attr_addr = (self.attr_addr & 0x00FF) | ((data as u16) << 8),
+                0x15 => self.attr_addr = (self.attr_addr & 0xFF00) | ((data as u16) << 0),
 
                 0x16 => self.char_total_disp_horiz = data,
 
@@ -669,7 +704,7 @@ impl Device for Vdc {
 
                 0x1B => self.addr_inc = data,
 
-                0x1C => self.char_start = ((data & 0xE0) as u16) << 8,
+                0x1C => self.char_base_addr = ((data & 0xE0) as u16) << 8,
 
                 0x1D => self.underline_ctrl = data & 0x1F,
 
@@ -681,8 +716,12 @@ impl Device for Vdc {
                     self.update_addr = (self.update_addr + 1) & (VRAM_ADDR_MAX as u16);
                 }
 
-                0x20 => self.block_start = (self.block_start & 0x00FF) | ((data as u16) << 8),
-                0x21 => self.block_start = (self.block_start & 0xFF00) | ((data as u16) << 0),
+                0x20 => {
+                    self.block_start_addr = (self.block_start_addr & 0x00FF) | ((data as u16) << 8)
+                }
+                0x21 => {
+                    self.block_start_addr = (self.block_start_addr & 0xFF00) | ((data as u16) << 0)
+                }
 
                 0x22 => self.disp_enable_end = data,
                 0x23 => self.disp_enable_begin = data,
