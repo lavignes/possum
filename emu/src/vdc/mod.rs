@@ -230,36 +230,8 @@ impl Vdc {
             raster_x: 0,
             raster_y: 0,
 
-            status: 0,
+            status: Status::STATUS.bits(), // assume ready always
             register_select: 0,
-
-            // TODO: remove these hard-codes (stolen from C= 128 docs)
-            // horiz_total: 126,
-            // horiz_displayed: 80,
-            // horiz_sync: 102,
-            // sync_widths: 0b0100_1001,
-            // vert_total: 32,
-            // vert_adjust: 0,
-            // vert_displayed: 25,
-            // vert_sync: 29,
-            // interlace_mode: 0,
-            // char_total_vert: 7,
-            // cursor_mode_start_scan: 0,
-            // cursor_end_scan_line: 7,
-            // disp_start: 0x0000,
-            // cursor_pos: 0,
-            // update_addr: 0,
-            // attr_start: 0x0800,
-            // char_total_disp_horiz: 0b0111_1000,
-            // char_disp_vert: 0b0000_1000,
-            // vert_scroll_ctrl: 0,
-            // horiz_scroll_ctrl: 0,
-            // fg_bg_color: 0,
-            // addr_inc: 0,
-            // char_start: 0x2000,
-            // underline_ctrl: 0,
-            // word_count: 0,
-            // block_start: 0,
 
             // Commented names are the short-hand from the C=128 docs:
             // HT[0:7]

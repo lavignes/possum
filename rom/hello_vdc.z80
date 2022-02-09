@@ -1,0 +1,236 @@
+; vim: ft=z80 ts=8 sw=8 noet
+
+KB_PORT: equ $f0
+
+	org $0000
+start:
+	call vdc_init
+	call hello
+exit:
+	in a, (KB_PORT)
+	cp 'Q'
+	jr nz, exit
+	halt
+
+VDC_PORT_STAT: equ $90
+VDC_PORT_SEL: equ $90
+VDC_PORT_DATA: equ $91
+
+VDC_STAT_VBLANK: equ $20
+VDC_STAT_STATUS: equ $80
+
+vdc_init:
+	ld a, $00
+	call vdc_sel
+	ld a, 126
+	out (VDC_PORT_DATA), a
+
+	ld a, $01
+	call vdc_sel
+	ld a, 80
+	out (VDC_PORT_DATA), a
+
+	ld a, $02
+	call vdc_sel
+	ld a, 100
+	out (VDC_PORT_DATA), a
+
+	ld a, $03
+	call vdc_sel
+	ld a, %01001001
+	out (VDC_PORT_DATA), a
+
+	ld a, $04
+	call vdc_sel
+	ld a, 30
+	out (VDC_PORT_DATA), a
+
+	ld a, $06
+	call vdc_sel
+	ld a, 25
+	out (VDC_PORT_DATA), a
+
+	ld a, $07
+	call vdc_sel
+	ld a, 29
+	out (VDC_PORT_DATA), a
+
+	ld a, $09
+	call vdc_sel
+	ld a, 7
+	out (VDC_PORT_DATA), a
+
+	ld a, $0b
+	call vdc_sel
+	ld a, 7
+	out (VDC_PORT_DATA), a
+
+	ld a, $14
+	call vdc_sel
+	ld a, $80
+	out (VDC_PORT_DATA), a
+
+	ld a, $16
+	call vdc_sel
+	ld a, %01111000
+	out (VDC_PORT_DATA), a
+
+	ld a, $17
+	call vdc_sel
+	ld a, %00001000
+	out (VDC_PORT_DATA), a
+
+	ld a, $1a
+	call vdc_sel
+	ld a, %11110000
+	out (VDC_PORT_DATA), a
+
+	ld a, $1c
+	call vdc_sel
+	ld a, $20
+	out (VDC_PORT_DATA), a
+
+	ret
+
+vdc_sel:
+	out (VDC_PORT_SEL), a
+	ld b, VDC_STAT_STATUS
+.reg_wt:
+	in a, (VDC_PORT_STAT)
+	and b
+	jr z, .reg_wt
+	ret
+
+hello:
+	; set update addr to $2010
+	ld a, 0x12
+	call vdc_sel
+	ld a, $20
+	out (VDC_PORT_DATA), a	
+	ld a, 0x13
+	call vdc_sel
+	ld a, $10
+	out (VDC_PORT_DATA), a
+	
+	; data register
+	ld a, 0x1f
+	call vdc_sel
+	
+	; copy charset
+	ld hl, CHARSET 	
+	ld bc, CHARSET_END - CHARSET
+.nrow:
+	ld a, (hl)
+	out (VDC_PORT_DATA), a
+	inc hl
+	dec bc
+	ld a, b
+	or c
+	jr nz, .nrow
+
+	; select display (cell) $0000
+	ld a, 0x12
+	call vdc_sel
+	ld a, $00
+	out (VDC_PORT_DATA), a
+	ld a, 0x13
+	call vdc_sel
+	ld a, $00
+	out (VDC_PORT_DATA), a
+
+	; data register
+	ld a, 0x1f
+	call vdc_sel
+
+	; write 1 2 3 3 4 (hello)
+	ld a, 1
+	out (VDC_PORT_DATA), a
+	ld a, 2
+	out (VDC_PORT_DATA), a
+	ld a, 3
+	out (VDC_PORT_DATA), a
+	out (VDC_PORT_DATA), a
+	ld a, 4 
+	out (VDC_PORT_DATA), a
+
+	; move cursor to 5
+	ld a, $0f
+	call vdc_sel
+	ld a, 5
+	out (VDC_PORT_DATA), a
+
+	ret
+
+CHARSET:
+	db %10000010
+	db %10000010
+	db %10000010
+	db %11111110
+	db %10000010
+	db %10000010
+	db %10000010
+	db %00000000
+
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+
+	db %00000000
+	db %00000000
+	db %01111100
+	db %10000010
+	db %11111110
+	db %10000000
+	db %01111100
+	db %00000000
+	
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	
+	db %00110000
+	db %00010000
+	db %00010000
+	db %00010000
+	db %00010000
+	db %00010000
+	db %00011000
+	db %00000000
+
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+
+	db %00000000
+	db %00000000
+	db %01111100
+	db %10000010
+	db %10000010
+	db %10000010
+	db %01111100
+	db %00000000
+
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
+CHARSET_END:
