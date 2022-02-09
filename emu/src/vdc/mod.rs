@@ -21,6 +21,38 @@ bitflags::bitflags! {
     }
 }
 
+bitflags::bitflags! {
+    // control bits in the horizontal scroll register
+    struct HScrollControl: u8 {
+        // double-wide all pixels
+        const DBL = 0x10;
+
+        // semigraphic mode
+        const SEMI = 0x20;
+
+        // enable attributes
+        const ATR = 0x40;
+
+        // text mode (1 sets to graphics mode)
+        const TEXT = 0x80;
+    }
+}
+
+bitflags::bitflags! {
+    // control bits in the vertical scroll register
+    struct VScrollControl: u8 {
+        // double blink rate
+        const CBRATE = 0x20;
+
+        // reverse graphics
+        const RVS = 0x40;
+
+        // sets whether the next block operation is a
+        // copy or fill
+        const COPY = 0x80;
+    }
+}
+
 fn color_lookup(bits: u8) -> u32 {
     match bits & 0x0F {
         // black
@@ -380,31 +412,47 @@ impl Device for Vdc {
                     {
                         let cell_index = self.vram[addr & VRAM_ADDR_MAX];
 
-                        // TODO: check for attr enabled bit
+                        // If attributes are enabled, locate and apply them
+                        let (mut fg_color, mut bg_color, char_set_offset) =
+                            if (self.horiz_scroll_ctrl & HScrollControl::ATR.bits()) != 0 {
+                                // get the attrs for this cell
+                                let attr_index = (self.attr_start as usize) + (cell_index as usize);
+                                let attr = self.vram[attr_index & VRAM_ADDR_MAX];
+                                let mut fg_color = color_lookup(attr);
+                                let mut bg_color = color_lookup(self.fg_bg_color);
 
-                        // get the attrs for this cell
-                        let attr_index = (self.attr_start as usize) + (cell_index as usize);
-                        let attr = self.vram[attr_index & VRAM_ADDR_MAX];
-                        let mut fg_color = color_lookup(attr);
-                        let mut bg_color = color_lookup(self.fg_bg_color);
+                                // there are expected to be 2 sets of 256 characters when attributes
+                                // are enabled. The alternate set follows the first in memory.
+                                let char_set_offset =
+                                    if attr & Attribute::ALTERNATE_CHARACTER.bits() != 0 {
+                                        0
+                                    } else {
+                                        256
+                                    };
 
-                        // there are expected to be 2 sets of 256 characters when attributes
-                        // are enabled. The alternate set follows the first in memory.
-                        let char_set_offset = if attr & Attribute::ALTERNATE_CHARACTER.bits() != 0 {
-                            0
-                        } else {
-                            256
-                        };
+                                // reverse it
+                                if (attr & Attribute::REVERSE.bits()) != 0 {
+                                    mem::swap(&mut fg_color, &mut bg_color);
+                                }
 
-                        // reverse it
-                        if (attr & Attribute::REVERSE.bits()) != 0 {
-                            mem::swap(&mut fg_color, &mut bg_color);
-                        }
+                                // underline it
+                                if (attr & Attribute::UNDERLINE.bits() != 0)
+                                    && cell_yoffset == (self.underline_ctrl & 0x0F) as usize
+                                {
+                                    mem::swap(&mut fg_color, &mut bg_color);
+                                }
 
-                        // underline it
-                        if (attr & Attribute::UNDERLINE.bits() != 0)
-                            && cell_yoffset == (self.underline_ctrl & 0x0F) as usize
-                        {
+                                (fg_color, bg_color, char_set_offset)
+                            } else {
+                                (
+                                    color_lookup(self.fg_bg_color >> 4),
+                                    color_lookup(self.fg_bg_color),
+                                    0,
+                                )
+                            };
+
+                        // reverse everything if the control bit is set
+                        if (self.vert_scroll_ctrl & VScrollControl::RVS.bits()) != 0 {
                             mem::swap(&mut fg_color, &mut bg_color);
                         }
 
@@ -442,10 +490,12 @@ impl Device for Vdc {
                             x += 1;
                             pix <<= 1;
                         }
+
                         // continue right to account for the total width
                         for _ in 0..(self.cell_width - self.cell_visible_width) {
-                            // TODO: semigraphics
-                            self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = bg_color;
+                            // TODO: semigraphics mode
+                            self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
+                                0;
                             x += 1;
                         }
                     }
