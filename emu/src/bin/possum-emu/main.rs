@@ -108,7 +108,7 @@ fn main() -> io::Result<()> {
             let mhz = (cycles as f64) / 1_000_000.0;
             canvas
                 .window_mut()
-                .set_title(&format!("pussum-emu :: {mhz:.03} MHz :: {frames} fps"))
+                .set_title(&format!("possum-emu :: {mhz:.03} MHz :: {frames} fps"))
                 .map_err(io::Error::other)?;
             start = now;
             frames = 0;
