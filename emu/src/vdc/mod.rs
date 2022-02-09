@@ -388,6 +388,14 @@ impl Device for Vdc {
                         let mut fg_color = color_lookup(attr);
                         let mut bg_color = color_lookup(self.fg_bg_color);
 
+                        // there are expected to be 2 sets of 256 characters when attributes
+                        // are enabled. The alternate set follows the first in memory.
+                        let char_set_offset = if attr & Attribute::ALTERNATE_CHARACTER.bits() != 0 {
+                            0
+                        } else {
+                            256
+                        };
+
                         // reverse it
                         if (attr & Attribute::REVERSE.bits()) != 0 {
                             mem::swap(&mut fg_color, &mut bg_color);
@@ -419,7 +427,7 @@ impl Device for Vdc {
 
                         // get the 8 pixels for the char
                         let pix_index = (self.char_start as usize)
-                            + ((cell_index as usize) * PIX_STRIDE)
+                            + ((char_set_offset + (cell_index as usize)) * PIX_STRIDE)
                             + cell_yoffset;
                         let mut pix = self.vram[pix_index & VRAM_ADDR_MAX];
 
@@ -436,6 +444,8 @@ impl Device for Vdc {
                         }
                         // continue right to account for the total width
                         for _ in 0..(self.cell_width - self.cell_visible_width) {
+                            // TODO: semigraphics
+                            self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = bg_color;
                             x += 1;
                         }
                     }
@@ -527,8 +537,8 @@ impl Device for Vdc {
 
                     0x1F => {
                         // reads automatically increment the address to update :-)
-                        let data = self.vram[(self.update_addr & VRAM_ADDR_MAX) as usize];
-                        self.update_addr = (self.update_addr + 1) & VRAM_ADDR_MAX;
+                        let data = self.vram[(self.update_addr as usize) & VRAM_ADDR_MAX];
+                        self.update_addr = (self.update_addr + 1) & (VRAM_ADDR_MAX as u16);
                         data
                     }
 
@@ -612,8 +622,8 @@ impl Device for Vdc {
 
                 0x1F => {
                     // writes automatically increment the address to update :-)
-                    self.vram[(self.update_addr & VRAM_ADDR_MAX) as usize] = data;
-                    self.update_addr = (self.update_addr + 1) & VRAM_ADDR_MAX;
+                    self.vram[(self.update_addr as usize) & VRAM_ADDR_MAX] = data;
+                    self.update_addr = (self.update_addr + 1) & (VRAM_ADDR_MAX as u16);
                 }
 
                 0x20 => self.block_start = (self.block_start & 0x00FF) | ((data as u16) << 8),
