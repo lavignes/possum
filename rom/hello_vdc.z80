@@ -4,6 +4,8 @@ KB_PORT: equ $f0
 
 	org $0000
 start:
+	ld sp, $ffff
+
 	call vdc_init
 	call hello
 exit:
@@ -20,11 +22,13 @@ VDC_STAT_VBLANK: equ $20
 VDC_STAT_STATUS: equ $80
 
 vdc_init:
+	; set h-sync start at column 126
 	ld a, $00
 	call vdc_sel
 	ld a, 126
 	out (VDC_PORT_DATA), a
 
+	; 80 columns
 	ld a, $01
 	call vdc_sel
 	ld a, 80
@@ -80,6 +84,7 @@ vdc_init:
 	ld a, %00001000
 	out (VDC_PORT_DATA), a
 
+	; set FG and BG color
 	ld a, $1a
 	call vdc_sel
 	ld a, %11110000
