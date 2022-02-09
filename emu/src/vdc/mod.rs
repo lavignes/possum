@@ -115,10 +115,12 @@ pub struct Framebuffer {
 }
 
 impl Framebuffer {
-    fn resize(&mut self, width: usize, height: usize) {
+    fn resize(&mut self, width: usize, height: usize) -> bool {
+        let changed = (width != self.width) || (height != self.height);
         self.pixels.resize(width * height, 0);
         self.width = width;
         self.height = height;
+        changed
     }
 
     #[inline]
@@ -354,11 +356,14 @@ impl Vdc {
 
         self.framebuffer_ready = false;
 
-        // limit size to 1024x1024
-        self.framebuffer.resize(
+        let changed_size = self.framebuffer.resize(
             self.signal_width.wrapping_sub(self.hsync_width) & 0x3FF,
             self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF,
         );
+        // lets be a little paranoid ;-)
+        if changed_size {
+            self.framebuffer_ready = false;
+        }
     }
 }
 
