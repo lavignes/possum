@@ -69,41 +69,37 @@ fn main() -> io::Result<()> {
         .map_err(io::Error::other)?;
 
     let mut start = Instant::now();
-    // TODO: This is a busy-wait to prevent from sapping CPU time drawing unchanged frames.
-    //   Need to instead set a rough target to draw ~30 frames in a second and
-    //   then compute the skip on the fly.
-    let mut frame_idle = 200;
+    let mut last_frame = Instant::now();
     let mut frames = 0;
     let mut cycles = 0;
     while !system.halted() {
         cycles += system.step();
-        if system.framebuffer_ready() {
-            frame_idle -= 1;
-            if frame_idle == 0 {
-                frame_idle = 200;
-                let framebuffer = system.framebuffer();
-                let rect = Rect::new(
-                    0,
-                    0,
-                    framebuffer.width() as u32,
-                    framebuffer.height() as u32,
-                );
-                texture
-                    .update(
-                        rect,
-                        bytemuck::cast_slice(framebuffer.data()),
-                        framebuffer.width() * mem::size_of::<u32>(),
-                    )
-                    .map_err(io::Error::other)?;
-                canvas
-                    .copy(&texture, rect, None)
-                    .map_err(io::Error::other)?;
-                canvas.present();
-                frames += 1;
-            }
+        let now = Instant::now();
+
+        if system.framebuffer_ready() && now.duration_since(last_frame) > Duration::from_millis(32)
+        {
+            let framebuffer = system.framebuffer();
+            let rect = Rect::new(
+                0,
+                0,
+                framebuffer.width() as u32,
+                framebuffer.height() as u32,
+            );
+            texture
+                .update(
+                    rect,
+                    bytemuck::cast_slice(framebuffer.data()),
+                    framebuffer.width() * mem::size_of::<u32>(),
+                )
+                .map_err(io::Error::other)?;
+            canvas
+                .copy(&texture, rect, None)
+                .map_err(io::Error::other)?;
+            canvas.present();
+            last_frame = now;
+            frames += 1;
         }
 
-        let now = Instant::now();
         if now.duration_since(start) > Duration::from_secs(1) {
             let mhz = (cycles as f64) / 1_000_000.0;
             canvas

@@ -355,10 +355,8 @@ impl Vdc {
         self.framebuffer_ready = false;
 
         let changed_size = self.framebuffer.resize(
-            self.signal_width.wrapping_sub(self.hsync_width).min(0x3FF),
-            self.signal_height
-                .wrapping_sub(self.vsync_height)
-                .min(0x3FF),
+            self.signal_width.wrapping_sub(self.hsync_width) & 0x3FF,
+            self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF,
         );
         // lets be a little paranoid ;-)
         if changed_size {
@@ -522,6 +520,7 @@ impl Device for Vdc {
         if self.raster_x == self.signal_width {
             self.raster_x = 0;
             self.raster_y += 1;
+
             // check if we're ready to present the framebuffer to the outside world
             self.framebuffer_ready = self.raster_y == self.vsync_start;
             if self.raster_y == self.signal_height {
