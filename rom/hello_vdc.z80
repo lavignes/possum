@@ -36,7 +36,7 @@ vdc_init:
 
 	ld a, $02
 	call vdc_sel
-	ld a, 100
+	ld a, 102
 	out (VDC_PORT_DATA), a
 
 	ld a, $03
@@ -87,12 +87,22 @@ vdc_init:
 	; set FG and BG color
 	ld a, $1a
 	call vdc_sel
-	ld a, %11110000
+	ld a, %00001111
 	out (VDC_PORT_DATA), a
 
 	ld a, $1c
 	call vdc_sel
 	ld a, $20
+	out (VDC_PORT_DATA), a
+
+	ld a, $22
+	call vdc_sel
+	ld a, $7d
+	out (VDC_PORT_DATA), a
+
+	ld a, $23
+	call vdc_sel
+	ld a, $64
 	out (VDC_PORT_DATA), a
 
 	ret

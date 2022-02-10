@@ -286,11 +286,6 @@ impl Vdc {
             word_count: 0,
             // BS[0:15]
             block_start_addr: 0,
-
-            // The screen must turn off for some portion of the scan-line in RGBi.
-            // These control when that period starts and ends (measured in char columns)
-            // TODO: implement?
-
             // DEB[0:15]
             disp_enable_begin: 0,
             // DEE[0:15]
@@ -360,8 +355,10 @@ impl Vdc {
         self.framebuffer_ready = false;
 
         let changed_size = self.framebuffer.resize(
-            self.signal_width.wrapping_sub(self.hsync_width) & 0x3FF,
-            self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF,
+            self.signal_width.wrapping_sub(self.hsync_width).min(0x3FF),
+            self.signal_height
+                .wrapping_sub(self.vsync_height)
+                .min(0x3FF),
         );
         // lets be a little paranoid ;-)
         if changed_size {
@@ -380,22 +377,33 @@ impl Device for Vdc {
 
         // in hblank
         if self.raster_x == self.hsync_start {
+            let mut fg_color = color_lookup(self.fg_bg_color >> 4);
+            let mut bg_color = color_lookup(self.fg_bg_color);
+
+            // reverse everything if the control bit is set
+            if (self.vert_scroll_ctrl & VScrollControl::RVS.bits()) != 0 {
+                mem::swap(&mut fg_color, &mut bg_color);
+            }
+
             if self.raster_y < self.top_border_height {
                 // top border
                 for x in 0..self.framebuffer.width {
-                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
+                        bg_color;
                 }
             } else if self.raster_y < (self.top_border_height + self.visible_height) {
                 // visible
 
                 // Draw left and right borders first, since we can spill out of them I think
                 for x in 0..self.left_border_width {
-                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
+                        bg_color;
                 }
                 for x in (self.left_border_width + self.visible_width)
                     ..(self.signal_width - self.hsync_width)
                 {
-                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
+                        bg_color;
                 }
 
                 // Adjust the line to the vertical scroll
@@ -427,7 +435,6 @@ impl Device for Vdc {
                                 let attr_index = (self.attr_addr as usize) + (cell_index as usize);
                                 let attr = self.vram[attr_index & VRAM_ADDR_MAX];
                                 let mut fg_color = color_lookup(attr);
-                                let mut bg_color = color_lookup(self.fg_bg_color);
 
                                 // there are expected to be 2 sets of 256 characters when attributes
                                 // are enabled. The alternate set follows the first in memory.
@@ -452,17 +459,8 @@ impl Device for Vdc {
 
                                 (fg_color, bg_color, char_set_offset)
                             } else {
-                                (
-                                    color_lookup(self.fg_bg_color >> 4),
-                                    color_lookup(self.fg_bg_color),
-                                    0,
-                                )
+                                (fg_color, bg_color, 0)
                             };
-
-                        // reverse everything if the control bit is set
-                        if (self.vert_scroll_ctrl & VScrollControl::RVS.bits()) != 0 {
-                            mem::swap(&mut fg_color, &mut bg_color);
-                        }
 
                         // Reverse the video *AGAIN* if this is the cursor
                         let is_cursor =
@@ -503,7 +501,7 @@ impl Device for Vdc {
                         for _ in 0..(self.cell_width - self.cell_visible_width) {
                             // TODO: semigraphics mode
                             self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
-                                0;
+                                bg_color;
                             x += 1;
                         }
                     }
@@ -511,7 +509,8 @@ impl Device for Vdc {
             } else if self.raster_y < self.vsync_start {
                 // bottom border
                 for x in 0..self.framebuffer.width {
-                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] = 0;
+                    self.framebuffer.pixels[x + (self.raster_y * self.framebuffer.width)] =
+                        bg_color;
                 }
             } else {
                 // in vblank
@@ -621,7 +620,7 @@ impl Device for Vdc {
 
         match port & 0x01 {
             // select register
-            0 => self.register_select = data & 0x1F,
+            0 => self.register_select = data & 0x3F,
 
             1 => match self.register_select {
                 0x00 => self.horiz_total = data,
