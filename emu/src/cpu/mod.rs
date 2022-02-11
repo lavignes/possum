@@ -5,7 +5,7 @@ mod tests;
 
 use std::mem;
 
-use crate::bus::Bus;
+use crate::bus::{Bus, InterruptBus};
 
 #[derive(Copy, Clone, Debug)]
 enum WideRegister {
@@ -97,11 +97,10 @@ pub struct Cpu {
 
     interrupt_mode: InterruptMode,
     halted: bool,
-    interrupts_enabled: bool,
+    enable_interrupts_next_cycle: bool,
     iff1: bool,
     iff2: bool,
     irq: bool,
-    reti: bool,
 }
 
 #[inline]
@@ -220,7 +219,7 @@ impl Cpu {
     #[inline]
     fn immediate(&mut self, bus: &mut impl Bus) -> u8 {
         let opcode = bus.read(self.pc);
-        self.pc = self.pc.carrying_add(1, false).0;
+        self.pc = self.pc.wrapping_add(1);
         opcode
     }
 
@@ -266,13 +265,13 @@ impl Cpu {
     ) -> usize {
         let addr = self.wide_register(addr);
         bus.write(addr, self.register(reg));
-        self.wz = (self.register(Register::A) as u16) | (addr.carrying_add(1, false).0 & 0xFF);
+        self.wz = (self.register(Register::A) as u16) | (addr.wrapping_add(1) & 0xFF);
         7
     }
 
     #[inline]
     fn inc_wide(&mut self, reg: WideRegister) -> usize {
-        let data = self.wide_register(reg).carrying_add(1, false).0;
+        let data = self.wide_register(reg).wrapping_add(1);
         self.set_wide_register(reg, data);
         6
     }
@@ -280,7 +279,7 @@ impl Cpu {
     #[inline]
     fn inc_wz(&mut self, reg: Register) -> usize {
         let data = self.register(reg);
-        let result = data.carrying_add(1, false).0;
+        let result = data.wrapping_add(1);
         self.wz = result as u16;
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::PV, result == 0x80);
@@ -296,7 +295,7 @@ impl Cpu {
     #[inline]
     fn dec_wz(&mut self, reg: Register) -> usize {
         let data = self.register(reg);
-        let result = data.borrowing_sub(1, false).0;
+        let result = data.wrapping_sub(1);
         self.wz = result as u16;
         self.set_flag(Flag::N, true);
         self.set_flag(Flag::PV, result == 0x7F);
@@ -334,7 +333,7 @@ impl Cpu {
     fn add_wide_wz(&mut self, dst: WideRegister, src: WideRegister) -> usize {
         let lhs = self.wide_register(dst);
         let rhs = self.wide_register(src);
-        self.wz = lhs.carrying_add(1, false).0;
+        self.wz = lhs.wrapping_add(1);
         let (result, carry) = lhs.carrying_add(rhs, false);
         self.set_flag(Flag::C, carry);
         self.set_flag(Flag::N, false);
@@ -352,13 +351,13 @@ impl Cpu {
     fn read_indirect_wz(&mut self, reg: Register, addr: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(addr);
         self.set_register(reg, bus.read(addr));
-        self.wz = addr.carrying_add(1, false).0;
+        self.wz = addr.wrapping_add(1);
         7
     }
 
     #[inline]
     fn dec_wide(&mut self, reg: WideRegister) -> usize {
-        let data = self.wide_register(reg).borrowing_sub(1, false).0;
+        let data = self.wide_register(reg).wrapping_sub(1);
         self.set_wide_register(reg, data);
         6
     }
@@ -378,7 +377,7 @@ impl Cpu {
 
     #[inline]
     fn djnz_wz(&mut self, bus: &mut impl Bus) -> usize {
-        let b = self.register(Register::B).borrowing_sub(1, false).0;
+        let b = self.register(Register::B).wrapping_sub(1);
         self.set_register(Register::B, b);
         if b > 0 {
             let offset = bus.read(self.pc) as i8 as i16;
@@ -387,7 +386,7 @@ impl Cpu {
             self.pc = wz;
             13
         } else {
-            self.pc = self.pc.carrying_add(1, false).0;
+            self.pc = self.pc.wrapping_add(1);
             8
         }
     }
@@ -432,7 +431,7 @@ impl Cpu {
         if self.condition(condition) {
             self.jump_relative_wz(bus)
         } else {
-            self.pc = self.pc.carrying_add(1, false).0;
+            self.pc = self.pc.wrapping_add(1);
             7
         }
     }
@@ -442,7 +441,7 @@ impl Cpu {
         let addr = self.wide_immediate(bus);
         let parts = u16_parts(self.wide_register(reg));
         bus.write(addr, parts[0]);
-        let addr = addr.carrying_add(1, false).0;
+        let addr = addr.wrapping_add(1);
         bus.write(addr, parts[1]);
         self.wz = addr;
         16
@@ -454,17 +453,17 @@ impl Cpu {
         let mut result = data;
         if self.flag(Flag::N) {
             if ((data & 0x0F) > 0x09) || self.flag(Flag::H) {
-                result = result.borrowing_sub(0x06, false).0;
+                result = result.wrapping_sub(0x06);
             }
             if (data > 0x99) || self.flag(Flag::C) {
-                result = result.borrowing_sub(0x60, false).0;
+                result = result.wrapping_sub(0x60);
             }
         } else {
             if ((data & 0x0F) > 0x09) || self.flag(Flag::H) {
-                result = result.carrying_add(0x06, false).0;
+                result = result.wrapping_add(0x06);
             }
             if (data > 0x99) || self.flag(Flag::C) {
-                result = result.carrying_add(0x60, false).0;
+                result = result.wrapping_add(0x60);
             }
         }
         self.set_flag(Flag::C, self.flag(Flag::C) || (data > 0x99));
@@ -482,10 +481,10 @@ impl Cpu {
     fn read_wide_absolute_wz(&mut self, reg: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_immediate(bus);
         let low = bus.read(addr);
-        let addr = addr.carrying_add(1, false).0;
+        let addr = addr.wrapping_add(1);
         let high = bus.read(addr);
         self.set_wide_register(reg, (low as u16) | ((high as u16) << 8));
-        self.wz = addr.carrying_add(1, false).0;
+        self.wz = addr.wrapping_add(1);
         16
     }
 
@@ -504,7 +503,7 @@ impl Cpu {
     fn write_absolute_wz(&mut self, reg: Register, bus: &mut impl Bus) -> usize {
         let addr = self.wide_immediate(bus);
         bus.write(addr, self.register(reg));
-        self.wz = (self.register(Register::A) as u16) | (addr.carrying_add(1, false).0 & 0xFF);
+        self.wz = (self.register(Register::A) as u16) | (addr.wrapping_add(1) & 0xFF);
         13
     }
 
@@ -512,7 +511,7 @@ impl Cpu {
     fn inc_hl_indirect(&mut self, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(WideRegister::HL);
         let data = bus.read(addr);
-        let result = data.carrying_add(1, false).0;
+        let result = data.wrapping_add(1);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::PV, result == 0x80);
         self.set_flag(Flag::X, (result & (Flag::X as u8)) != 0);
@@ -528,7 +527,7 @@ impl Cpu {
     fn dec_hl_indirect(&mut self, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(WideRegister::HL);
         let data = bus.read(addr);
-        let result = data.borrowing_sub(1, false).0;
+        let result = data.wrapping_sub(1);
         self.set_flag(Flag::N, true);
         self.set_flag(Flag::PV, result == 0x7F);
         self.set_flag(Flag::X, (result & (Flag::X as u8)) != 0);
@@ -560,7 +559,7 @@ impl Cpu {
     fn read_absolute_wz(&mut self, reg: Register, bus: &mut impl Bus) -> usize {
         let addr = self.wide_immediate(bus);
         self.set_register(reg, bus.read(addr));
-        self.wz = addr.carrying_add(1, false).0;
+        self.wz = addr.wrapping_add(1);
         13
     }
 
@@ -596,7 +595,7 @@ impl Cpu {
     #[inline]
     fn halt(&mut self) -> usize {
         self.halted = true;
-        self.pc = self.pc.borrowing_sub(1, false).0;
+        self.pc = self.pc.wrapping_sub(1);
         4
     }
 
@@ -781,9 +780,9 @@ impl Cpu {
     #[inline]
     fn pop_base(&mut self, bus: &mut impl Bus) -> u16 {
         let low = bus.read(self.sp);
-        self.sp = self.sp.carrying_add(1, false).0;
+        self.sp = self.sp.wrapping_add(1);
         let high = bus.read(self.sp);
-        self.sp = self.sp.carrying_add(1, false).0;
+        self.sp = self.sp.wrapping_add(1);
         ((high as u16) << 8) | (low as u16)
     }
 
@@ -831,9 +830,9 @@ impl Cpu {
 
     #[inline]
     fn push_base(&mut self, data: u16, bus: &mut impl Bus) {
-        self.sp = self.sp.borrowing_sub(1, false).0;
+        self.sp = self.sp.wrapping_sub(1);
         bus.write(self.sp, (data >> 8) as u8);
-        self.sp = self.sp.borrowing_sub(1, false).0;
+        self.sp = self.sp.wrapping_sub(1);
         bus.write(self.sp, data as u8);
     }
 
@@ -937,7 +936,7 @@ impl Cpu {
     fn jump_indirect(&mut self, reg: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(reg);
         let low = bus.read(addr);
-        let high = bus.read(addr.carrying_add(1, false).0);
+        let high = bus.read(addr.wrapping_add(1));
         self.pc = ((high as u16) << 8) | (low as u16);
         4
     }
@@ -965,7 +964,7 @@ impl Cpu {
 
     #[inline]
     fn enable_interrupts(&mut self) -> usize {
-        self.interrupts_enabled = true;
+        self.enable_interrupts_next_cycle = true;
         4
     }
 
@@ -1282,10 +1281,10 @@ impl Cpu {
     fn inc_index_indirect_wz(&mut self, index: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
-        let result = data.carrying_add(1, false).0;
+        let result = data.wrapping_add(1);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::PV, result == 0x80);
         self.set_flag(Flag::X, (result & (Flag::X as u8)) != 0);
@@ -1301,10 +1300,10 @@ impl Cpu {
     fn dec_index_indirect_wz(&mut self, index: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
-        let result = data.borrowing_sub(1, false).0;
+        let result = data.wrapping_sub(1);
         self.set_flag(Flag::N, true);
         self.set_flag(Flag::PV, result == 0x7F);
         self.set_flag(Flag::X, (result & (Flag::X as u8)) != 0);
@@ -1324,7 +1323,7 @@ impl Cpu {
     ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = self.immediate(bus);
         bus.write(addr, data);
@@ -1340,7 +1339,7 @@ impl Cpu {
     ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         self.set_register(reg, data);
@@ -1356,7 +1355,7 @@ impl Cpu {
     ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         bus.write(addr, self.register(reg));
         15
@@ -1371,7 +1370,7 @@ impl Cpu {
     ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let rhs = bus.read(addr);
         self.add_carry_base(rhs, carry);
@@ -1387,7 +1386,7 @@ impl Cpu {
     ) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let rhs = bus.read(addr);
         self.sub_carry_base(rhs, carry);
@@ -1398,7 +1397,7 @@ impl Cpu {
     fn and_index_indirect_wz(&mut self, index: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let rhs = bus.read(addr);
         self.and_base(rhs);
@@ -1409,7 +1408,7 @@ impl Cpu {
     fn xor_index_indirect_wz(&mut self, index: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let rhs = bus.read(addr);
         self.xor_base(rhs);
@@ -1420,7 +1419,7 @@ impl Cpu {
     fn or_index_indirect_wz(&mut self, index: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let rhs = bus.read(addr);
         self.or_base(rhs);
@@ -1431,7 +1430,7 @@ impl Cpu {
     fn compare_index_indirect_wz(&mut self, index: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_register(index);
         let offset = self.immediate(bus) as i8 as i16;
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let rhs = bus.read(addr);
         self.compare_base(rhs);
@@ -1463,7 +1462,7 @@ impl Cpu {
     fn sub_carry_wide_wz(&mut self, dst: WideRegister, rhs: WideRegister) -> usize {
         let lhs = self.wide_register(dst);
         let rhs = self.wide_register(rhs);
-        self.wz = lhs.carrying_add(1, false).0;
+        self.wz = lhs.wrapping_add(1);
         let (result, carry) = lhs.borrowing_sub(rhs, self.flag(Flag::C));
         self.set_wide_register(dst, result);
         self.set_flag(Flag::C, carry);
@@ -1517,10 +1516,10 @@ impl Cpu {
     }
 
     #[inline]
-    fn reti_wz(&mut self, bus: &mut impl Bus) -> usize {
+    fn reti_wz(&mut self, bus: &mut impl InterruptBus) -> usize {
         let cycles = 1 + self.return_wz(bus);
         // signal to the bus that we're open for business
-        self.reti = true;
+        bus.ret_interrupt();
         cycles
     }
 
@@ -1528,7 +1527,7 @@ impl Cpu {
     fn add_carry_wide_wz(&mut self, dst: WideRegister, rhs: WideRegister) -> usize {
         let lhs = self.wide_register(dst);
         let rhs = self.wide_register(rhs);
-        self.wz = lhs.carrying_add(1, false).0;
+        self.wz = lhs.wrapping_add(1);
         let (result, carry) = lhs.carrying_add(rhs, self.flag(Flag::C));
         self.set_wide_register(dst, result);
         self.set_flag(Flag::C, carry);
@@ -1556,7 +1555,7 @@ impl Cpu {
         let result = (a & 0xF0) | (data & 0x0F);
         self.set_register(Register::A, result);
         bus.write(addr, (data >> 4) | (a << 4));
-        self.wz = addr.carrying_add(1, false).0;
+        self.wz = addr.wrapping_add(1);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::PV, (result.count_ones() & 1) == 0);
         self.set_flag(Flag::X, (result & (Flag::X as u8)) != 0);
@@ -1575,7 +1574,7 @@ impl Cpu {
         let result = (a & 0xF0) | (data >> 4);
         self.set_register(Register::A, result);
         bus.write(addr, (data << 4) | (a & 0x0F));
-        self.wz = addr.carrying_add(1, false).0;
+        self.wz = addr.wrapping_add(1);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::PV, (result.count_ones() & 1) == 0);
         self.set_flag(Flag::X, (result & (Flag::X as u8)) != 0);
@@ -1602,10 +1601,10 @@ impl Cpu {
     fn ldi(&mut self, bus: &mut impl Bus) -> usize {
         let data = bus.read(self.hl);
         bus.write(self.de, data);
-        self.hl = self.hl.carrying_add(1, false).0;
-        self.de = self.de.carrying_add(1, false).0;
-        self.bc = self.bc.borrowing_sub(1, false).0;
-        let result = data.carrying_add(self.register(Register::A), false).0;
+        self.hl = self.hl.wrapping_add(1);
+        self.de = self.de.wrapping_add(1);
+        self.bc = self.bc.wrapping_sub(1);
+        let result = data.wrapping_add(self.register(Register::A));
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::PV, self.bc != 0);
         self.set_flag(Flag::X, (result & 0x08) != 0);
@@ -1616,19 +1615,19 @@ impl Cpu {
 
     #[inline]
     fn cpi_wz(&mut self, bus: &mut impl Bus) -> usize {
-        self.wz = self.wz.carrying_add(1, false).0;
+        self.wz = self.wz.wrapping_add(1);
         let hl = self.hl;
-        self.hl = hl.carrying_add(1, false).0;
-        self.bc = self.bc.borrowing_sub(1, false).0;
+        self.hl = hl.wrapping_add(1);
+        self.bc = self.bc.wrapping_sub(1);
         let a = self.register(Register::A);
-        let mut result = a.borrowing_sub(bus.read(hl), false).0;
+        let mut result = a.wrapping_sub(bus.read(hl));
         self.set_flag(Flag::N, true);
         self.set_flag(Flag::PV, self.bc != 0);
         self.set_flag(Flag::H, (result & 0x0F) > (a & 0x0F));
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::S, result & (Flag::S as u8) != 0);
         if self.flag(Flag::H) {
-            result = result.borrowing_sub(1, false).0;
+            result = result.wrapping_sub(1);
         }
         self.set_flag(Flag::X, result & (Flag::X as u8) != 0);
         self.set_flag(Flag::Y, result & (Flag::Y as u8) != 0);
@@ -1649,10 +1648,10 @@ impl Cpu {
     fn ldd(&mut self, bus: &mut impl Bus) -> usize {
         let data = bus.read(self.hl);
         bus.write(self.de, data);
-        self.hl = self.hl.borrowing_sub(1, false).0;
-        self.de = self.de.borrowing_sub(1, false).0;
-        self.bc = self.bc.borrowing_sub(1, false).0;
-        let result = data.carrying_add(self.register(Register::A), false).0;
+        self.hl = self.hl.wrapping_sub(1);
+        self.de = self.de.wrapping_sub(1);
+        self.bc = self.bc.wrapping_sub(1);
+        let result = data.wrapping_add(self.register(Register::A));
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::PV, self.bc != 0);
         self.set_flag(Flag::X, (result & 0x08) != 0);
@@ -1663,19 +1662,19 @@ impl Cpu {
 
     #[inline]
     fn cpd_wz(&mut self, bus: &mut impl Bus) -> usize {
-        self.wz = self.wz.borrowing_sub(1, false).0;
+        self.wz = self.wz.wrapping_sub(1);
         let hl = self.hl;
-        self.hl = hl.borrowing_sub(1, false).0;
-        self.bc = self.bc.borrowing_sub(1, false).0;
+        self.hl = hl.wrapping_sub(1);
+        self.bc = self.bc.wrapping_sub(1);
         let a = self.register(Register::A);
-        let mut result = a.borrowing_sub(bus.read(hl), false).0;
+        let mut result = a.wrapping_sub(bus.read(hl));
         self.set_flag(Flag::N, true);
         self.set_flag(Flag::PV, self.bc != 0);
         self.set_flag(Flag::H, (result & 0x0F) > (a & 0x0F));
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::S, result & (Flag::S as u8) != 0);
         if self.flag(Flag::H) {
-            result = result.borrowing_sub(1, false).0;
+            result = result.wrapping_sub(1);
         }
         self.set_flag(Flag::X, result & (Flag::X as u8) != 0);
         self.set_flag(Flag::Y, result & (Flag::Y as u8) != 0);
@@ -1697,8 +1696,8 @@ impl Cpu {
         let cycles = self.ldi(bus);
         if self.flag(Flag::PV) {
             let pc = self.pc;
-            self.pc = pc.borrowing_sub(2, false).0;
-            self.wz = pc.carrying_add(1, false).0;
+            self.pc = pc.wrapping_sub(2);
+            self.wz = pc.wrapping_add(1);
             5 + cycles
         } else {
             cycles
@@ -1710,8 +1709,8 @@ impl Cpu {
         let cycles = self.cpi_wz(bus);
         if self.flag(Flag::PV) && !self.flag(Flag::Z) {
             let pc = self.pc;
-            self.pc = pc.borrowing_sub(2, false).0;
-            self.wz = pc.carrying_add(1, false).0;
+            self.pc = pc.wrapping_sub(2);
+            self.wz = pc.wrapping_add(1);
             5 + cycles
         } else {
             cycles
@@ -1733,8 +1732,8 @@ impl Cpu {
         let cycles = self.ldd(bus);
         if self.flag(Flag::PV) {
             let pc = self.pc;
-            self.pc = pc.borrowing_sub(2, false).0;
-            self.wz = pc.carrying_add(1, false).0;
+            self.pc = pc.wrapping_sub(2);
+            self.wz = pc.wrapping_add(1);
             5 + cycles
         } else {
             cycles
@@ -1746,8 +1745,8 @@ impl Cpu {
         let cycles = self.cpd_wz(bus);
         if self.flag(Flag::PV) && !self.flag(Flag::Z) {
             let pc = self.pc;
-            self.pc = pc.borrowing_sub(2, false).0;
-            self.wz = pc.carrying_add(1, false).0;
+            self.pc = pc.wrapping_sub(2);
+            self.wz = pc.wrapping_add(1);
             5 + cycles
         } else {
             cycles
@@ -1773,7 +1772,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         let result = self.rlc_base(data);
@@ -1793,7 +1792,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         let result = self.rrc_base(data);
@@ -1813,7 +1812,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         let result = self.rl_base(data);
@@ -1833,7 +1832,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         let result = self.rr_base(data);
@@ -1853,7 +1852,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         let result = self.sla_base(data);
@@ -1873,7 +1872,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         let result = self.sra_base(data);
@@ -1893,7 +1892,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         let result = self.sll_base(data);
@@ -1913,7 +1912,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let data = bus.read(addr);
         let result = self.srl_base(data);
@@ -1933,7 +1932,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let result = bus.read(addr) & mask;
         let w = (self.wz >> 8) as u8;
@@ -1957,7 +1956,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let result = bus.read(addr) & !mask;
         bus.write(addr, result);
@@ -1977,7 +1976,7 @@ impl Cpu {
         bus: &mut impl Bus,
     ) -> usize {
         let addr = self.wide_register(index);
-        let addr = addr.carrying_add(offset as u16, false).0;
+        let addr = addr.wrapping_add(offset as u16);
         self.wz = addr;
         let result = bus.read(addr) | mask;
         bus.write(addr, result);
@@ -1988,26 +1987,75 @@ impl Cpu {
     }
 
     #[inline]
-    pub fn returned_from_interrupt(&self) -> bool {
-        self.reti
-    }
-
-    #[inline]
     pub fn halted(&self) -> bool {
         self.halted
     }
 
-    pub fn step(&mut self, bus: &mut impl Bus) -> usize {
-        // We've finished returning from interrupts
-        self.reti = false;
-
-        // TODO: service interrupts here
-
-        let opcode = self.fetch(bus);
-        self.do_opcode(opcode, bus)
+    #[inline]
+    pub fn irq(&mut self) {
+        self.irq = true;
     }
 
-    fn do_opcode(&mut self, opcode: u8, bus: &mut impl Bus) -> usize {
+    pub fn step(&mut self, bus: &mut impl InterruptBus) -> usize {
+        // when enabling interrupts, we essentially need to flip the iff flags,
+        // but we hold off and only do so at the start of the *NEXT* instruction.
+        if self.enable_interrupts_next_cycle {
+            self.iff1 = true;
+            self.iff2 = true;
+            self.enable_interrupts_next_cycle = false;
+        }
+
+        let opcode = self.fetch(bus);
+        let mut cycles = self.do_opcode(opcode, bus);
+
+        // TODO: NMI
+        if self.irq {
+            cycles += self.do_irq(bus);
+            self.irq = false;
+        }
+        cycles
+    }
+
+    fn do_irq(&mut self, bus: &mut impl InterruptBus) -> usize {
+        // interrupts do take us out of halt state
+        if self.halted {
+            self.halted = false;
+        }
+
+        if self.iff1 {
+            self.iff1 = false;
+            self.iff2 = false;
+
+            match self.interrupt_mode {
+                InterruptMode::Zero => todo!("Interrupt mode zero is not yet supported"),
+
+                InterruptMode::One => {
+                    self.push_base(self.pc, bus);
+                    self.pc = 0x0038;
+                    return 13;
+                }
+
+                InterruptMode::Two => {
+                    self.push_base(self.pc, bus);
+
+                    let addr = bus.ack_interrupt() as u16;
+                    let addr = (((self.register(Register::I) as u16) << 8) | addr) & 0xFFFE;
+                    let low = bus.read(addr);
+                    let addr = addr.wrapping_add(1);
+                    let high = bus.read(addr);
+                    self.pc = (low as u16) | ((high as u16) << 8);
+
+                    self.wz = self.pc;
+                    return 21;
+                }
+            }
+        }
+
+        self.wz = self.pc;
+        2
+    }
+
+    fn do_opcode(&mut self, opcode: u8, bus: &mut impl InterruptBus) -> usize {
         #[rustfmt::skip]
         match opcode {
             0x00 => /* nop              */ self.nop(),
@@ -2562,7 +2610,7 @@ impl Cpu {
         })
     }
 
-    fn dd_prefix(&mut self, bus: &mut impl Bus) -> usize {
+    fn dd_prefix(&mut self, bus: &mut impl InterruptBus) -> usize {
         let opcode = self.fetch(bus);
         #[rustfmt::skip]
         (4 + match opcode {
@@ -2672,7 +2720,7 @@ impl Cpu {
         })
     }
 
-    fn ed_prefix(&mut self, bus: &mut impl Bus) -> usize {
+    fn ed_prefix(&mut self, bus: &mut impl InterruptBus) -> usize {
         let opcode = self.fetch(bus);
         #[rustfmt::skip]
         (4 + match opcode {
@@ -2765,7 +2813,7 @@ impl Cpu {
         })
     }
 
-    fn fd_prefix(&mut self, bus: &mut impl Bus) -> usize {
+    fn fd_prefix(&mut self, bus: &mut impl InterruptBus) -> usize {
         let opcode = self.fetch(bus);
         #[rustfmt::skip]
         (4 + match opcode {

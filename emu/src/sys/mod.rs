@@ -1,7 +1,7 @@
 //! The whole system tied together. Implements the shared bus.
 
 use crate::{
-    bus::{Bus, Device, DeviceBus, InterruptHandler, NullBus},
+    bus::{Bus, Device, DeviceBus, InterruptBus, NullBus},
     cpu::Cpu,
     dma::Dma,
     vdc::{Framebuffer, Vdc},
@@ -102,7 +102,7 @@ impl<'a> Bus for CpuView<'a> {
 }
 
 // This impl handles the well-documented z80 interrupt daisy-chain
-impl<'a> InterruptHandler for CpuView<'a> {
+impl<'a> InterruptBus for CpuView<'a> {
     fn interrupted(&mut self) -> bool {
         if self.dma.interrupting() {
             return true;
@@ -120,29 +120,12 @@ impl<'a> InterruptHandler for CpuView<'a> {
         false
     }
 
-    fn interrupt_vector(&mut self) -> u8 {
-        if self.dma.interrupting() {
-            return self.dma.interrupt_vector();
-        }
-        match self.hd {
-            Some(hd) if hd.interrupting() => return hd.interrupt_vector(),
-            _ => {}
-        }
-        if self.vdc.interrupting() {
-            return self.vdc.interrupt_vector();
-        }
-        if self.pipe.interrupting() {
-            return self.pipe.interrupt_vector();
-        }
-        0
-    }
-
-    fn ack_interrupt(&mut self) {
+    fn ack_interrupt(&mut self) -> u8 {
         if self.dma.interrupting() {
             return self.dma.ack_interrupt();
         }
         match self.hd {
-            Some(hd) if hd.interrupting() => hd.ack_interrupt(),
+            Some(hd) if hd.interrupting() => return hd.ack_interrupt(),
             _ => {}
         }
         if self.vdc.interrupting() {
@@ -150,6 +133,23 @@ impl<'a> InterruptHandler for CpuView<'a> {
         }
         if self.pipe.interrupting() {
             return self.pipe.ack_interrupt();
+        }
+        0
+    }
+
+    fn ret_interrupt(&mut self) {
+        if self.dma.interrupt_pending() {
+            return self.dma.ret_interrupt();
+        }
+        match self.hd {
+            Some(hd) if hd.interrupt_pending() => return hd.ret_interrupt(),
+            _ => {}
+        }
+        if self.vdc.interrupt_pending() {
+            return self.vdc.ret_interrupt();
+        }
+        if self.pipe.interrupt_pending() {
+            return self.pipe.ret_interrupt();
         }
     }
 }
@@ -160,7 +160,6 @@ struct DmaView<'a> {
     hd: &'a mut Option<&'a mut Box<dyn Device>>,
     vdc: &'a mut Vdc,
     pipe: &'a mut dyn Device,
-    reti: bool,
 }
 
 impl<'a> Bus for DmaView<'a> {
@@ -208,11 +207,7 @@ impl<'a> Bus for DmaView<'a> {
     }
 }
 
-impl<'a> DeviceBus for DmaView<'a> {
-    fn reti(&self) -> bool {
-        self.reti
-    }
-}
+impl<'a> DeviceBus for DmaView<'a> {}
 
 impl System {
     // TODO: builder?
@@ -249,7 +244,6 @@ impl System {
             pipe: pipe.as_mut(),
         });
 
-        let mut reti = cpu.returned_from_interrupt();
         for _ in 0..cycles {
             // note: only 1 DMA device can run at a time.
             //   If I want to add support for more, then I need to put them in the daisy chain
@@ -260,14 +254,9 @@ impl System {
                 hd: &mut hd.as_mut(),
                 vdc,
                 pipe: pipe.as_mut(),
-                reti,
             });
 
             vdc.tick(&mut NullBus {});
-
-            // clear reti since it should only impact us for 1 cycle, right?
-            // TODO: I think the accurate impl would be to only check reti on final cycle
-            reti = false;
         }
         cycles
     }

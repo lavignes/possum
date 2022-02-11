@@ -10,17 +10,15 @@ pub trait Bus {
     fn output(&mut self, port: u16, data: u8);
 }
 
-pub trait InterruptHandler: Bus {
+pub trait InterruptBus: Bus {
     fn interrupted(&mut self) -> bool;
 
-    fn interrupt_vector(&mut self) -> u8;
+    fn ack_interrupt(&mut self) -> u8;
 
-    fn ack_interrupt(&mut self);
+    fn ret_interrupt(&mut self);
 }
 
-pub trait DeviceBus: Bus {
-    fn reti(&self) -> bool;
-}
+pub trait DeviceBus: Bus {}
 
 pub trait Device {
     fn tick(&mut self, bus: &mut dyn DeviceBus);
@@ -31,9 +29,11 @@ pub trait Device {
 
     fn interrupting(&self) -> bool;
 
-    fn interrupt_vector(&self) -> u8;
+    fn interrupt_pending(&self) -> bool;
 
-    fn ack_interrupt(&mut self);
+    fn ack_interrupt(&mut self) -> u8;
+
+    fn ret_interrupt(&mut self);
 }
 
 pub struct NullBus;
@@ -52,17 +52,12 @@ impl Bus for NullBus {
     fn output(&mut self, _: u16, _: u8) {}
 }
 
-impl DeviceBus for NullBus {
-    fn reti(&self) -> bool {
-        false
-    }
-}
+impl DeviceBus for NullBus {}
 
 #[cfg(test)]
 pub struct TestBus {
     mem: Vec<u8>,
     io: Vec<u8>,
-    reti: bool,
 }
 
 #[cfg(test)]

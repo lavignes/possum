@@ -69,6 +69,7 @@ struct Card<M> {
     mmap: M,
     device_info: Vec<u8>,
     interrupt: bool,
+    interrupt_pending: bool,
     interrupt_enabled: bool,
     interrupt_vector: u8,
     is_8_bit: bool,
@@ -148,6 +149,7 @@ impl<M: MemoryMap> Card<M> {
 
             interrupt: false,
             interrupt_enabled: false,
+            interrupt_pending: false,
             interrupt_vector: 0,
             is_8_bit: false,
 
@@ -512,25 +514,40 @@ impl<M: MemoryMap> Device for CardBus<M> {
         }
     }
 
-    fn interrupt_vector(&self) -> u8 {
-        // AFAICT, interrupts are low-level and won't populate the data bus.
-        if self.card0.interrupt_enabled && self.card0.interrupt {
-            return self.card0.interrupt_vector;
+    fn interrupt_pending(&self) -> bool {
+        if self.card0.interrupt_enabled {
+            return self.card0.interrupt_pending;
         }
         match self.card1.as_ref() {
-            Some(card1) if card1.interrupt_enabled && card1.interrupt => card1.interrupt_vector,
-            _ => 0,
+            Some(card1) if card1.interrupt_enabled => card1.interrupt_pending,
+            _ => false,
         }
     }
 
-    fn ack_interrupt(&mut self) {
+    fn ack_interrupt(&mut self) -> u8 {
+        // AFAICT, interrupts are low-level and won't populate the data bus.
         if self.card0.interrupt_enabled && self.card0.interrupt {
             self.card0.interrupt = false;
-            return;
+            self.card0.interrupt_pending = true;
+            return self.card0.interrupt_vector;
         }
         match self.card1.as_mut() {
             Some(card1) if card1.interrupt_enabled && card1.interrupt => {
                 card1.interrupt = false;
+                card1.interrupt_pending = true;
+                card1.interrupt_vector
+            }
+            _ => 0,
+        }
+    }
+
+    fn ret_interrupt(&mut self) {
+        if self.card0.interrupt_enabled && self.card0.interrupt_pending {
+            self.card0.interrupt_pending = false;
+        }
+        match self.card1.as_mut() {
+            Some(card1) if card1.interrupt_enabled && card1.interrupt_pending => {
+                card1.interrupt_pending = false;
             }
             _ => {}
         }

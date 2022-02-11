@@ -43,9 +43,13 @@ impl Device for AsciiKeyboard {
         false
     }
 
-    fn interrupt_vector(&self) -> u8 {
+    fn interrupt_pending(&self) -> bool {
+        false
+    }
+
+    fn ack_interrupt(&mut self) -> u8 {
         0
     }
 
-    fn ack_interrupt(&mut self) {}
+    fn ret_interrupt(&mut self) {}
 }
