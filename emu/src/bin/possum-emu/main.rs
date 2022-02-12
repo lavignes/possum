@@ -52,7 +52,7 @@ fn main() -> io::Result<()> {
     system.write_ram(&rom, 0);
 
     let window = video
-        .window("possum-emu", 952, 244 * 2)
+        .window("possum-emu", 752, 244 * 2)
         .allow_highdpi()
         .position_centered()
         .resizable()
@@ -76,7 +76,7 @@ fn main() -> io::Result<()> {
         cycles += system.step();
         let now = Instant::now();
 
-        if system.framebuffer_ready() && now.duration_since(last_frame) > Duration::from_millis(32)
+        if system.framebuffer_ready() && now.duration_since(last_frame) > Duration::from_millis(16)
         {
             let framebuffer = system.framebuffer();
             let rect = Rect::new(

@@ -261,14 +261,17 @@ impl System {
         cycles
     }
 
+    #[inline]
     pub fn halted(&self) -> bool {
         self.cpu.halted()
     }
 
+    #[inline]
     pub fn framebuffer_ready(&self) -> bool {
         self.vdc.framebuffer_ready()
     }
 
+    #[inline]
     pub fn framebuffer(&self) -> &Framebuffer {
         self.vdc.framebuffer()
     }

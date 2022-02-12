@@ -22,7 +22,7 @@ VDC_STAT_VBLANK: equ $20
 VDC_STAT_STATUS: equ $80
 
 vdc_init:
-	; set h-sync start at column 126
+	; set h-sync start at column 127
 	ld a, $00
 	call vdc_sel
 	ld a, 126

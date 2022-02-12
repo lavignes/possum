@@ -293,10 +293,12 @@ impl Vdc {
         }
     }
 
+    #[inline]
     pub fn framebuffer(&self) -> &Framebuffer {
         &self.framebuffer
     }
 
+    #[inline]
     pub fn framebuffer_ready(&self) -> bool {
         self.framebuffer_ready
     }
@@ -320,7 +322,14 @@ impl Vdc {
             (((self.sync_widths & 0x0F) as usize).wrapping_sub(1) & 0x0F) * self.cell_width;
         self.vsync_height = (self.sync_widths >> 4) as usize;
 
-        self.hsync_start = self.signal_width.wrapping_sub(self.hsync_width) & 0x3FF;
+        let h_disable =
+            ((self.disp_enable_end - self.disp_enable_begin) as usize) * self.cell_width;
+
+        self.hsync_start = self
+            .signal_width
+            .wrapping_sub(self.hsync_width)
+            .wrapping_sub(h_disable)
+            & 0x3FF;
         self.vsync_start = self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF;
 
         let vert_sync_pos = ((self.vert_sync.wrapping_sub(1) as usize) & 0xFF) * self.cell_height;
@@ -341,12 +350,14 @@ impl Vdc {
             .signal_width
             .wrapping_sub(horiz_sync_pos)
             .wrapping_sub(self.hsync_width)
+            .wrapping_sub(h_disable / 2)
             & 0xFF;
         self.right_border_width = self
             .signal_width
             .wrapping_sub(self.left_border_width)
             .wrapping_sub(self.visible_width)
             .wrapping_sub(self.hsync_width)
+            .wrapping_sub(h_disable / 2)
             & 0xFF;
 
         self.cursor_start_line = (self.cursor_mode_start_scan & 0x0F) as usize;
@@ -355,7 +366,10 @@ impl Vdc {
         self.framebuffer_ready = false;
 
         let changed_size = self.framebuffer.resize(
-            self.signal_width.wrapping_sub(self.hsync_width) & 0x3FF,
+            self.signal_width
+                .wrapping_sub(self.hsync_width)
+                .wrapping_sub(h_disable)
+                & 0x3FF,
             self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF,
         );
         // lets be a little paranoid ;-)

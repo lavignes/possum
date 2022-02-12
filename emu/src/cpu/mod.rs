@@ -103,16 +103,6 @@ pub struct Cpu {
     irq: bool,
 }
 
-#[inline]
-const fn u16_parts(value: u16) -> [u8; 2] {
-    unsafe { mem::transmute(value) }
-}
-
-#[inline]
-fn u16_parts_mut(value: &mut u16) -> &mut [u8; 2] {
-    unsafe { mem::transmute(value) }
-}
-
 impl Cpu {
     #[inline]
     fn flag(&self, flag: Flag) -> bool {
@@ -144,6 +134,11 @@ impl Cpu {
 
     #[inline]
     fn register(&self, reg: Register) -> u8 {
+        #[inline]
+        fn u16_parts(reg: u16) -> [u8; 2] {
+            unsafe { mem::transmute(reg) }
+        }
+
         match reg {
             Register::A => u16_parts(self.af)[1],
             Register::B => u16_parts(self.bc)[1],
@@ -163,6 +158,11 @@ impl Cpu {
 
     #[inline]
     fn set_register(&mut self, reg: Register, data: u8) {
+        #[inline]
+        fn u16_parts_mut(reg: &mut u16) -> &mut [u8; 2] {
+            unsafe { mem::transmute(reg) }
+        }
+
         match reg {
             Register::A => u16_parts_mut(&mut self.af)[1] = data,
             Register::B => u16_parts_mut(&mut self.bc)[1] = data,
@@ -439,10 +439,10 @@ impl Cpu {
     #[inline]
     fn write_wide_absolute_wz(&mut self, reg: WideRegister, bus: &mut impl Bus) -> usize {
         let addr = self.wide_immediate(bus);
-        let parts = u16_parts(self.wide_register(reg));
-        bus.write(addr, parts[0]);
+        let data = self.wide_register(reg);
+        bus.write(addr, (data >> 0) as u8);
         let addr = addr.wrapping_add(1);
-        bus.write(addr, parts[1]);
+        bus.write(addr, (data >> 8) as u8);
         self.wz = addr;
         16
     }
