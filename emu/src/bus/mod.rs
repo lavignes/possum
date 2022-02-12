@@ -66,7 +66,6 @@ impl TestBus {
         Self {
             mem: vec![0; 65536],
             io: vec![0; 65536],
-            reti: false,
         }
     }
 
@@ -74,7 +73,6 @@ impl TestBus {
         let mut result = Self {
             mem,
             io: vec![0; 65536],
-            reti: false,
         };
         // Pad out the full memory size
         result.mem.resize(65536, 0);
@@ -118,8 +116,17 @@ impl Bus for TestBus {
 }
 
 #[cfg(test)]
-impl DeviceBus for TestBus {
-    fn reti(&self) -> bool {
-        self.reti
+impl DeviceBus for TestBus {}
+
+#[cfg(test)]
+impl InterruptBus for TestBus {
+    fn interrupted(&mut self) -> bool {
+        false
     }
+
+    fn ack_interrupt(&mut self) -> u8 {
+        0
+    }
+
+    fn ret_interrupt(&mut self) {}
 }

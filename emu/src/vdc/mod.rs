@@ -5,7 +5,7 @@ use std::mem;
 use crate::{Device, DeviceBus};
 
 const VRAM_SIZE: usize = 0x4000;
-const VRAM_ADDR_MAX: usize = 0x3FFF;
+const VRAM_ADDR_MAX: usize = VRAM_SIZE - 1;
 
 bitflags::bitflags! {
     struct Attribute: u8 {
@@ -324,25 +324,32 @@ impl Vdc {
 
         let h_disable =
             ((self.disp_enable_end - self.disp_enable_begin) as usize) * self.cell_width;
+        let v_disable = 0;
 
         self.hsync_start = self
             .signal_width
             .wrapping_sub(self.hsync_width)
             .wrapping_sub(h_disable)
             & 0x3FF;
-        self.vsync_start = self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF;
+        self.vsync_start = self
+            .signal_height
+            .wrapping_sub(self.vsync_height)
+            .wrapping_sub(v_disable)
+            & 0x3FF;
 
         let vert_sync_pos = ((self.vert_sync.wrapping_sub(1) as usize) & 0xFF) * self.cell_height;
         self.top_border_height = self
             .signal_height
             .wrapping_sub(vert_sync_pos)
             .wrapping_sub(self.vsync_height)
+            .wrapping_sub(v_disable / 2)
             & 0xFF;
         self.bottom_border_height = self
             .signal_height
             .wrapping_sub(self.top_border_height)
             .wrapping_sub(self.visible_height)
             .wrapping_sub(self.vsync_height)
+            .wrapping_sub(v_disable / 2)
             & 0xFF;
 
         let horiz_sync_pos = (self.horiz_sync as usize) * self.cell_width;
@@ -370,7 +377,10 @@ impl Vdc {
                 .wrapping_sub(self.hsync_width)
                 .wrapping_sub(h_disable)
                 & 0x3FF,
-            self.signal_height.wrapping_sub(self.vsync_height) & 0x3FF,
+            self.signal_height
+                .wrapping_sub(self.vsync_height)
+                .wrapping_sub(v_disable)
+                & 0x3FF,
         );
         // lets be a little paranoid ;-)
         if changed_size {

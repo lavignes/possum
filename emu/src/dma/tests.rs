@@ -30,6 +30,6 @@ fn simple_transfer() {
     while !dma.interrupting() {
         dma.tick(&mut bus);
     }
-    assert_eq!(0x06, dma.interrupt_vector());
+    assert_eq!(0x06, dma.ack_interrupt());
     assert_eq!(bus.mem()[0..5], bus.mem()[5..10]); // !
 }

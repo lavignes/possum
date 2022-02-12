@@ -52,7 +52,7 @@ fn main() -> io::Result<()> {
     system.write_ram(&rom, 0);
 
     let window = video
-        .window("possum-emu", 752, 244 * 2)
+        .window("possum-emu", 752 * 2, 244 * 4)
         .allow_highdpi()
         .position_centered()
         .resizable()
