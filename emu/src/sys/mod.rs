@@ -65,14 +65,14 @@ impl<'a> Bus for CpuView<'a> {
         match port & 0xF0 {
             0x00 => self.dma.read(port),
 
-            0x01 => self.bank.bank(),
+            0x10 => self.bank.bank(),
 
             0x80 => match self.hd {
                 Some(hd) => hd.read(port),
                 _ => 0,
             },
 
-            0x90 | 0x91 => self.vdc.read(port),
+            0x90 => self.vdc.read(port),
 
             0xF0 => self.pipe.read(port),
 
@@ -84,7 +84,7 @@ impl<'a> Bus for CpuView<'a> {
         match port & 0xF0 {
             0x00 => self.dma.write(port, data),
 
-            0x01 => self.bank.select(data),
+            0x10 => self.bank.select(data),
 
             0x80 => {
                 if let Some(hd) = self.hd {
@@ -92,7 +92,7 @@ impl<'a> Bus for CpuView<'a> {
                 }
             }
 
-            0x90 | 0x91 => self.vdc.write(port, data),
+            0x90 => self.vdc.write(port, data),
 
             0xF0 => self.pipe.write(port, data),
 
@@ -173,14 +173,14 @@ impl<'a> Bus for DmaView<'a> {
 
     fn input(&mut self, port: u16) -> u8 {
         match port & 0xF0 {
-            0x01 => self.bank.bank(),
+            0x10 => self.bank.bank(),
 
             0x80 => match self.hd {
                 Some(hd) => hd.read(port),
                 _ => 0,
             },
 
-            0x90 | 0x91 => self.vdc.read(port),
+            0x90 => self.vdc.read(port),
 
             0xF0 => self.pipe.read(port),
 
@@ -190,7 +190,7 @@ impl<'a> Bus for DmaView<'a> {
 
     fn output(&mut self, port: u16, data: u8) {
         match port & 0xF0 {
-            0x01 => self.bank.select(data),
+            0x10 => self.bank.select(data),
 
             0x80 => {
                 if let Some(hd) = self.hd {
@@ -198,7 +198,7 @@ impl<'a> Bus for DmaView<'a> {
                 }
             }
 
-            0x90 | 0x91 => self.vdc.write(port, data),
+            0x90 => self.vdc.write(port, data),
 
             0xF0 => self.pipe.write(port, data),
 
