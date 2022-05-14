@@ -118,12 +118,12 @@ hello:
 .INIT_VALUES:
 	db 0, 126	; 126+1 columns
 	db 1, 80	; 80 text columns
-	db 2, 102	; hsync at col 102
+	db 2, 100	; hsync at col 100
 	db 3, $49	; hsync $9-wide vsync $4
 	db 4, 32	; 32+1 rows
 	db 6, 25	; 25 text rows
-	db 7, 29	; vsync at row 29
-	db 9, 7		; 7+1 rows per cell
+	db 7, 30	; vsync at row 30
+	db 9, 7 	; 7+1 rows per cell
 	db 10, %01100000; cursor starts at line 0, blink
 	db 11, 7	; cursor ends at line 7
 	db 12, $00	; screen memory at $0000
