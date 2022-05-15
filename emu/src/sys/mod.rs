@@ -9,6 +9,17 @@ use crate::{
 
 const BANK_SIZE: usize = 0x10000;
 const BANK_MAX: usize = 0x1F;
+const BANK_SHADOW_SIZE: u16 = 0x0400;
+
+struct IOAddr {}
+
+impl IOAddr {
+    const DMA: u16 = 0x00;
+    const BANK: u16 = 0x10;
+    const HD: u16 = 0x80;
+    const VDC: u16 = 0x90;
+    const PIPE: u16 = 0xF0;
+}
 
 pub struct System {
     cpu: Cpu,
@@ -18,6 +29,24 @@ pub struct System {
     hd: Option<Box<dyn Device>>,
     vdc: Vdc,
     pipe: Box<dyn Device>,
+}
+
+#[inline]
+fn read(ram: &[u8], offset: usize, addr: u16) -> u8 {
+    if addr < BANK_SHADOW_SIZE {
+        ram[addr as usize]
+    } else {
+        ram[addr as usize + offset]
+    }
+}
+
+#[inline]
+fn write(ram: &mut [u8], offset: usize, addr: u16, data: u8) {
+    if addr < BANK_SHADOW_SIZE {
+        ram[addr as usize] = data
+    } else {
+        ram[addr as usize + offset] = data
+    }
 }
 
 #[derive(Default)]
@@ -54,27 +83,27 @@ struct CpuView<'a> {
 
 impl<'a> Bus for CpuView<'a> {
     fn read(&mut self, addr: u16) -> u8 {
-        self.ram[addr as usize + self.bank.ram_offset()]
+        read(&self.ram, self.bank.ram_offset(), addr)
     }
 
     fn write(&mut self, addr: u16, data: u8) {
-        self.ram[addr as usize + self.bank.ram_offset()] = data
+        write(&mut self.ram, self.bank.ram_offset(), addr, data);
     }
 
     fn input(&mut self, port: u16) -> u8 {
         match port & 0xF0 {
-            0x00 => self.dma.read(port),
+            IOAddr::DMA => self.dma.read(port),
 
-            0x10 => self.bank.bank(),
+            IOAddr::BANK => self.bank.bank(),
 
-            0x80 => match self.hd {
+            IOAddr::HD => match self.hd {
                 Some(hd) => hd.read(port),
                 _ => 0,
             },
 
-            0x90 => self.vdc.read(port),
+            IOAddr::VDC => self.vdc.read(port),
 
-            0xF0 => self.pipe.read(port),
+            IOAddr::PIPE => self.pipe.read(port),
 
             _ => 0,
         }
@@ -82,19 +111,19 @@ impl<'a> Bus for CpuView<'a> {
 
     fn output(&mut self, port: u16, data: u8) {
         match port & 0xF0 {
-            0x00 => self.dma.write(port, data),
+            IOAddr::DMA => self.dma.write(port, data),
 
-            0x10 => self.bank.select(data),
+            IOAddr::BANK => self.bank.select(data),
 
-            0x80 => {
+            IOAddr::HD => {
                 if let Some(hd) = self.hd {
                     hd.write(port, data)
                 }
             }
 
-            0x90 => self.vdc.write(port, data),
+            IOAddr::VDC => self.vdc.write(port, data),
 
-            0xF0 => self.pipe.write(port, data),
+            IOAddr::PIPE => self.pipe.write(port, data),
 
             _ => {}
         }
@@ -164,25 +193,25 @@ struct DmaView<'a> {
 
 impl<'a> Bus for DmaView<'a> {
     fn read(&mut self, addr: u16) -> u8 {
-        self.ram[addr as usize + self.bank.ram_offset()]
+        read(&self.ram, self.bank.ram_offset(), addr)
     }
 
     fn write(&mut self, addr: u16, data: u8) {
-        self.ram[addr as usize + self.bank.ram_offset()] = data
+        write(&mut self.ram, self.bank.ram_offset(), addr, data);
     }
 
     fn input(&mut self, port: u16) -> u8 {
         match port & 0xF0 {
-            0x10 => self.bank.bank(),
+            IOAddr::BANK => self.bank.bank(),
 
-            0x80 => match self.hd {
+            IOAddr::HD => match self.hd {
                 Some(hd) => hd.read(port),
                 _ => 0,
             },
 
-            0x90 => self.vdc.read(port),
+            IOAddr::VDC => self.vdc.read(port),
 
-            0xF0 => self.pipe.read(port),
+            IOAddr::PIPE => self.pipe.read(port),
 
             _ => 0,
         }
@@ -190,17 +219,17 @@ impl<'a> Bus for DmaView<'a> {
 
     fn output(&mut self, port: u16, data: u8) {
         match port & 0xF0 {
-            0x10 => self.bank.select(data),
+            IOAddr::BANK => self.bank.select(data),
 
-            0x80 => {
+            IOAddr::HD => {
                 if let Some(hd) = self.hd {
                     hd.write(port, data)
                 }
             }
 
-            0x90 => self.vdc.write(port, data),
+            IOAddr::VDC => self.vdc.write(port, data),
 
-            0xF0 => self.pipe.write(port, data),
+            IOAddr::PIPE => self.pipe.write(port, data),
 
             _ => {}
         }

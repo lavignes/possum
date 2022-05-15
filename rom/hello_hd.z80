@@ -120,7 +120,8 @@ err:
 
 exit:
 	in a, (PIPE_PORT)
-	cp 'Q'
+	set 5, a	; lowercase ASCII
+	cp 'q'
 	jr nz, exit
 
 	halt

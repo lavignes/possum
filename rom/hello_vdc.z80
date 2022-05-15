@@ -10,7 +10,8 @@ start:
 	call hello
 exit:
 	in a, (KB_PORT)
-	cp 'Q'
+	set 5, a	; lowercase ASCII
+	cp 'q'
 	jr nz, exit
 	halt
 
@@ -18,7 +19,7 @@ VDC_PORT_STAT:	equ $90
 VDC_PORT_SEL:	equ $90
 VDC_PORT_DATA:	equ $91
 
-VDC_STAT_VBLANK:	equ $20
+VDC_STAT_VBLANK:        equ $20
 VDC_STAT_STATUS:	equ $80
 
 vdc_init:
@@ -144,11 +145,11 @@ hello:
 .CHARSET:
 	db %00000000
 	db %00000000
-	db %01000100
-	db %01000100
 	db %00000000
-	db %10000010
-	db %01111100
+	db %00000000
+	db %00000000
+	db %00000000
+	db %00000000
 	db %00000000
 
 	db %10000010
