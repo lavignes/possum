@@ -1,0 +1,8 @@
+; msg entry
+struct MSG
+	from.w
+	to.w
+end
+
+foo: MSG 0, 0
+

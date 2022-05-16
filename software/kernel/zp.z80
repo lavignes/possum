@@ -1,0 +1,41 @@
+IO_BANK = $10
+
+org $0000
+.rst00:
+	jp .reset
+
+org $0008
+.rst08:
+	halt
+
+org $0010
+.rst10:
+	halt
+
+org $0018
+.rst18:
+	halt
+
+org $0020
+.rst20:
+	halt
+
+org $28
+.rst28:
+	halt
+
+org $30
+.rst30:
+	halt
+
+org $0038
+.rst38:
+	halt
+
+org $0040
+.reset:
+	xor a
+	out (IO_BANK), a
+	jp k_main
+
+
