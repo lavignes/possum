@@ -1,7 +1,8 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
     fmt::{self, Display, Formatter},
-    io::Read,
+    fs::File,
+    io::{self, Read},
     rc::Rc,
 };
 
@@ -565,8 +566,37 @@ pub enum Token {
     Label(LabelType, StrRef),
 }
 
-pub struct Lexer<R: Read> {
-    path_interner: Rc<RefCell<PathInterner>>,
+pub trait LexerFactory<R> {
+    fn create(
+        &self,
+        path_interner: Ref<PathInterner>,
+        str_interner: Rc<RefCell<StrInterner>>,
+        path: PathRef,
+    ) -> io::Result<Lexer<R>>;
+}
+
+pub struct FileLexerFactory {}
+
+impl FileLexerFactory {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl LexerFactory<File> for FileLexerFactory {
+    fn create(
+        &self,
+        path_interner: Ref<PathInterner>,
+        str_interner: Rc<RefCell<StrInterner>>,
+        path: PathRef,
+    ) -> io::Result<Lexer<File>> {
+        // TODO: Need to pass the file manager!
+        let reader = File::open(path_interner.get(path).unwrap())?;
+        Ok(Lexer::new(str_interner, path, reader))
+    }
+}
+
+pub struct Lexer<R> {
     str_interner: Rc<RefCell<StrInterner>>,
     loc: SourceLoc,
     tok_loc: SourceLoc,
@@ -579,19 +609,13 @@ pub struct Lexer<R: Read> {
 
 impl<R: Read> Lexer<R> {
     #[inline]
-    pub fn new(
-        path_interner: Rc<RefCell<PathInterner>>,
-        str_interner: Rc<RefCell<StrInterner>>,
-        path: PathRef,
-        reader: R,
-    ) -> Self {
+    pub fn new(str_interner: Rc<RefCell<StrInterner>>, path: PathRef, reader: R) -> Self {
         let loc = SourceLoc {
             path,
             line: 1,
             column: 1,
         };
         Self {
-            path_interner,
             str_interner,
             loc,
             tok_loc: loc,
@@ -611,16 +635,6 @@ impl<R: Read> Lexer<R> {
     #[inline]
     pub fn str_interner_mut(&self) -> RefMut<StrInterner> {
         self.str_interner.borrow_mut()
-    }
-
-    #[inline]
-    pub fn path_interner(&self) -> Ref<PathInterner> {
-        self.path_interner.as_ref().borrow()
-    }
-
-    #[inline]
-    pub fn path_interner_mut(&self) -> RefMut<PathInterner> {
-        self.path_interner.borrow_mut()
     }
 
     #[inline]
@@ -1049,7 +1063,7 @@ mod tests {
         let path_interner = Rc::new(RefCell::new(PathInterner::new()));
         let str_interner = Rc::new(RefCell::new(StrInterner::new()));
         let path = path_interner.borrow_mut().intern("file.test");
-        Lexer::new(path_interner, str_interner, path, Cursor::new(text))
+        Lexer::new(str_interner, path, Cursor::new(text))
     }
 
     #[test]

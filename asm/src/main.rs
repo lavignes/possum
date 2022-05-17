@@ -1,16 +1,18 @@
+mod assembler;
 mod charreader;
 mod expr;
 mod intern;
 mod lexer;
-mod parser;
+mod symtab;
 
-use std::{cell::RefCell, fs::File, io, path::PathBuf, rc::Rc};
+use std::{fs::File, io, io::Write, path::PathBuf, process::ExitCode};
 
 use clap::Parser;
 
 use crate::{
+    assembler::Assembler,
     intern::{PathInterner, StrInterner},
-    lexer::Lexer,
+    lexer::FileLexerFactory,
 };
 
 #[derive(Parser, Debug)]
@@ -19,16 +21,38 @@ struct Args {
     /// Path to input assembly file
     #[clap(parse(from_os_str), value_name = "INPUT")]
     input: PathBuf,
+
+    /// Path to output binary file. (Default: stdout)
+    #[clap(parse(from_os_str), short, long)]
+    output: Option<PathBuf>,
 }
 
-fn main() -> io::Result<()> {
+fn main() -> ExitCode {
     let args = Args::parse();
 
-    let path_interner = Rc::new(RefCell::new(PathInterner::new()));
-    let str_interner = Rc::new(RefCell::new(StrInterner::new()));
-    let file = path_interner.borrow_mut().intern(args.input.clone());
-    let reader = File::open(args.input)?;
-    let lexer = Lexer::new(path_interner, str_interner, file, reader);
+    let output: Box<dyn Write> = if let Some(path) = args.output {
+        let result = File::options()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path.clone());
+        match result {
+            Err(e) => {
+                eprintln!("Cannot open file \"{}\" for writing: {e}", path.display());
+                return ExitCode::FAILURE;
+            }
+            Ok(file) => Box::new(file),
+        }
+    } else {
+        Box::new(io::stdout())
+    };
 
-    Ok(())
+    let mut assembler = Assembler::new(Box::new(FileLexerFactory::new()), output);
+    match assembler.assemble(args.input) {
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+        _ => ExitCode::SUCCESS,
+    }
 }
