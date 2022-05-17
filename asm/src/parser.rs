@@ -1,10 +1,10 @@
-use std::{collections::HashMap, io::Read};
+use std::{cell::RefCell, collections::HashMap, io::Read, rc::Rc};
 
 use crate::{
-    charreader::CharReaderError,
     expr::Expr,
-    fileinfo::{FileInfo, SourceLoc},
-    lexer::{Lexer, Token},
+    intern::StrRef,
+    lexer::{Lexer, SourceLoc, Token},
+    PathInterner, StrInterner,
 };
 
 enum Node {
@@ -19,38 +19,21 @@ struct SourceNode {
 struct Macro {}
 
 #[derive(thiserror::Error, Debug)]
-pub enum PassOneError {
-    #[error("{0}")]
-    ReadError(#[from] CharReaderError),
+#[error("{msg}")]
+pub struct ParseError {
+    msg: String,
 }
 
 pub struct Parser<R: Read> {
-    file_info: FileInfo,
-    macros: HashMap<String, Macro>,
+    path_interner: Rc<RefCell<PathInterner>>,
+    str_interner: Rc<RefCell<StrInterner>>,
+    macros: HashMap<StrRef, Macro>,
     lexers: Vec<Lexer<R>>,
     stash: Option<Token>,
 }
 
 impl<R: Read> Parser<R> {
-    // fn peek(&mut self) -> Option<Token> {
-    //     if self.stash.is_none() {
-    //         self.stash = self.next();
-    //     }
-    //     self.stash.as_ref()
-    // }
-    //
-    // fn next(&mut self) -> Option<Result<Token, LexerError>> {
-    //     if self.stash.is_some() {
-    //         return self.stash.take();
-    //     }
-    //     if let Some(next) = self.lexers.last_mut()?.next() {
-    //         return Some(next);
-    //     }
-    //     self.lexers.pop();
-    //     self.next()
-    // }
-
-    fn parse(&mut self) -> Result<Vec<Node>, PassOneError> {
+    fn parse(&mut self) -> Result<Vec<Node>, ParseError> {
         let nodes = Vec::new();
         Ok(nodes)
     }

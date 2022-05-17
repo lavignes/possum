@@ -1,61 +1,196 @@
 use std::{
+    cell::{Ref, RefCell, RefMut},
     fmt::{self, Display, Formatter},
     io::Read,
+    rc::Rc,
 };
 
 use crate::{
     charreader::{CharReader, CharReaderError},
-    fileinfo::{FileId, SourceLoc},
+    intern::{PathRef, StrRef},
+    PathInterner, StrInterner,
 };
+
+#[derive(Copy, Clone, Debug)]
+pub struct SourceLoc {
+    pub path: PathRef,
+    pub line: usize,
+    pub column: usize,
+}
+
+impl Display for SourceLoc {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let Self { path, line, column } = self;
+        write!(f, "<pathref {path:?}>:{line}:{column}")
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum LexerError {
-    #[error("read error: {source}")]
-    ReadError {
-        loc: SourceLoc,
-        source: CharReaderError,
-    },
+    #[error("read error: {0}")]
+    ReadError(CharReaderError),
 
-    #[error("unrecognized string escape: `{escape}`")]
-    UnrecognizedStringEscape { loc: SourceLoc, escape: String },
+    #[error("unrecognized string escape: `{0}`")]
+    UnrecognizedStringEscape(String),
 
-    #[error("malformed binary number: `{value}`")]
-    MalformedBinaryNumber { loc: SourceLoc, value: String },
+    #[error("malformed binary number: `{0}`")]
+    MalformedBinaryNumber(String),
 
-    #[error("malformed decimal number: `{value}`")]
-    MalformedDecimalNumber { loc: SourceLoc, value: String },
+    #[error("malformed decimal number: `{0}`")]
+    MalformedDecimalNumber(String),
 
-    #[error("malformed hexadecimal number: `{value}`")]
-    MalformedHexidecimalNumber { loc: SourceLoc, value: String },
+    #[error("malformed hexadecimal number: `{0}`")]
+    MalformedHexidecimalNumber(String),
 
-    #[error("unrecognized input: `{value}`")]
-    UnrecognizedInput { loc: SourceLoc, value: String },
+    #[error("unrecognized input: `{0}`")]
+    UnrecognizedInput(String),
 
-    #[error("malformed label: `{value}`")]
-    MalformedLabel { loc: SourceLoc, value: String },
+    #[error("unknown directive: `{0}`")]
+    UnknownDirective(String),
+
+    #[error("malformed label: `{0}`")]
+    MalformedLabel(String),
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum OperationName {
-    Adc,
+    Nop,
+    Ld,
+    Inc,
+    Dec,
+    Rlca,
+    Ex,
     Add,
-    And,
-    Bit,
-    Call,
+    Rrca,
+    Djnz,
+    Rla,
+    Jr,
+    Rra,
+    Daa,
+    Cpl,
+    Scf,
     Ccf,
+    Halt,
+    Adc,
+    Sub,
+    Sbc,
+    And,
+    Xor,
+    Or,
     Cp,
+    Ret,
+    Pop,
+    Jp,
+    Call,
+    Push,
+    Rst,
+    Out,
+    Exx,
+    In,
+    Di,
+    Ei,
+    Neg,
+    Retn,
+    Im,
+    Reti,
+    Ldi,
+    Cpi,
+    Ini,
+    Outi,
+    Ldd,
+    Cpd,
+    Ind,
+    Outd,
+    Ldir,
+    Cpir,
+    Inir,
+    Otir,
+    Lddr,
+    Cpdr,
+    Indr,
+    Otdr,
+    Rlc,
+    Rrc,
+    Rl,
+    Rr,
+    Sla,
+    Sra,
+    Sll,
+    Srl,
+    Bit,
+    Res,
+    Set,
 }
 
 impl OperationName {
     fn parse(name: &str) -> Option<Self> {
         match name {
-            "adc" | "ADC" => Some(Self::Adc),
+            "nop" | "NOP" => Some(Self::Nop),
+            "ld" | "LD" => Some(Self::Ld),
+            "inc" | "INC" => Some(Self::Inc),
+            "dec" | "DEC" => Some(Self::Dec),
+            "rlca" | "RLCA" => Some(Self::Rlca),
+            "ex" | "EX" => Some(Self::Ex),
             "add" | "ADD" => Some(Self::Add),
-            "and" | "AND" => Some(Self::And),
-            "bit" | "BIT" => Some(Self::Bit),
-            "call" | "CALL" => Some(Self::Call),
+            "rrca" | "RRCA" => Some(Self::Rrca),
+            "djnz" | "DJNZ" => Some(Self::Djnz),
+            "rla" | "RLA" => Some(Self::Rla),
+            "jr" | "JR" => Some(Self::Jr),
+            "rra" | "RRA" => Some(Self::Rra),
+            "daa" | "DAA" => Some(Self::Daa),
+            "cpl" | "CPL" => Some(Self::Cpl),
+            "scf" | "SCF" => Some(Self::Scf),
             "ccf" | "CCF" => Some(Self::Ccf),
+            "halt" | "HALT" => Some(Self::Halt),
+            "adc" | "ADC" => Some(Self::Adc),
+            "sub" | "SUB" => Some(Self::Sub),
+            "sbc" | "SBC" => Some(Self::Sbc),
+            "and" | "AND" => Some(Self::And),
+            "xor" | "XOR" => Some(Self::Xor),
+            "or" | "OR" => Some(Self::Or),
             "cp" | "CP" => Some(Self::Cp),
+            "ret" | "RET" => Some(Self::Ret),
+            "pop" | "POP" => Some(Self::Pop),
+            "jp" | "JP" => Some(Self::Jp),
+            "call" | "CALL" => Some(Self::Call),
+            "push" | "PUSH" => Some(Self::Push),
+            "rst" | "RST" => Some(Self::Rst),
+            "out" | "OUT" => Some(Self::Out),
+            "exx" | "EXX" => Some(Self::Exx),
+            "in" | "IN" => Some(Self::In),
+            "di" | "DI" => Some(Self::Di),
+            "ei" | "EI" => Some(Self::Ei),
+            "neg" | "NEG" => Some(Self::Neg),
+            "retn" | "RETN" => Some(Self::Retn),
+            "im" | "IM" => Some(Self::Im),
+            "reti" | "RETI" => Some(Self::Reti),
+            "ldi" | "LDI" => Some(Self::Ldi),
+            "cpi" | "CPI" => Some(Self::Cpi),
+            "ini" | "INI" => Some(Self::Ini),
+            "outi" | "OUTI" => Some(Self::Outi),
+            "ldd" | "LDD" => Some(Self::Ldd),
+            "cpd" | "CPD" => Some(Self::Cpd),
+            "ind" | "IND" => Some(Self::Ind),
+            "outd" | "OUTD" => Some(Self::Outd),
+            "ldir" | "LDIR" => Some(Self::Ldir),
+            "cpir" | "CPIR" => Some(Self::Cpir),
+            "inir" | "INIR" => Some(Self::Inir),
+            "otir" | "OTIR" => Some(Self::Otir),
+            "lddr" | "LDDR" => Some(Self::Lddr),
+            "cpdr" | "CPDR" => Some(Self::Cpdr),
+            "indr" | "INDR" => Some(Self::Indr),
+            "otdr" | "OTDR" => Some(Self::Otdr),
+            "rlc" | "RLC" => Some(Self::Rlc),
+            "rrc" | "RRC" => Some(Self::Rrc),
+            "rl" | "RL" => Some(Self::Rl),
+            "rr" | "RR" => Some(Self::Rr),
+            "sla" | "SLA" => Some(Self::Sla),
+            "sra" | "SRA" => Some(Self::Sra),
+            "sll" | "SLL" => Some(Self::Sll),
+            "srl" | "SRL" => Some(Self::Srl),
+            "bit" | "BIT" => Some(Self::Bit),
+            "res" | "RES" => Some(Self::Res),
+            "set" | "SET" => Some(Self::Set),
             _ => None,
         }
     }
@@ -67,13 +202,72 @@ impl Display for OperationName {
             f,
             "{}",
             match self {
-                Self::Adc => "adc",
+                Self::Nop => "nop",
+                Self::Ld => "ld",
+                Self::Inc => "inc",
+                Self::Dec => "dec",
+                Self::Rlca => "rlca",
+                Self::Ex => "ex",
                 Self::Add => "add",
-                Self::And => "and",
-                Self::Bit => "bit",
-                Self::Call => "call",
+                Self::Rrca => "rrca",
+                Self::Djnz => "djnz",
+                Self::Rla => "rla",
+                Self::Jr => "jr",
+                Self::Rra => "rra",
+                Self::Daa => "daa",
+                Self::Cpl => "cpl",
+                Self::Scf => "scf",
                 Self::Ccf => "ccf",
+                Self::Halt => "halt",
+                Self::Adc => "adc",
+                Self::Sub => "sub",
+                Self::Sbc => "sbc",
+                Self::And => "and",
+                Self::Xor => "xor",
+                Self::Or => "or",
                 Self::Cp => "cp",
+                Self::Ret => "ret",
+                Self::Pop => "pop",
+                Self::Jp => "jp",
+                Self::Call => "call",
+                Self::Push => "push",
+                Self::Rst => "rst",
+                Self::Out => "out",
+                Self::Exx => "exx",
+                Self::In => "in",
+                Self::Di => "di",
+                Self::Ei => "ei",
+                Self::Neg => "neg",
+                Self::Retn => "retn",
+                Self::Im => "im",
+                Self::Reti => "reti",
+                Self::Ldi => "ldi",
+                Self::Cpi => "cpi",
+                Self::Ini => "ini",
+                Self::Outi => "outi",
+                Self::Ldd => "ldd",
+                Self::Cpd => "cpd",
+                Self::Ind => "ind",
+                Self::Outd => "outd",
+                Self::Ldir => "ldir",
+                Self::Cpir => "cpir",
+                Self::Inir => "inir",
+                Self::Otir => "otir",
+                Self::Lddr => "lddr",
+                Self::Cpdr => "cpdr",
+                Self::Indr => "indr",
+                Self::Otdr => "otdr",
+                Self::Rlc => "rlc",
+                Self::Rrc => "rrc",
+                Self::Rl => "rl",
+                Self::Rr => "rr",
+                Self::Sla => "sla",
+                Self::Sra => "sra",
+                Self::Sll => "sll",
+                Self::Srl => "srl",
+                Self::Bit => "bit",
+                Self::Res => "res",
+                Self::Set => "set",
             }
         )
     }
@@ -176,6 +370,7 @@ pub enum Symbol {
     ParenClose,
     Minus,
     Equal,
+    NotEqual,
     Plus,
     Pipe,
     DoublePipe,
@@ -205,7 +400,8 @@ impl Symbol {
             "(" => Some(Self::ParenOpen),
             ")" => Some(Self::ParenClose),
             "-" => Some(Self::Minus),
-            "=" => Some(Self::Equal),
+            "==" => Some(Self::Equal),
+            "!=" => Some(Self::NotEqual),
             "+" => Some(Self::Plus),
             "|" => Some(Self::Pipe),
             "||" => Some(Self::DoublePipe),
@@ -241,7 +437,8 @@ impl Display for Symbol {
                 Self::ParenOpen => "(",
                 Self::ParenClose => ")",
                 Self::Minus => "-",
-                Self::Equal => "=",
+                Self::Equal => "==",
+                Self::NotEqual => "!=",
                 Self::Plus => "+",
                 Self::Pipe => "|",
                 Self::DoublePipe => "||",
@@ -263,12 +460,44 @@ impl Display for Symbol {
 #[derive(Debug, Copy, Clone)]
 pub enum DirectiveName {
     Org,
+    Macro,
+    Enum,
+    Struct,
+    Define,
+    If,
+    Ifdef,
+    Ifndef,
+    Else,
+    End,
+    Echo,
+    Db,
+    Dw,
+    Ds,
+    Include,
+    Incbin,
+    Sizeof,
 }
 
 impl DirectiveName {
     fn parse(name: &str) -> Option<Self> {
         match name {
-            "org" | "ORG" => Some(Self::Org),
+            "#org" | "#ORG" => Some(Self::Org),
+            "#macro" | "#MACRO" => Some(Self::Macro),
+            "#enum" | "#ENUM" => Some(Self::Enum),
+            "#struct" | "#STRUCT" => Some(Self::Struct),
+            "#define" | "#DEFINE" => Some(Self::Define),
+            "#if" | "#IF" => Some(Self::If),
+            "#ifdef" | "#IFDEF" => Some(Self::Ifdef),
+            "#ifndef" | "#IFNDEF" => Some(Self::Ifndef),
+            "#else" | "#ELSE" => Some(Self::Else),
+            "#end" | "#END" => Some(Self::End),
+            "#echo" | "#ECHO" => Some(Self::Echo),
+            "#db" | "#DB" => Some(Self::Db),
+            "#dw" | "#DW" => Some(Self::Dw),
+            "#ds" | "#DS" => Some(Self::Ds),
+            "#include" | "#INCLUDE" => Some(Self::Include),
+            "#incbin" | "#INCBIN" => Some(Self::Incbin),
+            "#sizeof" | "#SIZEOF" => Some(Self::Sizeof),
             _ => None,
         }
     }
@@ -280,7 +509,23 @@ impl Display for DirectiveName {
             f,
             "{}",
             match self {
-                Self::Org => "org",
+                Self::Org => "#org",
+                Self::Macro => "#macro",
+                Self::Enum => "#enum",
+                Self::Struct => "#struct",
+                Self::Define => "#define",
+                Self::If => "#if",
+                Self::Ifdef => "#ifdef",
+                Self::Ifndef => "#ifndef",
+                Self::Else => "#else",
+                Self::End => "#end",
+                Self::Echo => "#echo",
+                Self::Db => "#db",
+                Self::Dw => "#dw",
+                Self::Ds => "#ds",
+                Self::Include => "#include",
+                Self::Incbin => "#incbin",
+                Self::Sizeof => "#sizeof",
             }
         )
     }
@@ -298,6 +543,7 @@ enum State {
     InNumberBase16,
     InSymbol,
     InIdentifier,
+    InDirective,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -310,17 +556,20 @@ pub enum LabelType {
 #[derive(Debug, Clone)]
 pub enum Token {
     Comment,
-    String(String),
+    String(StrRef),
     Number(usize),
     Operation(OperationName),
     Directive(DirectiveName),
     Register(RegisterName),
     Symbol(Symbol),
-    Label(LabelType, String),
+    Label(LabelType, StrRef),
 }
 
 pub struct Lexer<R: Read> {
+    path_interner: Rc<RefCell<PathInterner>>,
+    str_interner: Rc<RefCell<StrInterner>>,
     loc: SourceLoc,
+    tok_loc: SourceLoc,
     included_from: Option<SourceLoc>,
     inner: CharReader<R>,
     stash: Option<char>,
@@ -329,13 +578,23 @@ pub struct Lexer<R: Read> {
 }
 
 impl<R: Read> Lexer<R> {
-    pub fn new(file: FileId, reader: R) -> Self {
+    #[inline]
+    pub fn new(
+        path_interner: Rc<RefCell<PathInterner>>,
+        str_interner: Rc<RefCell<StrInterner>>,
+        path: PathRef,
+        reader: R,
+    ) -> Self {
+        let loc = SourceLoc {
+            path,
+            line: 1,
+            column: 1,
+        };
         Self {
-            loc: SourceLoc {
-                file,
-                line: 1,
-                column: 1,
-            },
+            path_interner,
+            str_interner,
+            loc,
+            tok_loc: loc,
             included_from: None,
             inner: CharReader::new(reader),
             stash: None,
@@ -344,6 +603,27 @@ impl<R: Read> Lexer<R> {
         }
     }
 
+    #[inline]
+    pub fn str_interner(&self) -> Ref<StrInterner> {
+        self.str_interner.as_ref().borrow()
+    }
+
+    #[inline]
+    pub fn str_interner_mut(&self) -> RefMut<StrInterner> {
+        self.str_interner.borrow_mut()
+    }
+
+    #[inline]
+    pub fn path_interner(&self) -> Ref<PathInterner> {
+        self.path_interner.as_ref().borrow()
+    }
+
+    #[inline]
+    pub fn path_interner_mut(&self) -> RefMut<PathInterner> {
+        self.path_interner.borrow_mut()
+    }
+
+    #[inline]
     fn is_value_terminator(&self, c: char) -> bool {
         // Basically any char that could reasonably mark the end of a label or number
         matches!(
@@ -367,6 +647,7 @@ impl<R: Read> Lexer<R> {
         )
     }
 
+    #[inline]
     fn is_symbol_start(&self, c: char) -> bool {
         matches!(
             c,
@@ -393,7 +674,7 @@ impl<R: Read> Lexer<R> {
 }
 
 impl<R: Read> Iterator for Lexer<R> {
-    type Item = Result<(SourceLoc, Token), LexerError>;
+    type Item = (SourceLoc, Result<Token, LexerError>);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -405,10 +686,7 @@ impl<R: Read> Iterator for Lexer<R> {
                 None => match self.inner.next() {
                     None => return None,
                     Some(Err(e)) => {
-                        return Some(Err(LexerError::ReadError {
-                            loc: self.loc,
-                            source: e,
-                        }));
+                        return Some((self.loc, Err(LexerError::ReadError(e))));
                     }
                     Some(Ok(c)) => {
                         self.loc.column += 1;
@@ -427,53 +705,67 @@ impl<R: Read> Iterator for Lexer<R> {
 
                     ';' => {
                         self.state = State::InComment;
+                        self.tok_loc = self.loc;
                     }
 
                     '"' => {
                         self.state = State::InString;
+                        self.tok_loc = self.loc;
                         self.buffer.clear();
                     }
 
                     '%' => {
                         self.state = State::InNumberBase2;
+                        self.tok_loc = self.loc;
                         self.buffer.clear();
                     }
 
                     '0'..='9' => {
                         self.state = State::InNumberBase10;
+                        self.tok_loc = self.loc;
                         self.buffer.clear();
                         self.buffer.push(c);
                     }
 
                     '$' => {
                         self.state = State::InNumberBase16;
+                        self.tok_loc = self.loc;
                         self.buffer.clear();
                     }
 
                     _ if self.is_symbol_start(c) => {
                         self.state = State::InSymbol;
+                        self.tok_loc = self.loc;
+                        self.buffer.clear();
+                        self.buffer.push(c);
+                    }
+
+                    '#' => {
+                        self.state = State::InDirective;
+                        self.tok_loc = self.loc;
                         self.buffer.clear();
                         self.buffer.push(c);
                     }
 
                     _ if c.is_alphanumeric() || c == '_' || c == '.' => {
                         self.state = State::InIdentifier;
+                        self.tok_loc = self.loc;
                         self.buffer.clear();
                         self.buffer.push(c);
                     }
 
                     _ => {
-                        return Some(Err(LexerError::UnrecognizedInput {
-                            loc: self.loc,
-                            value: format!("{c}"),
-                        }))
+                        return Some((
+                            self.loc,
+                            Err(LexerError::UnrecognizedInput(format!("{c}"))),
+                        ));
                     }
                 },
 
                 State::InComment => match c {
                     '\n' => {
                         self.state = State::Initial;
-                        return Some(Ok((self.loc, Token::Comment)));
+                        return Some((self.tok_loc, Ok(Token::Comment)));
                     }
 
                     _ => {}
@@ -482,7 +774,8 @@ impl<R: Read> Iterator for Lexer<R> {
                 State::InString => match c {
                     '"' => {
                         self.state = State::Initial;
-                        return Some(Ok((self.loc, Token::String(self.buffer.clone()))));
+                        let string = self.str_interner.borrow_mut().intern(&self.buffer);
+                        return Some((self.tok_loc, Ok(Token::String(string))));
                     }
 
                     '\\' => {
@@ -528,10 +821,10 @@ impl<R: Read> Iterator for Lexer<R> {
                     }
 
                     _ => {
-                        return Some(Err(LexerError::UnrecognizedStringEscape {
-                            loc: self.loc,
-                            escape: format!("\\{c}"),
-                        }))
+                        return Some((
+                            self.loc,
+                            Err(LexerError::UnrecognizedStringEscape(format!("\\{c}"))),
+                        ));
                     }
                 },
 
@@ -542,10 +835,10 @@ impl<R: Read> Iterator for Lexer<R> {
                     }
 
                     _ => {
-                        return Some(Err(LexerError::UnrecognizedStringEscape {
-                            loc: self.loc,
-                            escape: format!("\\${c}"),
-                        }))
+                        return Some((
+                            self.loc,
+                            Err(LexerError::UnrecognizedStringEscape(format!("\\${c}"))),
+                        ));
                     }
                 },
 
@@ -565,10 +858,14 @@ impl<R: Read> Iterator for Lexer<R> {
                     }
 
                     _ => {
-                        return Some(Err(LexerError::UnrecognizedStringEscape {
-                            loc: self.loc,
-                            escape: format!("\\${}{}", self.buffer.chars().last().unwrap(), c),
-                        }))
+                        return Some((
+                            self.loc,
+                            Err(LexerError::UnrecognizedStringEscape(format!(
+                                "\\${}{}",
+                                self.buffer.chars().last().unwrap(),
+                                c
+                            ))),
+                        ));
                     }
                 },
 
@@ -580,20 +877,23 @@ impl<R: Read> Iterator for Lexer<R> {
                         // Instead of treating this as a binary number, this must
                         // be the mod symbol
                         if self.buffer.is_empty() {
-                            return Some(Ok((self.loc, Token::Symbol(Symbol::Mod))));
+                            return Some((self.tok_loc, Ok(Token::Symbol(Symbol::Mod))));
                         }
 
                         let value = usize::from_str_radix(&self.buffer, 2).unwrap();
-                        return Some(Ok((self.loc, Token::Number(value))));
+                        return Some((self.tok_loc, Ok(Token::Number(value))));
                     }
 
                     '0' | '1' => self.buffer.push(c),
 
                     _ => {
-                        return Some(Err(LexerError::MalformedBinaryNumber {
-                            loc: self.loc,
-                            value: format!("%{}{}", self.buffer, c),
-                        }))
+                        return Some((
+                            self.tok_loc,
+                            Err(LexerError::MalformedBinaryNumber(format!(
+                                "%{}{}",
+                                self.buffer, c
+                            ))),
+                        ));
                     }
                 },
 
@@ -603,16 +903,19 @@ impl<R: Read> Iterator for Lexer<R> {
                         self.stash = Some(c);
 
                         let value = usize::from_str_radix(&self.buffer, 10).unwrap();
-                        return Some(Ok((self.loc, Token::Number(value))));
+                        return Some((self.tok_loc, Ok(Token::Number(value))));
                     }
 
                     '0'..='9' => self.buffer.push(c),
 
                     _ => {
-                        return Some(Err(LexerError::MalformedDecimalNumber {
-                            loc: self.loc,
-                            value: format!("{}{}", self.buffer, c),
-                        }))
+                        return Some((
+                            self.tok_loc,
+                            Err(LexerError::MalformedDecimalNumber(format!(
+                                "{}{}",
+                                self.buffer, c
+                            ))),
+                        ));
                     }
                 },
 
@@ -624,20 +927,23 @@ impl<R: Read> Iterator for Lexer<R> {
                         // Instead of treating this as a hex number, this must
                         // be the dollar symbol
                         if self.buffer.is_empty() {
-                            return Some(Ok((self.loc, Token::Symbol(Symbol::Dollar))));
+                            return Some((self.tok_loc, Ok(Token::Symbol(Symbol::Dollar))));
                         }
 
                         let value = usize::from_str_radix(&self.buffer, 16).unwrap();
-                        return Some(Ok((self.loc, Token::Number(value))));
+                        return Some((self.tok_loc, Ok(Token::Number(value))));
                     }
 
                     '0'..='9' | 'a'..='f' | 'A'..='F' => self.buffer.push(c.to_ascii_lowercase()),
 
                     _ => {
-                        return Some(Err(LexerError::MalformedHexidecimalNumber {
-                            loc: self.loc,
-                            value: format!("${}{}", self.buffer, c),
-                        }))
+                        return Some((
+                            self.tok_loc,
+                            Err(LexerError::MalformedHexidecimalNumber(format!(
+                                "${}{}",
+                                self.buffer, c
+                            ))),
+                        ));
                     }
                 },
 
@@ -647,16 +953,36 @@ impl<R: Read> Iterator for Lexer<R> {
 
                     // first try and parse a 2 char symbol
                     if let Some(symbol) = Symbol::parse(&self.buffer) {
-                        return Some(Ok((self.loc, Token::Symbol(symbol))));
+                        return Some((self.tok_loc, Ok(Token::Symbol(symbol))));
                     }
 
-                    // try again for 1 char (stash the other char)
+                    // It must be 1 char (stash the other char)
                     self.stash = self.buffer.pop();
-                    return Some(Ok((
-                        self.loc,
-                        Token::Symbol(Symbol::parse(&self.buffer).unwrap()),
-                    )));
+                    return Some((
+                        self.tok_loc,
+                        Ok(Token::Symbol(Symbol::parse(&self.buffer).unwrap())),
+                    ));
                 }
+
+                State::InDirective => match c {
+                    _ if c.is_alphanumeric() || c == '_' => {
+                        self.buffer.push(c);
+                    }
+
+                    _ => {
+                        self.state = State::Initial;
+                        self.stash = Some(c);
+
+                        if let Some(dir) = DirectiveName::parse(&self.buffer) {
+                            return Some((self.tok_loc, Ok(Token::Directive(dir))));
+                        }
+
+                        return Some((
+                            self.tok_loc,
+                            Err(LexerError::UnknownDirective(self.buffer.clone())),
+                        ));
+                    }
+                },
 
                 State::InIdentifier => match c {
                     _ if c.is_alphanumeric() || c == '_' || c == '.' => {
@@ -666,47 +992,42 @@ impl<R: Read> Iterator for Lexer<R> {
                     '\'' => {
                         self.state = State::Initial;
                         if self.buffer == "af" {
-                            return Some(Ok((self.loc, Token::Register(RegisterName::AFPrime))));
+                            return Some((
+                                self.tok_loc,
+                                Ok(Token::Register(RegisterName::AFPrime)),
+                            ));
                         }
                     }
 
                     _ => {
                         self.state = State::Initial;
+                        self.stash = Some(c);
 
                         if let Some(op) = OperationName::parse(&self.buffer) {
-                            return Some(Ok((self.loc, Token::Operation(op))));
-                        }
-
-                        if let Some(dir) = DirectiveName::parse(&self.buffer) {
-                            return Some(Ok((self.loc, Token::Directive(dir))));
+                            return Some((self.tok_loc, Ok(Token::Operation(op))));
                         }
 
                         if let Some(reg) = RegisterName::parse(&self.buffer) {
-                            return Some(Ok((self.loc, Token::Register(reg))));
+                            return Some((self.tok_loc, Ok(Token::Register(reg))));
                         }
 
+                        let string = self.str_interner.borrow_mut().intern(&self.buffer);
                         return match self.buffer.chars().filter(|c| *c == '.').count() {
-                            0 => Some(Ok((
-                                self.loc,
-                                Token::Label(LabelType::Global, self.buffer.clone()),
-                            ))),
+                            0 => Some((self.tok_loc, Ok(Token::Label(LabelType::Global, string)))),
                             1 => {
                                 if self.buffer.starts_with('.') {
-                                    Some(Ok((
-                                        self.loc,
-                                        Token::Label(LabelType::Local, self.buffer.clone()),
-                                    )))
+                                    Some((self.tok_loc, Ok(Token::Label(LabelType::Local, string))))
                                 } else {
-                                    Some(Ok((
-                                        self.loc,
-                                        Token::Label(LabelType::Direct, self.buffer.clone()),
-                                    )))
+                                    Some((
+                                        self.tok_loc,
+                                        Ok(Token::Label(LabelType::Direct, string)),
+                                    ))
                                 }
                             }
-                            _ => Some(Err(LexerError::MalformedLabel {
-                                loc: self.loc,
-                                value: self.buffer.clone(),
-                            })),
+                            _ => Some((
+                                self.tok_loc,
+                                Err(LexerError::MalformedLabel(self.buffer.clone())),
+                            )),
                         };
                     }
                 },
@@ -717,23 +1038,27 @@ impl<R: Read> Iterator for Lexer<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{cell::RefCell, io::Cursor, rc::Rc};
 
     use crate::{
-        fileinfo::FileId,
         lexer::{LabelType, RegisterName, Symbol, Token},
-        Lexer,
+        Lexer, PathInterner, StrInterner,
     };
 
-    const FILE: FileId = FileId(0);
+    fn lexer(text: &str) -> Lexer<Cursor<&str>> {
+        let path_interner = Rc::new(RefCell::new(PathInterner::new()));
+        let str_interner = Rc::new(RefCell::new(StrInterner::new()));
+        let path = path_interner.borrow_mut().intern("file.test");
+        Lexer::new(path_interner, str_interner, path, Cursor::new(text))
+    }
 
     #[test]
     fn comment() {
         let text = r#"
             ; comment
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
-        assert!(matches!(lexer.next(), Some(Ok((_, Token::Comment)))));
+        let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some((_, Ok(Token::Comment)))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -742,8 +1067,10 @@ mod tests {
         let text = r#"
             "test"
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
-        assert!(matches!(lexer.next(), Some(Ok((_, Token::String(s)))) if s == "test"));
+        let mut lexer = lexer(text);
+        assert!(
+            matches!(lexer.next(), Some((_, Ok(Token::String(s)))) if lexer.str_interner().eq_some("test", s))
+        );
         assert!(matches!(lexer.next(), None));
     }
 
@@ -752,8 +1079,10 @@ mod tests {
         let text = r#"
             "test\n"
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
-        assert!(matches!(lexer.next(), Some(Ok((_, Token::String(s)))) if s == "test\n"));
+        let mut lexer = lexer(text);
+        assert!(
+            matches!(lexer.next(), Some((_, Ok(Token::String(s)))) if lexer.str_interner().eq_some("test\n", s))
+        );
         assert!(matches!(lexer.next(), None));
     }
 
@@ -762,8 +1091,10 @@ mod tests {
         let text = r#"
             "test\$7f"
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
-        assert!(matches!(lexer.next(), Some(Ok((_, Token::String(s)))) if s == "test\x7f"));
+        let mut lexer = lexer(text);
+        assert!(
+            matches!(lexer.next(), Some((_, Ok(Token::String(s)))) if lexer.str_interner().eq_some("test\x7f", s))
+        );
         assert!(matches!(lexer.next(), None));
     }
 
@@ -772,8 +1103,8 @@ mod tests {
         let text = r#"
             %010101
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
-        assert!(matches!(lexer.next(), Some(Ok((_, Token::Number(n)))) if n == 0b010101));
+        let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some((_, Ok(Token::Number(n)))) if n == 0b010101));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -782,8 +1113,8 @@ mod tests {
         let text = r#"
             123456
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
-        assert!(matches!(lexer.next(), Some(Ok((_, Token::Number(n)))) if n == 123456));
+        let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some((_, Ok(Token::Number(n)))) if n == 123456));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -792,8 +1123,8 @@ mod tests {
         let text = r#"
             $cafebabe
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
-        assert!(matches!(lexer.next(), Some(Ok((_, Token::Number(n)))) if n == 0xcafebabe));
+        let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some((_, Ok(Token::Number(n)))) if n == 0xcafebabe));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -802,106 +1133,106 @@ mod tests {
         let text = r#"
             ~ ! $ % ^ & && * ( ) - = + | || : , < > <= >= << >> / ?
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
+        let mut lexer = lexer(text);
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Tilde))))
+            Some((_, Ok(Token::Symbol(Symbol::Tilde))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Bang))))
+            Some((_, Ok(Token::Symbol(Symbol::Bang))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Dollar))))
+            Some((_, Ok(Token::Symbol(Symbol::Dollar))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Mod))))
+            Some((_, Ok(Token::Symbol(Symbol::Mod))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Caret))))
+            Some((_, Ok(Token::Symbol(Symbol::Caret))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Ampersand))))
+            Some((_, Ok(Token::Symbol(Symbol::Ampersand))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::DoubleAmpersand))))
+            Some((_, Ok(Token::Symbol(Symbol::DoubleAmpersand))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Star))))
+            Some((_, Ok(Token::Symbol(Symbol::Star))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::ParenOpen))))
+            Some((_, Ok(Token::Symbol(Symbol::ParenOpen))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::ParenClose))))
+            Some((_, Ok(Token::Symbol(Symbol::ParenClose))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Minus))))
+            Some((_, Ok(Token::Symbol(Symbol::Minus))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Equal))))
+            Some((_, Ok(Token::Symbol(Symbol::Equal))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Plus))))
+            Some((_, Ok(Token::Symbol(Symbol::Plus))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Pipe))))
+            Some((_, Ok(Token::Symbol(Symbol::Pipe))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::DoublePipe))))
+            Some((_, Ok(Token::Symbol(Symbol::DoublePipe))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Colon))))
+            Some((_, Ok(Token::Symbol(Symbol::Colon))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Comma))))
+            Some((_, Ok(Token::Symbol(Symbol::Comma))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::LessThan))))
+            Some((_, Ok(Token::Symbol(Symbol::LessThan))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::GreaterThan))))
+            Some((_, Ok(Token::Symbol(Symbol::GreaterThan))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::LessEqual))))
+            Some((_, Ok(Token::Symbol(Symbol::LessEqual))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::GreaterEqual))))
+            Some((_, Ok(Token::Symbol(Symbol::GreaterEqual))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::ShiftLeft))))
+            Some((_, Ok(Token::Symbol(Symbol::ShiftLeft))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::ShiftRight))))
+            Some((_, Ok(Token::Symbol(Symbol::ShiftRight))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Div))))
+            Some((_, Ok(Token::Symbol(Symbol::Div))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Symbol(Symbol::Question))))
+            Some((_, Ok(Token::Symbol(Symbol::Question))))
         ));
         assert!(matches!(lexer.next(), None));
     }
@@ -911,86 +1242,86 @@ mod tests {
         let text = r#"
             a b c d e h l af bc de hl ix iy ixl ixh iyl iyh sp pc af'
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
+        let mut lexer = lexer(text);
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::A))))
+            Some((_, Ok(Token::Register(RegisterName::A))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::B))))
+            Some((_, Ok(Token::Register(RegisterName::B))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::C))))
+            Some((_, Ok(Token::Register(RegisterName::C))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::D))))
+            Some((_, Ok(Token::Register(RegisterName::D))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::E))))
+            Some((_, Ok(Token::Register(RegisterName::E))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::H))))
+            Some((_, Ok(Token::Register(RegisterName::H))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::L))))
+            Some((_, Ok(Token::Register(RegisterName::L))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::AF))))
+            Some((_, Ok(Token::Register(RegisterName::AF))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::BC))))
+            Some((_, Ok(Token::Register(RegisterName::BC))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::DE))))
+            Some((_, Ok(Token::Register(RegisterName::DE))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::HL))))
+            Some((_, Ok(Token::Register(RegisterName::HL))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::IX))))
+            Some((_, Ok(Token::Register(RegisterName::IX))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::IY))))
+            Some((_, Ok(Token::Register(RegisterName::IY))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::IXL))))
+            Some((_, Ok(Token::Register(RegisterName::IXL))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::IXH))))
+            Some((_, Ok(Token::Register(RegisterName::IXH))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::IYL))))
+            Some((_, Ok(Token::Register(RegisterName::IYL))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::IYH))))
+            Some((_, Ok(Token::Register(RegisterName::IYH))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::SP))))
+            Some((_, Ok(Token::Register(RegisterName::SP))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::PC))))
+            Some((_, Ok(Token::Register(RegisterName::PC))))
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Register(RegisterName::AFPrime))))
+            Some((_, Ok(Token::Register(RegisterName::AFPrime))))
         ));
         assert!(matches!(lexer.next(), None));
     }
@@ -1002,18 +1333,18 @@ mod tests {
             .local_label
             direct.label
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
+        let mut lexer = lexer(text);
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Label(LabelType::Global, s)))) if s == "global_label"
+            Some((_, Ok(Token::Label(LabelType::Global, s)))) if lexer.str_interner().eq_some("global_label", s)
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Label(LabelType::Local, s)))) if s == ".local_label"
+            Some((_, Ok(Token::Label(LabelType::Local, s)))) if lexer.str_interner().eq_some(".local_label", s)
         ));
         assert!(matches!(
             lexer.next(),
-            Some(Ok((_, Token::Label(LabelType::Direct, s)))) if s == "direct.label"
+            Some((_, Ok(Token::Label(LabelType::Direct, s)))) if lexer.str_interner().eq_some("direct.label", s)
         ));
         assert!(matches!(lexer.next(), None));
     }
@@ -1021,14 +1352,19 @@ mod tests {
     #[test]
     fn sanity_test() {
         let text = r#"
-            org $0000
+            #org $0000
+            
+            #macro foo arg1, arg2
+                add arg1, arg2
+            #end
             
             ; comment
-            add a, b
+            foo a, b
         "#;
-        let mut lexer = Lexer::new(FILE, Cursor::new(text));
-        while let Some(elem) = lexer.next() {
-            assert!(matches!(elem, Ok(elem)));
+        let mut lexer = lexer(text);
+        while let Some((loc, res)) = lexer.next() {
+            dbg!((loc, &res));
+            assert!(res.is_ok());
         }
     }
 }
