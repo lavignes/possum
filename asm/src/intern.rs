@@ -142,9 +142,9 @@ impl PathInterner {
     }
 
     #[inline]
-    pub fn get(&self, path: PathRef) -> Option<&Path> {
+    pub fn get(&self, pathref: PathRef) -> Option<&Path> {
         self.inner
-            .get(path.0)
+            .get(pathref.0)
             .map(|b| Path::new(OsStr::from_bytes(b)))
     }
 

@@ -5,7 +5,12 @@ mod intern;
 mod lexer;
 mod symtab;
 
-use std::{fs::File, io, io::Write, path::PathBuf, process::ExitCode};
+use std::{
+    fs::File,
+    io::{self, Write},
+    path::PathBuf,
+    process::ExitCode,
+};
 
 use clap::Parser;
 
@@ -30,7 +35,7 @@ struct Args {
 fn main() -> ExitCode {
     let args = Args::parse();
 
-    let output: Box<dyn Write> = if let Some(path) = args.output {
+    let mut output: Box<dyn Write> = if let Some(path) = args.output {
         let result = File::options()
             .write(true)
             .create(true)
@@ -47,8 +52,8 @@ fn main() -> ExitCode {
         Box::new(io::stdout())
     };
 
-    let mut assembler = Assembler::new(Box::new(FileLexerFactory::new()), output);
-    match assembler.assemble(args.input) {
+    let assembler = Assembler::new(Box::new(FileLexerFactory::new()));
+    match assembler.assemble(args.input, &mut output) {
         Err(e) => {
             eprintln!("{e}");
             ExitCode::FAILURE

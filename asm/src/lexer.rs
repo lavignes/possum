@@ -14,15 +14,19 @@ use crate::{
 
 #[derive(Copy, Clone, Debug)]
 pub struct SourceLoc {
-    pub path: PathRef,
+    pub pathref: PathRef,
     pub line: usize,
     pub column: usize,
 }
 
 impl Display for SourceLoc {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let Self { path, line, column } = self;
-        write!(f, "<pathref {path:?}>:{line}:{column}")
+        let Self {
+            pathref,
+            line,
+            column,
+        } = self;
+        write!(f, "<pathref {pathref:?}>:{line}:{column}")
     }
 }
 
@@ -571,7 +575,7 @@ pub trait LexerFactory<R> {
         &self,
         path_interner: Ref<PathInterner>,
         str_interner: Rc<RefCell<StrInterner>>,
-        path: PathRef,
+        pathref: PathRef,
     ) -> io::Result<Lexer<R>>;
 }
 
@@ -588,11 +592,11 @@ impl LexerFactory<File> for FileLexerFactory {
         &self,
         path_interner: Ref<PathInterner>,
         str_interner: Rc<RefCell<StrInterner>>,
-        path: PathRef,
+        pathref: PathRef,
     ) -> io::Result<Lexer<File>> {
         // TODO: Need to pass the file manager!
-        let reader = File::open(path_interner.get(path).unwrap())?;
-        Ok(Lexer::new(str_interner, path, reader))
+        let file = File::open(path_interner.get(pathref).unwrap())?;
+        Ok(Lexer::new(str_interner, pathref, file))
     }
 }
 
@@ -609,9 +613,9 @@ pub struct Lexer<R> {
 
 impl<R: Read> Lexer<R> {
     #[inline]
-    pub fn new(str_interner: Rc<RefCell<StrInterner>>, path: PathRef, reader: R) -> Self {
+    pub fn new(str_interner: Rc<RefCell<StrInterner>>, pathref: PathRef, reader: R) -> Self {
         let loc = SourceLoc {
-            path,
+            pathref,
             line: 1,
             column: 1,
         };
@@ -1054,16 +1058,13 @@ impl<R: Read> Iterator for Lexer<R> {
 mod tests {
     use std::{cell::RefCell, io::Cursor, rc::Rc};
 
-    use crate::{
-        lexer::{LabelType, RegisterName, Symbol, Token},
-        Lexer, PathInterner, StrInterner,
-    };
+    use super::*;
 
     fn lexer(text: &str) -> Lexer<Cursor<&str>> {
         let path_interner = Rc::new(RefCell::new(PathInterner::new()));
         let str_interner = Rc::new(RefCell::new(StrInterner::new()));
-        let path = path_interner.borrow_mut().intern("file.test");
-        Lexer::new(str_interner, path, Cursor::new(text))
+        let pathref = path_interner.borrow_mut().intern("file.test");
+        Lexer::new(str_interner, pathref, Cursor::new(text))
     }
 
     #[test]
