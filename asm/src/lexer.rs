@@ -1,8 +1,7 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
     fmt::{self, Display, Formatter},
-    fs::File,
-    io::{self, Read},
+    io::Read,
     rc::Rc,
 };
 
@@ -568,36 +567,6 @@ pub enum Token {
     Register(RegisterName),
     Symbol(Symbol),
     Label(LabelType, StrRef),
-}
-
-pub trait LexerFactory<R> {
-    fn create(
-        &self,
-        path_interner: Ref<PathInterner>,
-        str_interner: Rc<RefCell<StrInterner>>,
-        pathref: PathRef,
-    ) -> io::Result<Lexer<R>>;
-}
-
-pub struct FileLexerFactory {}
-
-impl FileLexerFactory {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl LexerFactory<File> for FileLexerFactory {
-    fn create(
-        &self,
-        path_interner: Ref<PathInterner>,
-        str_interner: Rc<RefCell<StrInterner>>,
-        pathref: PathRef,
-    ) -> io::Result<Lexer<File>> {
-        // TODO: Need to pass the file manager!
-        let file = File::open(path_interner.get(pathref).unwrap())?;
-        Ok(Lexer::new(str_interner, pathref, file))
-    }
 }
 
 pub struct Lexer<R> {

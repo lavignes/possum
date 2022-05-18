@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    io::{Read, Write},
+    io::{self, Read, Write},
     path::Path,
     rc::Rc,
 };
@@ -8,9 +8,10 @@ use std::{
 use fxhash::FxHashMap;
 
 use crate::{
+    fileman::{FileManager, FileSystem},
     intern::StrRef,
-    lexer::{Lexer, LexerFactory, SourceLoc, Token},
-    PathInterner, StrInterner,
+    lexer::{Lexer, SourceLoc, Token},
+    StrInterner,
 };
 
 #[derive(Clone, Debug)]
@@ -41,10 +42,9 @@ enum State {
 #[error("{0}")]
 pub struct AssemblerError(String);
 
-pub struct Assembler<R> {
-    path_interner: Rc<RefCell<PathInterner>>,
+pub struct Assembler<S, R> {
+    file_manager: FileManager<S>,
     str_interner: Rc<RefCell<StrInterner>>,
-    lexer_factory: Box<dyn LexerFactory<R>>,
     lexers: Vec<Lexer<R>>,
     macros: FxHashMap<StrRef, Macro>,
     pass_index: usize,
@@ -55,12 +55,11 @@ pub struct Assembler<R> {
     active_macro: Option<StrRef>,
 }
 
-impl<R: Read> Assembler<R> {
-    pub fn new(lexer_factory: Box<dyn LexerFactory<R>>) -> Self {
+impl<S: FileSystem<Reader = R>, R: Read> Assembler<S, R> {
+    pub fn new(file_system: S) -> Self {
         Self {
-            path_interner: Rc::new(RefCell::new(PathInterner::new())),
+            file_manager: FileManager::new(file_system),
             str_interner: Rc::new(RefCell::new(StrInterner::new())),
-            lexer_factory,
             lexers: Vec::new(),
             macros: FxHashMap::default(),
             pass_index: 0,
@@ -72,27 +71,39 @@ impl<R: Read> Assembler<R> {
         }
     }
 
-    pub fn assemble<P: AsRef<Path>>(
+    pub fn add_search_path<C: AsRef<Path>, P: AsRef<Path>>(
+        &mut self,
+        cwd: C,
+        path: P,
+    ) -> io::Result<()> {
+        self.file_manager.add_search_path(cwd, path)?;
+        Ok(())
+    }
+
+    pub fn assemble<C: AsRef<Path>, P: AsRef<Path>>(
         mut self,
+        cwd: C,
         path: P,
         bin_writer: &mut dyn Write,
     ) -> Result<(), AssemblerError> {
-        // TODO: We need a file manager that can resolve working dirs and include paths!
-        let path = path.as_ref();
-        let pathref = self.path_interner.borrow_mut().intern(path.clone());
+        let (pathref, reader) = match self.file_manager.reader(cwd, path.as_ref()) {
+            Ok(Some(tup)) => tup,
+            Ok(None) => {
+                return Err(AssemblerError(format!(
+                    "File not found: \"{}\"",
+                    path.as_ref().display()
+                )))
+            }
+            Err(e) => {
+                return Err(AssemblerError(format!(
+                    "Failed to open \"{}\" for reading: {e}",
+                    path.as_ref().display()
+                )))
+            }
+        };
 
-        let lexer = self.lexer_factory.create(
-            self.path_interner.borrow(),
-            self.str_interner.clone(),
-            pathref,
-        );
-
-        self.lexers.push(lexer.map_err(|e| {
-            AssemblerError(format!(
-                "Failed to open \"{}\" for reading: {e}",
-                path.display()
-            ))
-        })?);
+        let lexer = Lexer::new(self.str_interner.clone(), pathref, reader);
+        self.lexers.push(lexer);
 
         self.pass(bin_writer)?;
         self.pass(bin_writer)
@@ -116,54 +127,64 @@ impl<R: Read> Assembler<R> {
 #[cfg(test)]
 mod tests {
     use std::{
-        cell::Ref,
-        io::{self, Cursor, ErrorKind},
+        io::{self, Cursor},
         path::PathBuf,
     };
 
     use fxhash::FxHashMap;
 
     use super::*;
-    use crate::intern::PathRef;
 
-    fn assembler<P: AsRef<Path>>(files: &[(P, &str)]) -> Assembler<Cursor<String>> {
-        struct StringLexerFactory {
-            files: FxHashMap<PathBuf, Cursor<String>>,
-        }
+    struct StringFileSystem {
+        files: FxHashMap<PathBuf, String>,
+    }
 
-        impl LexerFactory<Cursor<String>> for StringLexerFactory {
-            fn create(
-                &self,
-                path_interner: Ref<PathInterner>,
-                str_interner: Rc<RefCell<StrInterner>>,
-                pathref: PathRef,
-            ) -> io::Result<Lexer<Cursor<String>>> {
-                let path = path_interner.get(pathref).unwrap();
-                match self.files.get(path) {
-                    Some(reader) => Ok(Lexer::new(str_interner, pathref, reader.clone())),
-                    None => Err(io::Error::new(ErrorKind::NotFound, "File not found")),
-                }
+    impl StringFileSystem {
+        #[inline]
+        fn new<P: AsRef<Path>>(files: &[(P, &str)]) -> Self {
+            let mut map = FxHashMap::default();
+            for (path, s) in files {
+                map.insert(path.as_ref().to_path_buf(), s.to_string());
             }
+            Self { files: map }
+        }
+    }
+
+    impl FileSystem for StringFileSystem {
+        type Reader = Cursor<String>;
+
+        #[inline]
+        fn is_dir(&self, _: &Path) -> io::Result<bool> {
+            Ok(true)
         }
 
-        let mut map = FxHashMap::default();
-        for (path, string) in files {
-            map.insert(path.as_ref().into(), Cursor::new(string.to_string()));
+        #[inline]
+        fn is_file(&self, path: &Path) -> io::Result<bool> {
+            Ok(self.files.contains_key(path))
         }
 
-        Assembler::new(Box::new(StringLexerFactory { files: map }))
+        #[inline]
+        fn open_read(&self, path: &Path) -> io::Result<Self::Reader> {
+            Ok(Cursor::new(self.files.get(path).unwrap().clone()))
+        }
+    }
+
+    fn assembler<P: AsRef<Path>>(
+        files: &[(P, &str)],
+    ) -> Assembler<StringFileSystem, Cursor<String>> {
+        Assembler::new(StringFileSystem::new(files))
     }
 
     #[test]
     fn sanity() {
         let assembler = assembler(&[(
-            "test.asm",
+            "/test.asm",
             r#"
             "#,
         )]);
 
         let mut binary = Vec::new();
-        assert!(assembler.assemble("test.asm", &mut binary).is_ok());
+        assert!(assembler.assemble("/", "test.asm", &mut binary).is_ok());
 
         assert_eq!("testtest", String::from_utf8(binary).unwrap());
     }

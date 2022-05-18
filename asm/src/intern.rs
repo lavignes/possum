@@ -1,9 +1,15 @@
 use std::{
-    borrow::Borrow, ffi::OsStr, marker::PhantomData, mem, os::unix::ffi::OsStrExt, path::Path, ptr,
-    str,
+    borrow::Borrow,
+    ffi::OsStr,
+    marker::PhantomData,
+    mem,
+    os::unix::ffi::OsStrExt,
+    path::{Component, Path, PathBuf},
+    ptr, str,
 };
 
 use fxhash::FxHashSet;
+use path_absolutize::Absolutize;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct BytesRef(RiskySlice<'static>);
@@ -119,6 +125,33 @@ impl StrInterner {
     }
 }
 
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct PathRef(BytesRef);
 
@@ -152,6 +185,47 @@ impl PathInterner {
     pub fn eq<P: AsRef<Path>>(&self, expected: P, interned: PathRef) -> Option<bool> {
         self.inner
             .eq(expected.as_ref().as_os_str().as_bytes(), interned.0)
+    }
+
+    #[inline]
+    pub fn eq_some<P: AsRef<Path>>(&self, expected: P, interned: PathRef) -> bool {
+        matches!(self.eq(expected, interned), Some(true))
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct AbsPathInterner {
+    inner: PathInterner,
+}
+
+impl AbsPathInterner {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            inner: PathInterner::new(),
+        }
+    }
+
+    #[inline]
+    pub fn intern<C: AsRef<Path>, P: AsRef<Path>>(&mut self, cwd: C, path: P) -> PathRef {
+        let cwd = cwd.as_ref();
+        let path = path.as_ref();
+        self.inner.intern(path.absolutize_from(cwd).unwrap())
+    }
+
+    #[inline]
+    pub fn get(&self, pathref: PathRef) -> Option<&Path> {
+        self.inner.get(pathref)
+    }
+
+    #[inline]
+    pub fn eq<P: AsRef<Path>>(&self, expected: P, interned: PathRef) -> Option<bool> {
+        self.inner.eq(expected.as_ref(), interned)
+    }
+
+    #[inline]
+    pub fn eq_some<P: AsRef<Path>>(&self, expected: P, interned: PathRef) -> bool {
+        matches!(self.inner.eq(expected, interned), Some(true))
     }
 }
 
@@ -210,5 +284,19 @@ mod tests {
         assert_eq!(as_ref("shoes"), int.get(shoes).unwrap());
         assert_eq!(as_ref("socks"), int.get(socks).unwrap());
         assert_eq!(as_ref("shirts"), int.get(shirts).unwrap());
+    }
+
+    #[test]
+    fn abs_paths() {
+        let mut int = AbsPathInterner::new();
+        let hello = int.intern("/foo", "./hello");
+
+        let as_ref = AsRef::<Path>::as_ref;
+        assert_eq!(as_ref("/foo/hello"), int.get(hello).unwrap());
+
+        let shoes = int.intern("/foo", "../shoes");
+
+        assert_eq!(as_ref("/foo/hello"), int.get(hello).unwrap());
+        assert_eq!(as_ref("/shoes"), int.get(shoes).unwrap());
     }
 }
