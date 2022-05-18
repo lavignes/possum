@@ -7,7 +7,8 @@ mod lexer;
 mod symtab;
 
 use std::{
-    fs::File,
+    env,
+    fs::{self, File},
     io::{self, Write},
     path::PathBuf,
     process::ExitCode,
@@ -45,10 +46,13 @@ fn main() -> ExitCode {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(path.clone());
+            .open(path.as_path());
         match result {
             Err(e) => {
-                eprintln!("Cannot open file \"{}\" for writing: {e}", path.display());
+                eprintln!(
+                    "Cannot open output file \"{}\" for writing: {e}",
+                    path.display()
+                );
                 return ExitCode::FAILURE;
             }
             Ok(file) => Box::new(file),
@@ -57,21 +61,19 @@ fn main() -> ExitCode {
         Box::new(io::stdout())
     };
 
-    let cwd = std::env::current_dir().unwrap();
+    let cwd = env::current_dir().unwrap();
+    let full_cwd = fs::canonicalize(cwd).unwrap();
     let file_system = RealFileSystem::new();
     let mut assembler = Assembler::new(file_system);
 
     for path in &args.include {
-        if let Err(e) = assembler.add_search_path(cwd.clone(), path) {
-            eprintln!(
-                "Could not read include directory \"{}\": {e}",
-                path.display()
-            );
+        if let Err(e) = assembler.add_search_path(full_cwd.as_path(), path) {
+            eprintln!("{e}");
             return ExitCode::FAILURE;
         }
     }
 
-    if let Err(e) = assembler.assemble(cwd, args.file, &mut output) {
+    if let Err(e) = assembler.assemble(full_cwd.as_path(), args.file, &mut output) {
         eprintln!("{e}");
         ExitCode::FAILURE
     } else {

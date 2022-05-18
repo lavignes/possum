@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    io::{self, Read, Write},
+    io::{Read, Write},
     path::Path,
     rc::Rc,
 };
@@ -75,8 +75,14 @@ impl<S: FileSystem<Reader = R>, R: Read> Assembler<S, R> {
         &mut self,
         cwd: C,
         path: P,
-    ) -> io::Result<()> {
-        self.file_manager.add_search_path(cwd, path)?;
+    ) -> Result<(), AssemblerError> {
+        let path = path.as_ref();
+        self.file_manager.add_search_path(cwd, path).map_err(|e| {
+            AssemblerError(format!(
+                "Failed to find include path \"{}\": {e}",
+                path.display()
+            ))
+        })?;
         Ok(())
     }
 
@@ -86,18 +92,19 @@ impl<S: FileSystem<Reader = R>, R: Read> Assembler<S, R> {
         path: P,
         bin_writer: &mut dyn Write,
     ) -> Result<(), AssemblerError> {
-        let (pathref, reader) = match self.file_manager.reader(cwd, path.as_ref()) {
+        let path = path.as_ref();
+        let (pathref, reader) = match self.file_manager.reader(cwd, path) {
             Ok(Some(tup)) => tup,
             Ok(None) => {
                 return Err(AssemblerError(format!(
                     "File not found: \"{}\"",
-                    path.as_ref().display()
+                    path.display()
                 )))
             }
             Err(e) => {
                 return Err(AssemblerError(format!(
                     "Failed to open \"{}\" for reading: {e}",
-                    path.as_ref().display()
+                    path.display()
                 )))
             }
         };

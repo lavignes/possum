@@ -1,11 +1,6 @@
 use std::{
-    borrow::Borrow,
-    ffi::OsStr,
-    marker::PhantomData,
-    mem,
-    os::unix::ffi::OsStrExt,
-    path::{Component, Path, PathBuf},
-    ptr, str,
+    borrow::Borrow, ffi::OsStr, marker::PhantomData, mem, os::unix::ffi::OsStrExt, path::Path, ptr,
+    str,
 };
 
 use fxhash::FxHashSet;

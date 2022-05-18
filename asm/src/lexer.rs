@@ -8,7 +8,7 @@ use std::{
 use crate::{
     charreader::{CharReader, CharReaderError},
     intern::{PathRef, StrRef},
-    PathInterner, StrInterner,
+    StrInterner,
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -16,17 +16,6 @@ pub struct SourceLoc {
     pub pathref: PathRef,
     pub line: usize,
     pub column: usize,
-}
-
-impl Display for SourceLoc {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let Self {
-            pathref,
-            line,
-            column,
-        } = self;
-        write!(f, "<pathref {pathref:?}>:{line}:{column}")
-    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -601,12 +590,12 @@ impl<R: Read> Lexer<R> {
     }
 
     #[inline]
-    pub fn str_interner(&self) -> Ref<StrInterner> {
+    fn str_interner(&self) -> Ref<StrInterner> {
         self.str_interner.as_ref().borrow()
     }
 
     #[inline]
-    pub fn str_interner_mut(&self) -> RefMut<StrInterner> {
+    fn str_interner_mut(&self) -> RefMut<StrInterner> {
         self.str_interner.borrow_mut()
     }
 
