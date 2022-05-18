@@ -1017,6 +1017,7 @@ mod tests {
     use std::{cell::RefCell, io::Cursor, rc::Rc};
 
     use super::*;
+    use crate::intern::PathInterner;
 
     fn lexer(text: &str) -> Lexer<Cursor<&str>> {
         let path_interner = Rc::new(RefCell::new(PathInterner::new()));
@@ -1104,7 +1105,7 @@ mod tests {
     #[test]
     fn symbols() {
         let text = r#"
-            ~ ! $ % ^ & && * ( ) - = + | || : , < > <= >= << >> / ?
+            ~ ! $ % ^ & && * ( ) - == + | || : , < > <= >= << >> / ?
         "#;
         let mut lexer = lexer(text);
         assert!(matches!(
