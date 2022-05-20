@@ -40,6 +40,8 @@ impl BytesInterner {
     pub fn intern<T: AsRef<[u8]>>(&mut self, bytes: T) -> BytesRef {
         let bytes = bytes.as_ref();
         if let Some(&slice) = self.map.get(bytes) {
+            // Safety: We preserve pointer validity by chaining buffers together
+            //   rather than re-allocating them
             return BytesRef(unsafe { mem::transmute::<_, RiskySlice<'static>>(slice) });
         }
         let slice = self.buffer(bytes);
@@ -70,12 +72,10 @@ impl BytesInterner {
         buffer.extend_from_slice(slice);
         // Safety: We preserve pointer validity by chaining buffers together
         //   rather than re-allocating them
-        unsafe {
-            RiskySlice {
-                data: buffer.as_ptr().add(start),
-                len: slice.len(),
-                marker: PhantomData,
-            }
+        RiskySlice {
+            data: unsafe { buffer.as_ptr().add(start) },
+            len: slice.len(),
+            marker: PhantomData,
         }
     }
 }
@@ -106,6 +106,7 @@ impl StrInterner {
     pub fn get(&self, string: StrRef) -> Option<&str> {
         self.inner
             .get(string.0)
+            // Safety: It *was* a string when it came in
             .map(|b| unsafe { str::from_utf8_unchecked(b) })
     }
 

@@ -1,4 +1,9 @@
-use std::{fs, fs::File, io, io::Read, iter, path::Path};
+use std::{
+    fs::{self, File},
+    io::{self, Read},
+    iter,
+    path::Path,
+};
 
 use crate::intern::{AbsPathInterner, PathRef};
 
@@ -24,8 +29,7 @@ impl FileSystem for RealFileSystem {
 
     #[inline]
     fn is_dir(&self, path: &Path) -> io::Result<bool> {
-        fs::read_dir(path)?;
-        Ok(true)
+        Ok(fs::metadata(path)?.is_dir())
     }
 
     #[inline]
@@ -53,6 +57,11 @@ impl<S: FileSystem> FileManager<S> {
             path_interner: AbsPathInterner::new(),
             search_paths: Vec::new(),
         }
+    }
+
+    #[inline]
+    pub fn path(&self, pathref: PathRef) -> Option<&Path> {
+        self.path_interner.get(pathref)
     }
 
     pub fn add_search_path<C: AsRef<Path>, P: AsRef<Path>>(

@@ -546,9 +546,10 @@ pub enum LabelType {
     Direct,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Token {
     Comment,
+    NewLine,
     String(StrRef),
     Number(usize),
     Operation(OperationName),
@@ -587,6 +588,11 @@ impl<R: Read> Lexer<R> {
             state: State::Initial,
             buffer: String::new(),
         }
+    }
+
+    #[inline]
+    pub fn included_from(&self) -> Option<SourceLoc> {
+        self.included_from
     }
 
     #[inline]
@@ -654,11 +660,8 @@ impl<R: Read> Iterator for Lexer<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let c = match self.stash {
-                Some(c) => {
-                    self.stash = None;
-                    c
-                }
+            let c = match self.stash.take() {
+                Some(c) => c,
                 None => match self.inner.next() {
                     None => return None,
                     Some(Err(e)) => {
@@ -677,6 +680,8 @@ impl<R: Read> Iterator for Lexer<R> {
 
             match self.state {
                 State::Initial => match c {
+                    '\n' => return Some((self.loc, Ok(Token::NewLine))),
+
                     _ if c.is_whitespace() => continue,
 
                     ';' => {

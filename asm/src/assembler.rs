@@ -1,5 +1,7 @@
 use std::{
+    borrow::Borrow,
     cell::RefCell,
+    fmt,
     io::{Read, Write},
     path::Path,
     rc::Rc,
@@ -10,20 +12,14 @@ use fxhash::FxHashMap;
 use crate::{
     fileman::{FileManager, FileSystem},
     intern::StrRef,
-    lexer::{Lexer, SourceLoc, Token},
+    lexer::{Lexer, LexerError, SourceLoc, Token},
     StrInterner,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 enum MacroToken {
     Token(Token),
     Argument(usize),
-}
-
-impl From<Token> for MacroToken {
-    fn from(tok: Token) -> Self {
-        Self::Token(tok)
-    }
 }
 
 struct Macro {
@@ -38,6 +34,10 @@ enum State {
     Initial,
 }
 
+struct Context<'a> {
+    bin_writer: &'a dyn Write,
+}
+
 #[derive(thiserror::Error, Debug)]
 #[error("{0}")]
 pub struct AssemblerError(String);
@@ -46,10 +46,11 @@ pub struct Assembler<S, R> {
     file_manager: FileManager<S>,
     str_interner: Rc<RefCell<StrInterner>>,
     lexers: Vec<Lexer<R>>,
+    lexer: Option<Lexer<R>>,
     macros: FxHashMap<StrRef, Macro>,
     pass_index: usize,
 
-    stash: Option<(SourceLoc, MacroToken)>,
+    stash: Option<(SourceLoc, Result<MacroToken, LexerError>)>,
     pc: isize,
     state: Vec<State>,
     active_macro: Option<StrRef>,
@@ -61,6 +62,7 @@ impl<S: FileSystem<Reader = R>, R: Read> Assembler<S, R> {
             file_manager: FileManager::new(file_system),
             str_interner: Rc::new(RefCell::new(StrInterner::new())),
             lexers: Vec::new(),
+            lexer: None,
             macros: FxHashMap::default(),
             pass_index: 0,
 
@@ -109,25 +111,117 @@ impl<S: FileSystem<Reader = R>, R: Read> Assembler<S, R> {
             }
         };
 
-        let lexer = Lexer::new(self.str_interner.clone(), pathref, reader);
-        self.lexers.push(lexer);
+        self.lexer = Some(Lexer::new(self.str_interner.clone(), pathref, reader));
 
-        self.pass(bin_writer)?;
-        self.pass(bin_writer)
+        let mut ctx = Context { bin_writer };
+        self.pass(&mut ctx)?;
+        self.pass(&mut ctx)
     }
 
-    fn pass(&mut self, bin_writer: &mut dyn Write) -> Result<(), AssemblerError> {
-        let result = self.pass_real(bin_writer);
+    fn pass(&mut self, ctx: &mut Context) -> Result<(), AssemblerError> {
+        let result = self.pass_real(ctx);
         self.pass_index += 1;
         result
     }
 
-    fn pass_real(&mut self, bin_writer: &mut dyn Write) -> Result<(), AssemblerError> {
+    fn peek(&mut self) -> Option<&(SourceLoc, Result<MacroToken, LexerError>)> {
+        loop {
+            // Skip comment tokens
+            if let Some((_, Ok(MacroToken::Token(Token::Comment)))) = self.stash {
+                self.stash = None;
+            } else {
+                return self.stash.as_ref();
+            }
+            if self.lexer.is_none() {
+                self.lexer = self.lexers.pop();
+            }
+            match &mut self.lexer {
+                None => return None,
+                Some(lexer) => {
+                    self.stash = lexer
+                        .next()
+                        .map(|(loc, result)| (loc, result.map(MacroToken::Token)));
+                    continue;
+                }
+            }
+        }
+    }
+
+    fn next(&mut self) -> Option<(SourceLoc, Result<MacroToken, LexerError>)> {
+        self.peek();
+        self.stash.take()
+    }
+
+    fn make_full_error(&self, loc: SourceLoc, e: AssemblerError) -> AssemblerError {
+        let mut msg = String::new();
+        let mut fmt_msg = &mut msg as &mut dyn fmt::Write;
+
+        let path = self.file_manager.borrow().path(loc.pathref).unwrap();
+        writeln!(fmt_msg, "From \"{}\"", path.display()).unwrap();
+
+        let mut included_from = self.lexer.as_ref().unwrap().included_from();
+        for lexer in self.lexers.iter().rev() {
+            let loc = included_from.unwrap();
+            let path = self.file_manager.borrow().path(loc.pathref).unwrap();
+            writeln!(
+                fmt_msg,
+                "\tIncluded at {}:{}:{}",
+                path.display(),
+                loc.line,
+                loc.column
+            )
+            .unwrap();
+            included_from = lexer.included_from();
+        }
+        writeln!(
+            fmt_msg,
+            "\n{}:{}:{}:",
+            path.file_name().unwrap().to_str().unwrap(),
+            loc.line,
+            loc.column
+        )
+        .unwrap();
+        writeln!(fmt_msg, "{e}").unwrap();
+        AssemblerError(msg)
+    }
+
+    fn pass_real(&mut self, ctx: &mut Context) -> Result<(), AssemblerError> {
         self.pc = 0;
-
-        write!(bin_writer, "test").map_err(|e| AssemblerError(e.to_string()))?;
-
+        loop {
+            match self.item_opt(ctx) {
+                Some((loc, Err(e))) => Err(self.make_full_error(loc, e))?,
+                Some(_) => {}
+                None => break,
+            }
+        }
         Ok(())
+    }
+
+    fn item_opt(&mut self, ctx: &mut Context) -> Option<(SourceLoc, Result<(), AssemblerError>)> {
+        /*
+        match self.peek() {
+            Some()
+
+            None => None,
+        }
+        */
+
+        None
+
+        // if let Some(directive) = self.directive_opt(ctx) {
+        //     return Some(value);
+        // }
+        // if let Some(value) = self.directive_opt(ctx) {
+        //     return Some(value);
+        // }
+        // return None;
+    }
+
+    fn directive_opt(
+        &mut self,
+        ctx: &mut Context,
+    ) -> Option<(SourceLoc, Result<MacroToken, AssemblerError>)> {
+        None
     }
 }
 
@@ -187,12 +281,13 @@ mod tests {
         let assembler = assembler(&[(
             "/test.asm",
             r#"
+                
             "#,
         )]);
 
         let mut binary = Vec::new();
-        assert!(assembler.assemble("/", "test.asm", &mut binary).is_ok());
+        assembler.assemble("/", "test.asm", &mut binary).unwrap();
 
-        assert_eq!("testtest", String::from_utf8(binary).unwrap());
+        // assert_eq!("testtest", String::from_utf8(binary).unwrap());
     }
 }

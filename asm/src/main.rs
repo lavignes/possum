@@ -16,11 +16,7 @@ use std::{
 
 use clap::Parser;
 
-use crate::{
-    assembler::Assembler,
-    fileman::RealFileSystem,
-    intern::{PathInterner, StrInterner},
-};
+use crate::{assembler::Assembler, fileman::RealFileSystem, intern::StrInterner};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]

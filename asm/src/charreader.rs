@@ -50,7 +50,8 @@ impl<R: Read> Iterator for CharReader<R> {
                 if valid_len == 0 {
                     return Some(Err(e.into()));
                 }
-                str::from_utf8(&self.buf[0..self.buf_len]).unwrap()
+                // Safety: We already checked up to `valid_len`
+                unsafe { str::from_utf8_unchecked(&self.buf[0..valid_len]) }
             }
         };
 
