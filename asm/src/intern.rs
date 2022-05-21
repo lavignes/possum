@@ -1,6 +1,12 @@
 use std::{
-    borrow::Borrow, ffi::OsStr, marker::PhantomData, mem, os::unix::ffi::OsStrExt, path::Path, ptr,
-    str,
+    borrow::Borrow,
+    ffi::OsStr,
+    hash::{Hash, Hasher},
+    marker::PhantomData,
+    mem,
+    os::unix::ffi::OsStrExt,
+    path::Path,
+    ptr, slice, str,
 };
 
 use fxhash::FxHashSet;
@@ -9,7 +15,7 @@ use path_absolutize::Absolutize;
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct BytesRef(RiskySlice<'static>);
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone)]
 struct RiskySlice<'a> {
     data: *const u8,
     len: usize,
@@ -17,8 +23,28 @@ struct RiskySlice<'a> {
 }
 
 impl<'a> Borrow<[u8]> for RiskySlice<'a> {
+    #[inline]
     fn borrow(&self) -> &[u8] {
-        unsafe { &*ptr::slice_from_raw_parts(self.data, self.len) }
+        unsafe { &*slice::from_raw_parts(self.data, self.len) }
+    }
+}
+
+impl<'a> PartialEq<Self> for RiskySlice<'a> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        unsafe {
+            slice::from_raw_parts(self.data, self.len)
+                == slice::from_raw_parts(other.data, other.len)
+        }
+    }
+}
+
+impl<'a> Eq for RiskySlice<'a> {}
+
+impl<'a> Hash for RiskySlice<'a> {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        unsafe { slice::from_raw_parts(self.data, self.len).hash(state) }
     }
 }
 
@@ -41,7 +67,7 @@ impl BytesInterner {
         let bytes = bytes.as_ref();
         if let Some(&slice) = self.map.get(bytes) {
             // Safety: We preserve pointer validity by chaining buffers together
-            //   rather than re-allocating them
+            //   rather than re-allocating them.
             return BytesRef(unsafe { mem::transmute::<_, RiskySlice<'static>>(slice) });
         }
         let slice = self.buffer(bytes);

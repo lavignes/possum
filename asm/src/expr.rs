@@ -11,9 +11,18 @@ pub struct Expr {
     nodes: Vec<ExprNode>,
 }
 
+impl From<i32> for Expr {
+    #[inline]
+    fn from(value: i32) -> Self {
+        Self {
+            nodes: vec![ExprNode::Value(value)],
+        }
+    }
+}
+
 impl Expr {
     #[inline]
-    pub fn evaluate(&self, symtab: &Symtab) -> Result<Option<isize>, ExprError> {
+    pub fn evaluate(&self, symtab: &Symtab) -> Result<Option<i32>, ExprError> {
         Self::eval(symtab, &self.nodes, 0)
     }
 
@@ -21,12 +30,12 @@ impl Expr {
         symtab: &Symtab,
         nodes: &Vec<ExprNode>,
         index: usize,
-    ) -> Result<Option<isize>, ExprError> {
+    ) -> Result<Option<i32>, ExprError> {
         match nodes[index] {
             ExprNode::Value(value) => Ok(Some(value)),
             ExprNode::Label(label) => match symtab.get(label) {
                 Some(Symbol::Expr(_)) => Ok(None),
-                Some(Symbol::Value(value)) => Ok(Some(*value)),
+                Some(Symbol::Value(value)) => Ok(Some(*value as i32)),
                 _ => Ok(None),
             },
             ExprNode::Invert(index) => match Self::eval(symtab, nodes, index)? {
@@ -34,7 +43,7 @@ impl Expr {
                 _ => Ok(None),
             },
             ExprNode::Not(index) => match Self::eval(symtab, nodes, index)? {
-                Some(value) => Ok(Some(!(value != 0) as isize)),
+                Some(value) => Ok(Some(!(value != 0) as i32)),
                 _ => Ok(None),
             },
             ExprNode::Neg(index) => match Self::eval(symtab, nodes, index)? {
@@ -125,7 +134,7 @@ impl Expr {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
                 match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(((lhs != 0) && (rhs != 0)) as isize)),
+                    (Some(lhs), Some(rhs)) => Ok(Some(((lhs != 0) && (rhs != 0)) as i32)),
                     _ => Ok(None),
                 }
             }
@@ -133,7 +142,7 @@ impl Expr {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
                 match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(((lhs != 0) || (rhs != 0)) as isize)),
+                    (Some(lhs), Some(rhs)) => Ok(Some(((lhs != 0) || (rhs != 0)) as i32)),
                     _ => Ok(None),
                 }
             }
@@ -141,7 +150,7 @@ impl Expr {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
                 match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs < rhs) as isize)),
+                    (Some(lhs), Some(rhs)) => Ok(Some((lhs < rhs) as i32)),
                     _ => Ok(None),
                 }
             }
@@ -149,7 +158,7 @@ impl Expr {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
                 match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs <= rhs) as isize)),
+                    (Some(lhs), Some(rhs)) => Ok(Some((lhs <= rhs) as i32)),
                     _ => Ok(None),
                 }
             }
@@ -157,7 +166,7 @@ impl Expr {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
                 match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs > rhs) as isize)),
+                    (Some(lhs), Some(rhs)) => Ok(Some((lhs > rhs) as i32)),
                     _ => Ok(None),
                 }
             }
@@ -165,7 +174,7 @@ impl Expr {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
                 match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs >= rhs) as isize)),
+                    (Some(lhs), Some(rhs)) => Ok(Some((lhs >= rhs) as i32)),
                     _ => Ok(None),
                 }
             }
@@ -173,7 +182,7 @@ impl Expr {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
                 match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs == rhs) as isize)),
+                    (Some(lhs), Some(rhs)) => Ok(Some((lhs == rhs) as i32)),
                     _ => Ok(None),
                 }
             }
@@ -181,7 +190,7 @@ impl Expr {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
                 match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs != rhs) as isize)),
+                    (Some(lhs), Some(rhs)) => Ok(Some((lhs != rhs) as i32)),
                     _ => Ok(None),
                 }
             }
@@ -202,7 +211,7 @@ impl Expr {
 
 #[derive(Copy, Clone, Debug)]
 pub enum ExprNode {
-    Value(isize),
+    Value(i32),
     Label(StrRef),
     Invert(usize),
     Not(usize),

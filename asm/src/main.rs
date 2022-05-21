@@ -1,9 +1,12 @@
-mod assembler;
+#![feature(result_option_inspect)]
+
 mod charreader;
 mod expr;
 mod fileman;
 mod intern;
 mod lexer;
+mod module;
+mod parser;
 mod symtab;
 
 use std::{
@@ -14,11 +17,9 @@ use std::{
     process::ExitCode,
 };
 
-use clap::Parser;
+use crate::{fileman::RealFileSystem, intern::StrInterner, parser::Parser};
 
-use crate::{assembler::Assembler, fileman::RealFileSystem, intern::StrInterner};
-
-#[derive(Parser, Debug)]
+#[derive(clap::Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// Path to input assembly file
@@ -35,7 +36,7 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let args = <Args as clap::Parser>::parse();
 
     let mut output: Box<dyn Write> = if let Some(path) = args.output {
         let result = File::options()
@@ -60,19 +61,22 @@ fn main() -> ExitCode {
     let cwd = env::current_dir().unwrap();
     let full_cwd = fs::canonicalize(cwd).unwrap();
     let file_system = RealFileSystem::new();
-    let mut assembler = Assembler::new(file_system);
+    let mut parser = Parser::new(file_system);
 
     for path in &args.include {
-        if let Err(e) = assembler.add_search_path(full_cwd.as_path(), path) {
+        if let Err(e) = parser.add_search_path(full_cwd.as_path(), path) {
             eprintln!("{e}");
             return ExitCode::FAILURE;
         }
     }
 
-    if let Err(e) = assembler.assemble(full_cwd.as_path(), args.file, &mut output) {
-        eprintln!("{e}");
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
-    }
+    let ast = match parser.parse(full_cwd.as_path(), args.file) {
+        Ok(ast) => ast,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    ExitCode::SUCCESS
 }

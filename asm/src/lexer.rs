@@ -20,29 +20,52 @@ pub struct SourceLoc {
 
 #[derive(thiserror::Error, Debug)]
 pub enum LexerError {
-    #[error("read error: {0}")]
-    ReadError(CharReaderError),
+    #[error("read error: {source}")]
+    ReadError {
+        loc: SourceLoc,
+        source: CharReaderError,
+    },
 
-    #[error("unrecognized string escape: `{0}`")]
-    UnrecognizedStringEscape(String),
+    #[error("unexpected line break")]
+    UnexpectedLineBreak { loc: SourceLoc },
 
-    #[error("malformed binary number: `{0}`")]
-    MalformedBinaryNumber(String),
+    #[error("unrecognized string escape: `{msg}`")]
+    UnrecognizedStringEscape { loc: SourceLoc, msg: String },
 
-    #[error("malformed decimal number: `{0}`")]
-    MalformedDecimalNumber(String),
+    #[error("malformed binary number: `{msg}`")]
+    MalformedBinaryNumber { loc: SourceLoc, msg: String },
 
-    #[error("malformed hexadecimal number: `{0}`")]
-    MalformedHexidecimalNumber(String),
+    #[error("malformed decimal number: `{msg}`")]
+    MalformedDecimalNumber { loc: SourceLoc, msg: String },
 
-    #[error("unrecognized input: `{0}`")]
-    UnrecognizedInput(String),
+    #[error("malformed hexadecimal number: `{msg}`")]
+    MalformedHexidecimalNumber { loc: SourceLoc, msg: String },
 
-    #[error("unknown directive: `{0}`")]
-    UnknownDirective(String),
+    #[error("unrecognized input: `{msg}`")]
+    UnrecognizedInput { loc: SourceLoc, msg: String },
 
-    #[error("malformed label: `{0}`")]
-    MalformedLabel(String),
+    #[error("unknown directive: `{msg}`")]
+    UnknownDirective { loc: SourceLoc, msg: String },
+
+    #[error("malformed label: `{msg}`")]
+    MalformedLabel { loc: SourceLoc, msg: String },
+}
+
+impl LexerError {
+    #[inline]
+    pub fn loc(&self) -> SourceLoc {
+        match self {
+            Self::ReadError { loc, .. } => *loc,
+            Self::UnexpectedLineBreak { loc } => *loc,
+            Self::UnrecognizedStringEscape { loc, .. } => *loc,
+            Self::MalformedBinaryNumber { loc, .. } => *loc,
+            Self::MalformedDecimalNumber { loc, .. } => *loc,
+            Self::MalformedHexidecimalNumber { loc, .. } => *loc,
+            Self::UnrecognizedInput { loc, .. } => *loc,
+            Self::UnknownDirective { loc, .. } => *loc,
+            Self::MalformedLabel { loc, .. } => *loc,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -350,10 +373,9 @@ impl Display for RegisterName {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum Symbol {
+pub enum SymbolName {
     Tilde,
     Bang,
-    Dollar,
     Mod,
     Caret,
     Ampersand,
@@ -379,12 +401,11 @@ pub enum Symbol {
     Question,
 }
 
-impl Symbol {
+impl SymbolName {
     fn parse(name: &str) -> Option<Self> {
         match name {
             "~" => Some(Self::Tilde),
             "!" => Some(Self::Bang),
-            "$" => Some(Self::Dollar),
             "%" => Some(Self::Mod),
             "^" => Some(Self::Caret),
             "&" => Some(Self::Ampersand),
@@ -413,7 +434,7 @@ impl Symbol {
     }
 }
 
-impl Display for Symbol {
+impl Display for SymbolName {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -421,7 +442,6 @@ impl Display for Symbol {
             match self {
                 Self::Tilde => "~",
                 Self::Bang => "!",
-                Self::Dollar => "$",
                 Self::Mod => " %",
                 Self::Caret => "^",
                 Self::Ampersand => "&",
@@ -453,6 +473,7 @@ impl Display for Symbol {
 #[derive(Debug, Copy, Clone)]
 pub enum DirectiveName {
     Org,
+    Here,
     Macro,
     Enum,
     Struct,
@@ -474,23 +495,24 @@ pub enum DirectiveName {
 impl DirectiveName {
     fn parse(name: &str) -> Option<Self> {
         match name {
-            "#org" | "#ORG" => Some(Self::Org),
-            "#macro" | "#MACRO" => Some(Self::Macro),
-            "#enum" | "#ENUM" => Some(Self::Enum),
-            "#struct" | "#STRUCT" => Some(Self::Struct),
-            "#define" | "#DEFINE" => Some(Self::Define),
-            "#if" | "#IF" => Some(Self::If),
-            "#ifdef" | "#IFDEF" => Some(Self::Ifdef),
-            "#ifndef" | "#IFNDEF" => Some(Self::Ifndef),
-            "#else" | "#ELSE" => Some(Self::Else),
-            "#end" | "#END" => Some(Self::End),
-            "#echo" | "#ECHO" => Some(Self::Echo),
-            "#db" | "#DB" => Some(Self::Db),
-            "#dw" | "#DW" => Some(Self::Dw),
-            "#ds" | "#DS" => Some(Self::Ds),
-            "#include" | "#INCLUDE" => Some(Self::Include),
-            "#incbin" | "#INCBIN" => Some(Self::Incbin),
-            "#sizeof" | "#SIZEOF" => Some(Self::Sizeof),
+            "@org" | "@ORG" => Some(Self::Org),
+            "@here" | "@HERE" => Some(Self::Here),
+            "@macro" | "@MACRO" => Some(Self::Macro),
+            "@enum" | "@ENUM" => Some(Self::Enum),
+            "@struct" | "@STRUCT" => Some(Self::Struct),
+            "@define" | "@DEFINE" => Some(Self::Define),
+            "@if" | "@IF" => Some(Self::If),
+            "@ifdef" | "@IFDEF" => Some(Self::Ifdef),
+            "@ifndef" | "@IFNDEF" => Some(Self::Ifndef),
+            "@else" | "@ELSE" => Some(Self::Else),
+            "@end" | "@END" => Some(Self::End),
+            "@echo" | "@ECHO" => Some(Self::Echo),
+            "@db" | "@DB" => Some(Self::Db),
+            "@dw" | "@DW" => Some(Self::Dw),
+            "@ds" | "@DS" => Some(Self::Ds),
+            "@include" | "@INCLUDE" => Some(Self::Include),
+            "@incbin" | "@INCBIN" => Some(Self::Incbin),
+            "@sizeof" | "@SIZEOF" => Some(Self::Sizeof),
             _ => None,
         }
     }
@@ -502,23 +524,24 @@ impl Display for DirectiveName {
             f,
             "{}",
             match self {
-                Self::Org => "#org",
-                Self::Macro => "#macro",
-                Self::Enum => "#enum",
-                Self::Struct => "#struct",
-                Self::Define => "#define",
-                Self::If => "#if",
-                Self::Ifdef => "#ifdef",
-                Self::Ifndef => "#ifndef",
-                Self::Else => "#else",
-                Self::End => "#end",
-                Self::Echo => "#echo",
-                Self::Db => "#db",
-                Self::Dw => "#dw",
-                Self::Ds => "#ds",
-                Self::Include => "#include",
-                Self::Incbin => "#incbin",
-                Self::Sizeof => "#sizeof",
+                Self::Org => "@org",
+                Self::Here => "@here",
+                Self::Macro => "@macro",
+                Self::Enum => "@enum",
+                Self::Struct => "@struct",
+                Self::Define => "@define",
+                Self::If => "@if",
+                Self::Ifdef => "@ifdef",
+                Self::Ifndef => "@ifndef",
+                Self::Else => "@else",
+                Self::End => "@end",
+                Self::Echo => "@echo",
+                Self::Db => "@db",
+                Self::Dw => "@dw",
+                Self::Ds => "@ds",
+                Self::Include => "@include",
+                Self::Incbin => "@incbin",
+                Self::Sizeof => "@sizeof",
             }
         )
     }
@@ -540,7 +563,7 @@ enum State {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum LabelType {
+pub enum LabelKind {
     Global,
     Local,
     Direct,
@@ -548,15 +571,58 @@ pub enum LabelType {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Token {
-    Comment,
-    NewLine,
-    String(StrRef),
-    Number(usize),
-    Operation(OperationName),
-    Directive(DirectiveName),
-    Register(RegisterName),
-    Symbol(Symbol),
-    Label(LabelType, StrRef),
+    Comment {
+        loc: SourceLoc,
+    },
+    NewLine {
+        loc: SourceLoc,
+    },
+    String {
+        loc: SourceLoc,
+        value: StrRef,
+    },
+    Number {
+        loc: SourceLoc,
+        value: u32,
+    },
+    Operation {
+        loc: SourceLoc,
+        name: OperationName,
+    },
+    Directive {
+        loc: SourceLoc,
+        name: DirectiveName,
+    },
+    Register {
+        loc: SourceLoc,
+        name: RegisterName,
+    },
+    Symbol {
+        loc: SourceLoc,
+        name: SymbolName,
+    },
+    Label {
+        loc: SourceLoc,
+        kind: LabelKind,
+        value: StrRef,
+    },
+}
+
+impl Token {
+    #[inline]
+    pub fn loc(&self) -> SourceLoc {
+        match self {
+            Self::NewLine { loc, .. } => *loc,
+            Self::Comment { loc, .. } => *loc,
+            Self::String { loc, .. } => *loc,
+            Self::Number { loc, .. } => *loc,
+            Self::Operation { loc, .. } => *loc,
+            Self::Directive { loc, .. } => *loc,
+            Self::Register { loc, .. } => *loc,
+            Self::Symbol { loc, .. } => *loc,
+            Self::Label { loc, .. } => *loc,
+        }
+    }
 }
 
 pub struct Lexer<R> {
@@ -626,6 +692,8 @@ impl<R: Read> Lexer<R> {
                 | '|'
                 | ';'
                 | ','
+                | '@'
+                | '\n'
         )
     }
 
@@ -634,7 +702,6 @@ impl<R: Read> Lexer<R> {
         matches!(
             c,
             '~' | '!'
-                | '$'
                 | '%'
                 | '^'
                 | '&'
@@ -656,7 +723,7 @@ impl<R: Read> Lexer<R> {
 }
 
 impl<R: Read> Iterator for Lexer<R> {
-    type Item = (SourceLoc, Result<Token, LexerError>);
+    type Item = Result<Token, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -665,7 +732,10 @@ impl<R: Read> Iterator for Lexer<R> {
                 None => match self.inner.next() {
                     None => return None,
                     Some(Err(e)) => {
-                        return Some((self.loc, Err(LexerError::ReadError(e))));
+                        return Some(Err(LexerError::ReadError {
+                            loc: self.loc,
+                            source: e,
+                        }));
                     }
                     Some(Ok(c)) => {
                         self.loc.column += 1;
@@ -680,7 +750,7 @@ impl<R: Read> Iterator for Lexer<R> {
 
             match self.state {
                 State::Initial => match c {
-                    '\n' => return Some((self.loc, Ok(Token::NewLine))),
+                    '\n' => return Some(Ok(Token::NewLine { loc: self.loc })),
 
                     _ if c.is_whitespace() => continue,
 
@@ -721,7 +791,7 @@ impl<R: Read> Iterator for Lexer<R> {
                         self.buffer.push(c);
                     }
 
-                    '#' => {
+                    '@' => {
                         self.state = State::InDirective;
                         self.tok_loc = self.loc;
                         self.buffer.clear();
@@ -736,27 +806,35 @@ impl<R: Read> Iterator for Lexer<R> {
                     }
 
                     _ => {
-                        return Some((
-                            self.loc,
-                            Err(LexerError::UnrecognizedInput(format!("{c}"))),
-                        ));
+                        return Some(Err(LexerError::UnrecognizedInput {
+                            loc: self.loc,
+                            msg: format!("{c}"),
+                        }));
                     }
                 },
 
                 State::InComment => match c {
                     '\n' => {
                         self.state = State::Initial;
-                        return Some((self.tok_loc, Ok(Token::Comment)));
+                        self.stash = Some(c);
+                        return Some(Ok(Token::Comment { loc: self.tok_loc }));
                     }
 
                     _ => {}
                 },
 
                 State::InString => match c {
+                    '\n' => {
+                        return Some(Err(LexerError::UnexpectedLineBreak { loc: self.loc }));
+                    }
+
                     '"' => {
                         self.state = State::Initial;
-                        let string = self.str_interner.borrow_mut().intern(&self.buffer);
-                        return Some((self.tok_loc, Ok(Token::String(string))));
+                        let value = self.str_interner.borrow_mut().intern(&self.buffer);
+                        return Some(Ok(Token::String {
+                            loc: self.tok_loc,
+                            value,
+                        }));
                     }
 
                     '\\' => {
@@ -767,6 +845,10 @@ impl<R: Read> Iterator for Lexer<R> {
                 },
 
                 State::InStringEscape => match c {
+                    '\n' => {
+                        self.state = State::InString;
+                    }
+
                     'n' => {
                         self.state = State::InString;
                         self.buffer.push('\n');
@@ -802,28 +884,36 @@ impl<R: Read> Iterator for Lexer<R> {
                     }
 
                     _ => {
-                        return Some((
-                            self.loc,
-                            Err(LexerError::UnrecognizedStringEscape(format!("\\{c}"))),
-                        ));
+                        return Some(Err(LexerError::UnrecognizedStringEscape {
+                            loc: self.loc,
+                            msg: format!("\\{c}"),
+                        }));
                     }
                 },
 
                 State::InHexStringEscape1 => match c {
+                    '\n' => {
+                        return Some(Err(LexerError::UnexpectedLineBreak { loc: self.loc }));
+                    }
+
                     '0'..='9' | 'a'..='f' | 'A'..='F' => {
                         self.state = State::InHexStringEscape2;
                         self.buffer.push(c.to_ascii_lowercase());
                     }
 
                     _ => {
-                        return Some((
-                            self.loc,
-                            Err(LexerError::UnrecognizedStringEscape(format!("\\${c}"))),
-                        ));
+                        return Some(Err(LexerError::UnrecognizedStringEscape {
+                            loc: self.loc,
+                            msg: format!("\\${c}"),
+                        }));
                     }
                 },
 
                 State::InHexStringEscape2 => match c {
+                    '\n' => {
+                        return Some(Err(LexerError::UnexpectedLineBreak { loc: self.loc }));
+                    }
+
                     '0'..='9' | 'a'..='f' | 'A'..='F' => {
                         // Its kinda janky, but we pushed both bytes onto the buffer
                         // so we can parse them, then we overwrite the bytes with the char
@@ -839,14 +929,10 @@ impl<R: Read> Iterator for Lexer<R> {
                     }
 
                     _ => {
-                        return Some((
-                            self.loc,
-                            Err(LexerError::UnrecognizedStringEscape(format!(
-                                "\\${}{}",
-                                self.buffer.chars().last().unwrap(),
-                                c
-                            ))),
-                        ));
+                        return Some(Err(LexerError::UnrecognizedStringEscape {
+                            loc: self.tok_loc,
+                            msg: format!("\\${}{}", self.buffer.chars().last().unwrap(), c),
+                        }));
                     }
                 },
 
@@ -858,23 +944,26 @@ impl<R: Read> Iterator for Lexer<R> {
                         // Instead of treating this as a binary number, this must
                         // be the mod symbol
                         if self.buffer.is_empty() {
-                            return Some((self.tok_loc, Ok(Token::Symbol(Symbol::Mod))));
+                            return Some(Ok(Token::Symbol {
+                                loc: self.tok_loc,
+                                name: SymbolName::Mod,
+                            }));
                         }
 
-                        let value = usize::from_str_radix(&self.buffer, 2).unwrap();
-                        return Some((self.tok_loc, Ok(Token::Number(value))));
+                        let value = u32::from_str_radix(&self.buffer, 2).unwrap();
+                        return Some(Ok(Token::Number {
+                            loc: self.tok_loc,
+                            value,
+                        }));
                     }
 
                     '0' | '1' => self.buffer.push(c),
 
                     _ => {
-                        return Some((
-                            self.tok_loc,
-                            Err(LexerError::MalformedBinaryNumber(format!(
-                                "%{}{}",
-                                self.buffer, c
-                            ))),
-                        ));
+                        return Some(Err(LexerError::MalformedBinaryNumber {
+                            loc: self.tok_loc,
+                            msg: format!("%{}{}", self.buffer, c),
+                        }));
                     }
                 },
 
@@ -883,20 +972,20 @@ impl<R: Read> Iterator for Lexer<R> {
                         self.state = State::Initial;
                         self.stash = Some(c);
 
-                        let value = usize::from_str_radix(&self.buffer, 10).unwrap();
-                        return Some((self.tok_loc, Ok(Token::Number(value))));
+                        let value = u32::from_str_radix(&self.buffer, 10).unwrap();
+                        return Some(Ok(Token::Number {
+                            loc: self.tok_loc,
+                            value,
+                        }));
                     }
 
                     '0'..='9' => self.buffer.push(c),
 
                     _ => {
-                        return Some((
-                            self.tok_loc,
-                            Err(LexerError::MalformedDecimalNumber(format!(
-                                "{}{}",
-                                self.buffer, c
-                            ))),
-                        ));
+                        return Some(Err(LexerError::MalformedDecimalNumber {
+                            loc: self.tok_loc,
+                            msg: format!("{}{}", self.buffer, c),
+                        }));
                     }
                 },
 
@@ -905,26 +994,20 @@ impl<R: Read> Iterator for Lexer<R> {
                         self.state = State::Initial;
                         self.stash = Some(c);
 
-                        // Instead of treating this as a hex number, this must
-                        // be the dollar symbol
-                        if self.buffer.is_empty() {
-                            return Some((self.tok_loc, Ok(Token::Symbol(Symbol::Dollar))));
-                        }
-
-                        let value = usize::from_str_radix(&self.buffer, 16).unwrap();
-                        return Some((self.tok_loc, Ok(Token::Number(value))));
+                        let value = u32::from_str_radix(&self.buffer, 16).unwrap();
+                        return Some(Ok(Token::Number {
+                            loc: self.tok_loc,
+                            value,
+                        }));
                     }
 
                     '0'..='9' | 'a'..='f' | 'A'..='F' => self.buffer.push(c.to_ascii_lowercase()),
 
                     _ => {
-                        return Some((
-                            self.tok_loc,
-                            Err(LexerError::MalformedHexidecimalNumber(format!(
-                                "${}{}",
-                                self.buffer, c
-                            ))),
-                        ));
+                        return Some(Err(LexerError::MalformedHexidecimalNumber {
+                            loc: self.tok_loc,
+                            msg: format!("${}{}", self.buffer, c),
+                        }));
                     }
                 },
 
@@ -933,16 +1016,20 @@ impl<R: Read> Iterator for Lexer<R> {
                     self.buffer.push(c);
 
                     // first try and parse a 2 char symbol
-                    if let Some(symbol) = Symbol::parse(&self.buffer) {
-                        return Some((self.tok_loc, Ok(Token::Symbol(symbol))));
+                    if let Some(name) = SymbolName::parse(&self.buffer) {
+                        return Some(Ok(Token::Symbol {
+                            loc: self.tok_loc,
+                            name,
+                        }));
                     }
 
                     // It must be 1 char (stash the other char)
                     self.stash = self.buffer.pop();
-                    return Some((
-                        self.tok_loc,
-                        Ok(Token::Symbol(Symbol::parse(&self.buffer).unwrap())),
-                    ));
+                    let name = SymbolName::parse(&self.buffer).unwrap();
+                    return Some(Ok(Token::Symbol {
+                        loc: self.tok_loc,
+                        name,
+                    }));
                 }
 
                 State::InDirective => match c {
@@ -954,14 +1041,17 @@ impl<R: Read> Iterator for Lexer<R> {
                         self.state = State::Initial;
                         self.stash = Some(c);
 
-                        if let Some(dir) = DirectiveName::parse(&self.buffer) {
-                            return Some((self.tok_loc, Ok(Token::Directive(dir))));
+                        if let Some(name) = DirectiveName::parse(&self.buffer) {
+                            return Some(Ok(Token::Directive {
+                                loc: self.tok_loc,
+                                name,
+                            }));
                         }
 
-                        return Some((
-                            self.tok_loc,
-                            Err(LexerError::UnknownDirective(self.buffer.clone())),
-                        ));
+                        return Some(Err(LexerError::UnknownDirective {
+                            loc: self.tok_loc,
+                            msg: self.buffer.clone(),
+                        }));
                     }
                 },
 
@@ -973,10 +1063,10 @@ impl<R: Read> Iterator for Lexer<R> {
                     '\'' => {
                         self.state = State::Initial;
                         if self.buffer == "af" {
-                            return Some((
-                                self.tok_loc,
-                                Ok(Token::Register(RegisterName::AFPrime)),
-                            ));
+                            return Some(Ok(Token::Register {
+                                loc: self.tok_loc,
+                                name: RegisterName::AFPrime,
+                            }));
                         }
                     }
 
@@ -984,31 +1074,46 @@ impl<R: Read> Iterator for Lexer<R> {
                         self.state = State::Initial;
                         self.stash = Some(c);
 
-                        if let Some(op) = OperationName::parse(&self.buffer) {
-                            return Some((self.tok_loc, Ok(Token::Operation(op))));
+                        if let Some(name) = OperationName::parse(&self.buffer) {
+                            return Some(Ok(Token::Operation {
+                                loc: self.tok_loc,
+                                name,
+                            }));
                         }
 
-                        if let Some(reg) = RegisterName::parse(&self.buffer) {
-                            return Some((self.tok_loc, Ok(Token::Register(reg))));
+                        if let Some(name) = RegisterName::parse(&self.buffer) {
+                            return Some(Ok(Token::Register {
+                                loc: self.tok_loc,
+                                name,
+                            }));
                         }
 
-                        let string = self.str_interner.borrow_mut().intern(&self.buffer);
+                        let value = self.str_interner.borrow_mut().intern(&self.buffer);
                         return match self.buffer.chars().filter(|c| *c == '.').count() {
-                            0 => Some((self.tok_loc, Ok(Token::Label(LabelType::Global, string)))),
+                            0 => Some(Ok(Token::Label {
+                                loc: self.tok_loc,
+                                kind: LabelKind::Global,
+                                value,
+                            })),
                             1 => {
                                 if self.buffer.starts_with('.') {
-                                    Some((self.tok_loc, Ok(Token::Label(LabelType::Local, string))))
+                                    Some(Ok(Token::Label {
+                                        loc: self.tok_loc,
+                                        kind: LabelKind::Local,
+                                        value,
+                                    }))
                                 } else {
-                                    Some((
-                                        self.tok_loc,
-                                        Ok(Token::Label(LabelType::Direct, string)),
-                                    ))
+                                    Some(Ok(Token::Label {
+                                        loc: self.tok_loc,
+                                        kind: LabelKind::Direct,
+                                        value,
+                                    }))
                                 }
                             }
-                            _ => Some((
-                                self.tok_loc,
-                                Err(LexerError::MalformedLabel(self.buffer.clone())),
-                            )),
+                            _ => Some(Err(LexerError::MalformedLabel {
+                                loc: self.tok_loc,
+                                msg: self.buffer.clone(),
+                            })),
                         };
                     }
                 },
@@ -1037,7 +1142,9 @@ mod tests {
             ; comment
         "#;
         let mut lexer = lexer(text);
-        assert!(matches!(lexer.next(), Some((_, Ok(Token::Comment)))));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(lexer.next(), Some(Ok(Token::Comment { .. }))));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1047,9 +1154,11 @@ mod tests {
             "test"
         "#;
         let mut lexer = lexer(text);
-        assert!(
-            matches!(lexer.next(), Some((_, Ok(Token::String(s)))) if lexer.str_interner().eq_some("test", s))
-        );
+        let value = lexer.str_interner_mut().intern("test");
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::String { value, .. }))
+        ));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1059,9 +1168,11 @@ mod tests {
             "test\n"
         "#;
         let mut lexer = lexer(text);
-        assert!(
-            matches!(lexer.next(), Some((_, Ok(Token::String(s)))) if lexer.str_interner().eq_some("test\n", s))
-        );
+        let value = lexer.str_interner_mut().intern("test\n");
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::String { value, .. }))
+        ));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1071,9 +1182,11 @@ mod tests {
             "test\$7f"
         "#;
         let mut lexer = lexer(text);
-        assert!(
-            matches!(lexer.next(), Some((_, Ok(Token::String(s)))) if lexer.str_interner().eq_some("test\x7f", s))
-        );
+        let value = lexer.str_interner_mut().intern("test\x7f");
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::String { value, .. }))
+        ));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1083,7 +1196,15 @@ mod tests {
             %010101
         "#;
         let mut lexer = lexer(text);
-        assert!(matches!(lexer.next(), Some((_, Ok(Token::Number(n)))) if n == 0b010101));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Number {
+                value: 0b010101,
+                ..
+            }))
+        ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1093,7 +1214,12 @@ mod tests {
             123456
         "#;
         let mut lexer = lexer(text);
-        assert!(matches!(lexer.next(), Some((_, Ok(Token::Number(n)))) if n == 123456));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Number { value: 123456, .. }))
+        ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1103,115 +1229,191 @@ mod tests {
             $cafebabe
         "#;
         let mut lexer = lexer(text);
-        assert!(matches!(lexer.next(), Some((_, Ok(Token::Number(n)))) if n == 0xcafebabe));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Number {
+                value: 0xcafebabe,
+                ..
+            }))
+        ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
     #[test]
     fn symbols() {
         let text = r#"
-            ~ ! $ % ^ & && * ( ) - == + | || : , < > <= >= << >> / ?
+            ~ ! % ^ & && * ( ) - == + | || : , < > <= >= << >> / ?
         "#;
         let mut lexer = lexer(text);
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Tilde))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Tilde,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Bang))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Bang,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Dollar))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Mod,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Mod))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Caret,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Caret))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Ampersand,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Ampersand))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::DoubleAmpersand,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::DoubleAmpersand))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Star,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Star))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::ParenOpen,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::ParenOpen))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::ParenClose,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::ParenClose))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Minus,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Minus))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Equal,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Equal))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Plus,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Plus))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Pipe,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Pipe))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::DoublePipe,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::DoublePipe))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Colon,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Colon))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Comma,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Comma))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::LessThan,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::LessThan))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::GreaterThan,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::GreaterThan))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::LessEqual,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::LessEqual))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::GreaterEqual,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::GreaterEqual))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::ShiftLeft,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::ShiftLeft))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::ShiftRight,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::ShiftRight))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Div,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Div))))
-        ));
-        assert!(matches!(
-            lexer.next(),
-            Some((_, Ok(Token::Symbol(Symbol::Question))))
+            Some(Ok(Token::Symbol {
+                name: SymbolName::Question,
+                ..
+            }))
         ));
         assert!(matches!(lexer.next(), None));
     }
@@ -1222,86 +1424,148 @@ mod tests {
             a b c d e h l af bc de hl ix iy ixl ixh iyl iyh sp pc af'
         "#;
         let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::A))))
+            Some(Ok(Token::Register {
+                name: RegisterName::A,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::B))))
+            Some(Ok(Token::Register {
+                name: RegisterName::B,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::C))))
+            Some(Ok(Token::Register {
+                name: RegisterName::C,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::D))))
+            Some(Ok(Token::Register {
+                name: RegisterName::D,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::E))))
+            Some(Ok(Token::Register {
+                name: RegisterName::E,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::H))))
+            Some(Ok(Token::Register {
+                name: RegisterName::H,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::L))))
+            Some(Ok(Token::Register {
+                name: RegisterName::L,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::AF))))
+            Some(Ok(Token::Register {
+                name: RegisterName::AF,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::BC))))
+            Some(Ok(Token::Register {
+                name: RegisterName::BC,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::DE))))
+            Some(Ok(Token::Register {
+                name: RegisterName::DE,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::HL))))
+            Some(Ok(Token::Register {
+                name: RegisterName::HL,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::IX))))
+            Some(Ok(Token::Register {
+                name: RegisterName::IX,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::IY))))
+            Some(Ok(Token::Register {
+                name: RegisterName::IY,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::IXL))))
+            Some(Ok(Token::Register {
+                name: RegisterName::IXL,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::IXH))))
+            Some(Ok(Token::Register {
+                name: RegisterName::IXH,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::IYL))))
+            Some(Ok(Token::Register {
+                name: RegisterName::IYL,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::IYH))))
+            Some(Ok(Token::Register {
+                name: RegisterName::IYH,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::SP))))
+            Some(Ok(Token::Register {
+                name: RegisterName::SP,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::PC))))
+            Some(Ok(Token::Register {
+                name: RegisterName::PC,
+                ..
+            }))
         ));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Register(RegisterName::AFPrime))))
+            Some(Ok(Token::Register {
+                name: RegisterName::AFPrime,
+                ..
+            }))
         ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1313,37 +1577,55 @@ mod tests {
             direct.label
         "#;
         let mut lexer = lexer(text);
+        let value = lexer.str_interner_mut().intern("global_label");
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Label(LabelType::Global, s)))) if lexer.str_interner().eq_some("global_label", s)
+            Some(Ok(Token::Label {
+                kind: LabelKind::Global,
+                value,
+                ..
+            }))
         ));
+        let value = lexer.str_interner_mut().intern(".local_label");
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Label(LabelType::Local, s)))) if lexer.str_interner().eq_some(".local_label", s)
+            Some(Ok(Token::Label {
+                kind: LabelKind::Local,
+                value,
+                ..
+            }))
         ));
+        let value = lexer.str_interner_mut().intern("direct.label");
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
-            Some((_, Ok(Token::Label(LabelType::Direct, s)))) if lexer.str_interner().eq_some("direct.label", s)
+            Some(Ok(Token::Label {
+                kind: LabelKind::Direct,
+                value,
+                ..
+            }))
         ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
     #[test]
     fn sanity_test() {
         let text = r#"
-            #org $0000
+            @org $0000
             
-            #macro foo arg1, arg2
+            @macro foo arg1, arg2
                 add arg1, arg2
-            #end
+            @end
             
             ; comment
             foo a, b
         "#;
         let mut lexer = lexer(text);
-        while let Some((loc, res)) = lexer.next() {
-            dbg!((loc, &res));
-            assert!(res.is_ok());
+        while let Some(result) = lexer.next() {
+            assert!(result.is_ok());
         }
     }
 }
