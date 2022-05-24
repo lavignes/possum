@@ -15,11 +15,24 @@ pub struct Module<S> {
     str_interner: Rc<RefCell<StrInterner>>,
     file_manager: FileManager<S>,
     symtab: Symtab,
-    items: Vec<(SourceLoc, Item)>,
+    items: Vec<Item>,
 }
 
+#[derive(Debug)]
 pub enum Item {
-    Bytes { data: Vec<u8> },
+    Bytes {
+        loc: SourceLoc,
+        data: Vec<u8>,
+    },
+    Words {
+        loc: SourceLoc,
+        data: Vec<u16>,
+    },
+    Space {
+        loc: SourceLoc,
+        size: u16,
+        value: u8,
+    },
 }
 
 impl<S: FileSystem> Module<S> {
@@ -28,7 +41,7 @@ impl<S: FileSystem> Module<S> {
         str_interner: Rc<RefCell<StrInterner>>,
         file_manager: FileManager<S>,
         symtab: Symtab,
-        items: Vec<(SourceLoc, Item)>,
+        items: Vec<Item>,
     ) -> Self {
         Self {
             str_interner,

@@ -6,7 +6,7 @@ use std::{
     mem,
     os::unix::ffi::OsStrExt,
     path::Path,
-    ptr, slice, str,
+    slice, str,
 };
 
 use fxhash::FxHashSet;

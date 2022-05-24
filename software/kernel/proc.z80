@@ -1,8 +1,8 @@
 ; msg entry
 struct MSG
-	from.w
-	to.w
-end
+tx	dw
+rx	dw
+ends
 
-foo: MSG 0, 0
+foo: MSG
 

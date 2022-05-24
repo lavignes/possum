@@ -477,7 +477,7 @@ pub enum DirectiveName {
     Macro,
     Enum,
     Struct,
-    Define,
+    Symbol,
     If,
     Ifdef,
     Ifndef,
@@ -489,7 +489,6 @@ pub enum DirectiveName {
     Ds,
     Include,
     Incbin,
-    Sizeof,
 }
 
 impl DirectiveName {
@@ -500,7 +499,7 @@ impl DirectiveName {
             "@macro" | "@MACRO" => Some(Self::Macro),
             "@enum" | "@ENUM" => Some(Self::Enum),
             "@struct" | "@STRUCT" => Some(Self::Struct),
-            "@define" | "@DEFINE" => Some(Self::Define),
+            "@symbol" | "@SYMBOL" => Some(Self::Symbol),
             "@if" | "@IF" => Some(Self::If),
             "@ifdef" | "@IFDEF" => Some(Self::Ifdef),
             "@ifndef" | "@IFNDEF" => Some(Self::Ifndef),
@@ -512,7 +511,6 @@ impl DirectiveName {
             "@ds" | "@DS" => Some(Self::Ds),
             "@include" | "@INCLUDE" => Some(Self::Include),
             "@incbin" | "@INCBIN" => Some(Self::Incbin),
-            "@sizeof" | "@SIZEOF" => Some(Self::Sizeof),
             _ => None,
         }
     }
@@ -529,7 +527,7 @@ impl Display for DirectiveName {
                 Self::Macro => "@macro",
                 Self::Enum => "@enum",
                 Self::Struct => "@struct",
-                Self::Define => "@define",
+                Self::Symbol => "@symbol",
                 Self::If => "@if",
                 Self::Ifdef => "@ifdef",
                 Self::Ifndef => "@ifndef",
@@ -541,7 +539,6 @@ impl Display for DirectiveName {
                 Self::Ds => "@ds",
                 Self::Include => "@include",
                 Self::Incbin => "@incbin",
-                Self::Sizeof => "@sizeof",
             }
         )
     }
@@ -654,6 +651,11 @@ impl<R: Read> Lexer<R> {
             state: State::Initial,
             buffer: String::new(),
         }
+    }
+
+    #[inline]
+    pub fn loc(&self) -> SourceLoc {
+        self.loc
     }
 
     #[inline]
@@ -1154,11 +1156,13 @@ mod tests {
             "test"
         "#;
         let mut lexer = lexer(text);
-        let value = lexer.str_interner_mut().intern("test");
+        let string = lexer.str_interner_mut().intern("test");
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
-            Some(Ok(Token::String { value, .. }))
+            Some(Ok(Token::String { value, .. })) if value == string
         ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1168,11 +1172,13 @@ mod tests {
             "test\n"
         "#;
         let mut lexer = lexer(text);
-        let value = lexer.str_interner_mut().intern("test\n");
+        let string = lexer.str_interner_mut().intern("test\n");
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
-            Some(Ok(Token::String { value, .. }))
+            Some(Ok(Token::String { value, .. })) if value == string
         ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1182,11 +1188,13 @@ mod tests {
             "test\$7f"
         "#;
         let mut lexer = lexer(text);
-        let value = lexer.str_interner_mut().intern("test\x7f");
+        let string = lexer.str_interner_mut().intern("test\x7f");
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
-            Some(Ok(Token::String { value, .. }))
+            Some(Ok(Token::String { value, .. })) if value == string
         ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1577,7 +1585,7 @@ mod tests {
             direct.label
         "#;
         let mut lexer = lexer(text);
-        let value = lexer.str_interner_mut().intern("global_label");
+        let label = lexer.str_interner_mut().intern("global_label");
         assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
@@ -1585,9 +1593,9 @@ mod tests {
                 kind: LabelKind::Global,
                 value,
                 ..
-            }))
+            })) if value == label
         ));
-        let value = lexer.str_interner_mut().intern(".local_label");
+        let label = lexer.str_interner_mut().intern(".local_label");
         assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
@@ -1595,9 +1603,9 @@ mod tests {
                 kind: LabelKind::Local,
                 value,
                 ..
-            }))
+            })) if value == label
         ));
-        let value = lexer.str_interner_mut().intern("direct.label");
+        let label = lexer.str_interner_mut().intern("direct.label");
         assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
@@ -1605,7 +1613,7 @@ mod tests {
                 kind: LabelKind::Direct,
                 value,
                 ..
-            }))
+            })) if value == label
         ));
         assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));

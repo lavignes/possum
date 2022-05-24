@@ -5,7 +5,7 @@ use crate::{expr::Expr, intern::StrRef};
 #[derive(Clone, Debug)]
 pub enum Symbol {
     Expr(Expr),
-    Value(u16),
+    Value(i32),
 }
 
 pub struct Symtab {

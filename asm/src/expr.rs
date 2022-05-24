@@ -3,207 +3,132 @@ use crate::{
     symtab::{Symbol, Symtab},
 };
 
-#[derive(thiserror::Error, Debug)]
-pub enum ExprError {}
-
 #[derive(Clone, Debug)]
 pub struct Expr {
     nodes: Vec<ExprNode>,
 }
 
-impl From<i32> for Expr {
+impl Expr {
     #[inline]
-    fn from(value: i32) -> Self {
+    pub fn evaluate(&self, symtab: &Symtab) -> Option<i32> {
+        Self::eval(symtab, &self.nodes, 0)
+    }
+
+    #[inline]
+    pub fn value(value: i32) -> Self {
         Self {
             nodes: vec![ExprNode::Value(value)],
         }
     }
-}
 
-impl Expr {
-    #[inline]
-    pub fn evaluate(&self, symtab: &Symtab) -> Result<Option<i32>, ExprError> {
-        Self::eval(symtab, &self.nodes, 0)
-    }
-
-    fn eval(
-        symtab: &Symtab,
-        nodes: &Vec<ExprNode>,
-        index: usize,
-    ) -> Result<Option<i32>, ExprError> {
+    fn eval(symtab: &Symtab, nodes: &Vec<ExprNode>, index: usize) -> Option<i32> {
         match nodes[index] {
-            ExprNode::Value(value) => Ok(Some(value)),
+            ExprNode::Value(value) => Some(value),
             ExprNode::Label(label) => match symtab.get(label) {
-                Some(Symbol::Expr(_)) => Ok(None),
-                Some(Symbol::Value(value)) => Ok(Some(*value as i32)),
-                _ => Ok(None),
+                Some(Symbol::Expr(_)) => None,
+                Some(Symbol::Value(value)) => Some(*value as i32),
+                _ => None,
             },
-            ExprNode::Invert(index) => match Self::eval(symtab, nodes, index)? {
-                Some(value) => Ok(Some(!value)),
-                _ => Ok(None),
-            },
-            ExprNode::Not(index) => match Self::eval(symtab, nodes, index)? {
-                Some(value) => Ok(Some(!(value != 0) as i32)),
-                _ => Ok(None),
-            },
-            ExprNode::Neg(index) => match Self::eval(symtab, nodes, index)? {
-                Some(value) => Ok(Some(-value)),
-                _ => Ok(None),
-            },
+            ExprNode::Invert(index) => Self::eval(symtab, nodes, index).map(|value| !value),
+            ExprNode::Not(index) => {
+                Self::eval(symtab, nodes, index).map(|value| (value != 0) as i32)
+            }
+            ExprNode::Neg(index) => Self::eval(symtab, nodes, index).map(|value| -value),
             ExprNode::Add(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs.wrapping_add(rhs))),
-                    _ => Ok(None),
-                }
+                Some(lhs.wrapping_add(rhs))
             }
             ExprNode::Sub(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs.wrapping_sub(rhs))),
-                    _ => Ok(None),
-                }
+                Some(lhs.wrapping_sub(rhs))
             }
             ExprNode::Mul(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs.wrapping_mul(rhs))),
-                    _ => Ok(None),
-                }
+                Some(lhs.wrapping_mul(rhs))
             }
             ExprNode::Div(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs.wrapping_div(rhs))),
-                    _ => Ok(None),
-                }
+                Some(lhs.wrapping_div(rhs))
             }
             ExprNode::Mod(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs.wrapping_rem(rhs))),
-                    _ => Ok(None),
-                }
+                Some(lhs.wrapping_rem(rhs))
             }
             ExprNode::ShiftLeft(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs.wrapping_shl(rhs as u32))),
-                    _ => Ok(None),
-                }
+                Some(lhs.wrapping_shl(rhs as u32))
             }
             ExprNode::ShiftRight(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs.wrapping_shr(rhs as u32))),
-                    _ => Ok(None),
-                }
+                Some(lhs.wrapping_shr(rhs as u32))
             }
             ExprNode::And(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs & rhs)),
-                    _ => Ok(None),
-                }
+                Some(lhs & rhs)
             }
             ExprNode::Or(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs | rhs)),
-                    _ => Ok(None),
-                }
+                Some(lhs | rhs)
             }
             ExprNode::Xor(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(lhs ^ rhs)),
-                    _ => Ok(None),
-                }
+                Some(lhs ^ rhs)
             }
             ExprNode::AndLogical(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(((lhs != 0) && (rhs != 0)) as i32)),
-                    _ => Ok(None),
-                }
+                Some(((lhs != 0) && (rhs != 0)) as i32)
             }
             ExprNode::OrLogical(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some(((lhs != 0) || (rhs != 0)) as i32)),
-                    _ => Ok(None),
-                }
+                Some(((lhs != 0) || (rhs != 0)) as i32)
             }
             ExprNode::LessThan(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs < rhs) as i32)),
-                    _ => Ok(None),
-                }
+                Some((lhs < rhs) as i32)
             }
             ExprNode::LessThanEqual(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs <= rhs) as i32)),
-                    _ => Ok(None),
-                }
+                Some((lhs <= rhs) as i32)
             }
             ExprNode::GreaterThan(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs > rhs) as i32)),
-                    _ => Ok(None),
-                }
+                Some((lhs > rhs) as i32)
             }
             ExprNode::GreaterThanEqual(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs >= rhs) as i32)),
-                    _ => Ok(None),
-                }
+                Some((lhs >= rhs) as i32)
             }
             ExprNode::Equal(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs == rhs) as i32)),
-                    _ => Ok(None),
-                }
+                Some((lhs == rhs) as i32)
             }
             ExprNode::NotEquals(lhs, rhs) => {
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => Ok(Some((lhs != rhs) as i32)),
-                    _ => Ok(None),
-                }
+                Some((lhs != rhs) as i32)
             }
             ExprNode::Ternary(condition, lhs, rhs) => {
                 let condition = Self::eval(symtab, nodes, condition)?;
                 let lhs = Self::eval(symtab, nodes, lhs)?;
                 let rhs = Self::eval(symtab, nodes, rhs)?;
-                match (condition, lhs, rhs) {
-                    (Some(condition), Some(lhs), Some(rhs)) => {
-                        Ok(Some(if condition != 0 { lhs } else { rhs }))
-                    }
-                    _ => Ok(None),
-                }
+                Some(if condition != 0 { lhs } else { rhs })
             }
         }
     }

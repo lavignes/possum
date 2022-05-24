@@ -25,11 +25,6 @@ struct Macro {
     arg_indices: FxHashMap<StrRef, usize>,
 }
 
-#[derive(Copy, Clone, Debug)]
-enum State {
-    Initial,
-}
-
 #[derive(thiserror::Error, Debug)]
 #[error("{0}")]
 pub struct ParserError(String);
@@ -49,8 +44,8 @@ pub struct Parser<S, R> {
     symtab: Symtab,
 
     stash: Option<Token>,
+    loc: Option<SourceLoc>,
     here: u16,
-    state: Vec<State>,
     active_macro: Option<StrRef>,
     active_namespace: Option<StrRef>,
 }
@@ -70,14 +65,13 @@ where
             symtab: Symtab::new(),
 
             stash: None,
+            loc: None,
             here: 0,
-            state: vec![State::Initial],
             active_macro: None,
             active_namespace: None,
         }
     }
 
-    #[must_use]
     pub fn add_search_path<C: AsRef<Path>, P: AsRef<Path>>(
         &mut self,
         cwd: C,
@@ -120,6 +114,11 @@ where
         self.module()
     }
 
+    #[inline]
+    fn loc(&mut self) -> SourceLoc {
+        self.loc.unwrap()
+    }
+
     #[must_use]
     fn peek(&mut self) -> Result<Option<&Token>, LexerError> {
         loop {
@@ -135,6 +134,7 @@ where
                 None => match &mut self.lexer {
                     Some(lexer) => {
                         self.stash = lexer.next().transpose()?;
+                        self.loc = Some(lexer.loc());
                         if self.stash.is_none() {
                             self.lexer = None;
                         }
@@ -184,6 +184,7 @@ where
         ParserError(msg)
     }
 
+    #[must_use]
     fn module(mut self) -> Result<Module<S>, ParserError> {
         self.here = 0;
         let mut items = Vec::new();
@@ -196,6 +197,10 @@ where
             }
         }
 
+        for item in &items {
+            dbg!(item);
+        }
+
         let Self {
             str_interner,
             file_manager,
@@ -206,19 +211,25 @@ where
     }
 
     #[inline]
-    fn eval_expr(&mut self) -> Result<(SourceLoc, Option<i32>), (SourceLoc, ParserError)> {
-        match self
-            .expr()
-            .map(|(loc, expr)| (loc, expr.evaluate(&self.symtab)))?
-        {
-            (loc, Ok(value)) => Ok((loc, value)),
-            _ => todo!(),
-        }
+    #[must_use]
+    fn const_expr(&mut self) -> Result<Option<i32>, (SourceLoc, ParserError)> {
+        let (loc, expr) = self.expr()?;
+        Ok(expr.evaluate(&self.symtab))
     }
 
+    #[must_use]
     fn expr(&mut self) -> Result<(SourceLoc, Expr), (SourceLoc, ParserError)> {
+        // match self.peek()? {
+        //     Some(&Token::Symbol {
+        //         loc,
+        //         name:
+        //             SymbolName::ParenOpen | SymbolName::Bang | SymbolName::Minus | SymbolName::Tilde,
+        //     })
+        //     | Some(&Token::Label { loc, .. }) => self.expr_prec_0(),
+        //     _ => Ok(),
+        // }
         let loc = self.next()?.unwrap().loc();
-        Ok((loc, 42.into()))
+        Ok((loc, Expr::value(42)))
     }
 
     #[inline]
@@ -235,7 +246,7 @@ where
     }
 
     #[must_use]
-    fn item_opt(&mut self) -> Result<Option<(SourceLoc, Item)>, (SourceLoc, ParserError)> {
+    fn item_opt(&mut self) -> Result<Option<Item>, (SourceLoc, ParserError)> {
         loop {
             match self.peek()? {
                 Some(Token::NewLine { .. }) => {
@@ -261,76 +272,257 @@ where
                         }
                     };
 
-                    if let Some(sym) = self.symtab.get(direct) {
+                    if self.symtab.get(direct).is_some() {
                         let interner = self.str_interner.as_ref().borrow();
                         let label = interner.get(direct).unwrap();
                         return Err((
                             loc,
-                            ParserError(format!("The label \"{label}\" is already defined")),
+                            ParserError(format!("The label \"{label}\" was already defined")),
                         ));
                     }
-                    self.symtab.insert(value, Symbol::Value(self.here));
-
+                    self.symtab.insert(direct, Symbol::Value(self.here as i32));
                     self.next()?;
+
+                    if self.peeked_symbol(SymbolName::Colon)?.is_some() {
+                        self.next()?;
+                    }
                     continue;
                 }
 
-                Some(&Token::Directive { loc, name }) => match name {
-                    DirectiveName::Org => {
-                        self.next()?;
+                Some(&Token::Directive { loc, name }) => {
+                    match name {
+                        DirectiveName::Org => {
+                            self.next()?;
 
-                        self.here = match self.eval_expr()? {
-                            // TODO: Check for truncation error
-                            (_, Some(value)) => value as u16,
-                            (_, None) => return Err((loc, ParserError(format!("The expression following an \"@org\" directive must be immediately solvable")))),
-                        };
-                        continue;
-                    }
-
-                    DirectiveName::Db => {
-                        self.next()?;
-
-                        let mut data = Vec::new();
-                        loop {
-                            match self.peek()? {
-                                Some(&Token::String { value, .. }) => {
-                                    self.next()?;
-                                    let interner = self.str_interner.as_ref().borrow();
-                                    let bytes = interner.get(value).unwrap().as_bytes();
-                                    // TODO: Check for truncation error and wrapping!
-                                    self.here += bytes.len() as u16;
-                                    data.extend_from_slice(bytes);
-                                }
-
-                                _ => {
-                                    match self.eval_expr()? {
-                                        // TODO: Check for truncation error
-                                        (_, Some(value)) => {
-                                            self.here += 1;
-                                            data.push(value as u8);
-                                        },
-                                        (loc, None) => return Err((loc, ParserError(format!("Every expression following a \"@db\" directive must be immediately solvable")))),
-                                    };
-                                }
-                            }
-
-                            if self.peeked_symbol(SymbolName::Comma)?.is_some() {
-                                self.next()?;
-                                continue;
-                            }
-
-                            break;
+                            self.here = match self.const_expr()? {
+                                Some(value) => {
+                                    if (value as u32) > 0xFFFF {
+                                        return Err((
+                                            loc,
+                                            ParserError(format!(
+                                                "\"@org\" expression result ({}) is not a valid address", value
+                                            )),
+                                        ));
+                                    }
+                                    value as u16
+                                },
+                                None => return Err((loc, ParserError(format!("The expression following an \"@org\" directive must be immediately solvable")))),
+                            };
+                            continue;
                         }
 
-                        return Ok(Some((loc, Item::Bytes { data })));
-                    }
+                        DirectiveName::Symbol => {
+                            self.next()?;
 
-                    _ => todo!(),
-                },
+                            let direct = match self.peek()? {
+                                Some(&Token::Label { loc, value, kind }) => match kind {
+                                    LabelKind::Global | LabelKind::Direct => value,
+
+                                    LabelKind::Local => {
+                                        let interner = self.str_interner.as_ref().borrow_mut();
+                                        let label = interner.get(value).unwrap();
+                                        if let Some(namespace) = self.active_namespace {
+                                            let global = interner.get(namespace).unwrap();
+                                            self.str_interner
+                                                .borrow_mut()
+                                                .intern(format!("{global}{label}"))
+                                        } else {
+                                            return Err((loc, ParserError(format!("The local symbol \"{label}\" is being defined but there was no global label defined before it"))));
+                                        }
+                                    }
+                                },
+                                _ => {
+                                    return Err((
+                                        loc,
+                                        ParserError(format!("A symbol name is required")),
+                                    ))
+                                }
+                            };
+                            self.next()?;
+
+                            if self.symtab.get(direct).is_some() {
+                                let interner = self.str_interner.as_ref().borrow();
+                                let label = interner.get(direct).unwrap();
+                                return Err((
+                                    loc,
+                                    ParserError(format!(
+                                        "The symbol \"{label}\" was already defined"
+                                    )),
+                                ));
+                            }
+
+                            if self.peeked_symbol(SymbolName::Comma)?.is_none() {
+                                return Err((
+                                    loc,
+                                    ParserError(format!(
+                                        "Expected a comma between the name and value of a \"@symbol\" directive"
+                                    )),
+                                ));
+                            }
+                            self.next()?;
+
+                            let (_, expr) = self.expr()?;
+                            self.symtab.insert(direct, Symbol::Expr(expr));
+                        }
+
+                        DirectiveName::Db => {
+                            self.next()?;
+
+                            let mut data = Vec::new();
+                            loop {
+                                match self.peek()? {
+                                    Some(&Token::String { value, .. }) => {
+                                        self.next()?;
+                                        let interner = self.str_interner.as_ref().borrow();
+                                        let bytes = interner.get(value).unwrap().as_bytes();
+
+                                        if (self.here as usize) + bytes.len() > (u16::MAX as usize)
+                                        {
+                                            return Err((
+                                                loc,
+                                                ParserError(format!(
+                                                    "\"@db\" bytes extend past address $FFFF"
+                                                )),
+                                            ));
+                                        }
+                                        self.here += bytes.len() as u16;
+                                        data.extend_from_slice(bytes);
+                                    }
+
+                                    _ => {
+                                        match self.const_expr()? {
+                                            Some(value) => {
+                                                if (value as u32) > 0xFF {
+                                                    return Err((
+                                                        loc,
+                                                        ParserError(format!(
+                                                            "\"@db\" expression result ({}) will not fit in a byte", value
+                                                        )),
+                                                    ));
+                                                }
+                                                if (self.here as usize) + 1 > (u16::MAX as usize) {
+                                                    return Err((
+                                                        loc,
+                                                        ParserError(format!(
+                                                            "\"@db\" bytes extend past address $FFFF"
+                                                        )),
+                                                    ));
+                                                }
+                                                self.here += 1;
+                                                data.push(value as u8);
+                                            },
+                                            None => return Err((loc, ParserError(format!("Every expression following a \"@db\" directive must be immediately solvable")))),
+                                        };
+                                    }
+                                }
+
+                                if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                                    self.next()?;
+                                    continue;
+                                }
+                                break;
+                            }
+                            return Ok(Some(Item::Bytes { loc, data }));
+                        }
+
+                        DirectiveName::Dw => {
+                            self.next()?;
+
+                            let mut data = Vec::new();
+                            loop {
+                                match self.peek()? {
+                                    _ => {
+                                        match self.const_expr()? {
+                                            Some(value) => {
+                                                if (value as u32) > 0xFFFF {
+                                                    return Err((
+                                                        loc,
+                                                        ParserError(format!(
+                                                            "\"@dw\" expression result ({}) will not fit in a word", value
+                                                        )),
+                                                    ));
+                                                }
+                                                if (self.here as usize) + 2 > (u16::MAX as usize) {
+                                                    return Err((
+                                                        loc,
+                                                        ParserError(format!(
+                                                            "\"@dw\" words extend past address $FFFF"
+                                                        )),
+                                                    ));
+                                                }
+                                                self.here += 2;
+                                                data.push(value as u16);
+                                            },
+                                            None => return Err((loc, ParserError(format!("Every expression following a \"@dw\" directive must be immediately solvable")))),
+                                        };
+                                    }
+                                }
+
+                                if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                                    self.next()?;
+                                    continue;
+                                }
+                                break;
+                            }
+                            return Ok(Some(Item::Words { loc, data }));
+                        }
+
+                        DirectiveName::Ds => {
+                            self.next()?;
+
+                            let size = match self.const_expr()? {
+                                Some(size) => {
+                                    if (size as u32) > 0xFFFF {
+                                        return Err((
+                                            loc,
+                                            ParserError(format!(
+                                                "\"@ds\" size expression result ({}) will not fit in a word", size
+                                            )),
+                                        ));
+                                    }
+                                    if (self.here as usize) + (size as usize) > (u16::MAX as usize) {
+                                        return Err((
+                                            loc,
+                                            ParserError(format!(
+                                                "\"@ds\" size extends past address $FFFF"
+                                            )),
+                                        ));
+                                    }
+                                    self.here += size as u16;
+                                    size as u16
+                                },
+                                None => return Err((loc, ParserError(format!("The size of a \"@ds\" directive must be immediately solvable")))),
+                            };
+
+                            let value = if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                                self.next()?;
+                                match self.const_expr()? {
+                                    Some(value) => {
+                                        if (value as u32) > 0xFF {
+                                            return Err((
+                                                loc,
+                                                ParserError(format!(
+                                                    "\"@ds\" value expression result ({}) will not fit in a byte", value
+                                                )),
+                                            ));
+                                        }
+                                        value as u8
+                                    },
+                                    None => return Err((loc, ParserError(format!("The value of a \"@ds\" directive must be immediately solvable")))),
+                                }
+                            } else {
+                                0
+                            };
+                            return Ok(Some(Item::Space { loc, size, value }));
+                        }
+
+                        _ => todo!(),
+                    }
+                }
 
                 Some(Token::Operation { .. }) => {}
 
-                Some(_) => {}
+                Some(_) => todo!(),
 
                 None => return Ok(None),
             }
@@ -393,7 +585,10 @@ mod tests {
             "/test.asm",
             r#"
                 @org 42
-                @db "Hello World!", 42, "this", "is", "a test!"
+                @symbol test, @here
+
+                ; @db "Hello World!", 42, "this", "is", "a test!"
+                ; @dw 18
             "#,
         )]);
 
