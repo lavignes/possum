@@ -45,6 +45,10 @@ impl Expr {
     }
 
     #[inline]
+    pub fn push(&mut self, node: ExprNode) {
+        self.nodes.push(node);
+    }
+
     pub fn evaluate(&self, symtab: &Symtab) -> Option<i32> {
         let mut stack = Vec::new();
         for &node in &self.nodes {

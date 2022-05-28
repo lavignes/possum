@@ -18,6 +18,11 @@ pub enum Hole {
         offset: usize,
         expr: Expr,
     },
+    SignedByte {
+        loc: SourceLoc,
+        offset: usize,
+        expr: Expr,
+    },
     Word {
         loc: SourceLoc,
         offset: usize,
@@ -35,6 +40,11 @@ impl Hole {
     #[inline]
     pub fn byte(loc: SourceLoc, offset: usize, expr: Expr) -> Self {
         Self::Byte { loc, offset, expr }
+    }
+
+    #[inline]
+    pub fn signed_byte(loc: SourceLoc, offset: usize, expr: Expr) -> Self {
+        Self::SignedByte { loc, offset, expr }
     }
 
     #[inline]

@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cell::RefCell, fmt, io::Read, iter, path::Path, rc::Rc};
+use std::{borrow::Borrow, cell::RefCell, fmt::{self, format}, io::Read, iter, path::Path, rc::Rc};
 
 use fxhash::FxHashMap;
 
@@ -2397,7 +2397,7 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in byte"))));
+                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
@@ -2426,7 +2426,7 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in byte"))));
+                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
@@ -2845,6 +2845,180 @@ where
                         self.data.push(0x27);
                     }
 
+                    OperationName::Dec => {
+                        self.next()?;
+                        match self.next()? {
+                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x3D);
+                            }
+
+                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x05);
+                            }
+
+                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x0D);
+                            }
+
+                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x15);
+                            }
+
+                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x1D);
+                            }
+                            
+                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x25);
+                            }
+
+                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x2D);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0x25);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0x2D);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0x25);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0x2D);
+                            }
+                            
+                            Some(Token::Register { name: RegisterName::BC, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x0B);
+                            }
+
+                            Some(Token::Register { name: RegisterName::DE, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x1B);
+                            }
+
+                            Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x2B);
+                            }
+
+                            Some(Token::Register { name: RegisterName::SP, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x3B);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0x2B);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0x2B);
+                            }
+
+                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+
+                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                        self.here += 1;
+                                        self.data.push(0x35);
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+
+                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 3;
+                                        self.data.push(0xDD);
+                                        self.data.push(0x35);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+                                    
+                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 3;
+                                        self.data.push(0xFD);
+                                        self.data.push(0x35);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+
+                                    Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                }
+                            }
+
+                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected a register", tok.as_display(&self.str_interner))))),
+                            None => return self.end_of_input_err(),
+                        }
+                    }
+
+                    OperationName::Di => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0xF3);
+                    }
+
+                    OperationName::Djnz => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0x10);
+                        let (loc, mut expr) = self.expr()?;
+                        // Make the expression relative to @here
+                        expr.push(ExprNode::Value(self.here as i32));
+                        expr.push(ExprNode::Sub);
+                        if let Some(value) = expr.evaluate(&self.symtab) {
+                            if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32))  {
+                                return Err((loc, ParserError(format!("Jump distance ({value}) will not fit in a byte"))));
+                            }
+                            self.data.push(value as u8);
+                        } else {
+                            self.holes.push(Hole::signed_byte(loc, self.data.len(), expr));
+                            self.data.push(0);
+                        }
+                    }
+
                     OperationName::Nop => {
                         self.next()?;
                         self.here += 1;
@@ -3109,7 +3283,7 @@ where
                     _ => todo!(),
                 },
 
-                Some(_) => todo!(),
+                Some(&tok) => todo!("{}", tok.as_display(&self.str_interner)),
 
                 None => return Ok(()),
             }
