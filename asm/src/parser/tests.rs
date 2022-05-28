@@ -74,7 +74,11 @@ fn adc() {
     )]);
 
     let mut data = Vec::new();
-    parser.parse("/", "test.asm").unwrap().assemble(&mut data);
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
 
     #[rustfmt::skip]
     assert_eq!(vec![
@@ -97,7 +101,7 @@ fn adc() {
         0xED, 0x5A,
         0xED, 0x6A,
         0xED, 0x7A,
-        32, 00
+        32, 0
     ], data);
 }
 
@@ -138,7 +142,11 @@ fn add() {
     )]);
 
     let mut data = Vec::new();
-    parser.parse("/", "test.asm").unwrap().assemble(&mut data);
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
 
     #[rustfmt::skip]
     assert_eq!(vec![
@@ -169,10 +177,11 @@ fn add() {
         0xFD, 0x19,
         0xFD, 0x29,
         0xFD, 0x39,
-        44, 00
+        44, 0
     ], data);
 }
 
+#[test]
 fn and() {
     let parser = parser(&[(
         "/test.asm",
@@ -197,7 +206,11 @@ fn and() {
     )]);
 
     let mut data = Vec::new();
-    parser.parse("/", "test.asm").unwrap().assemble(&mut data);
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
 
     #[rustfmt::skip]
     assert_eq!(vec![
@@ -216,6 +229,135 @@ fn and() {
         0xE6, 0x42,
         0xDD, 0xA6, 0x01,
         0xFD, 0xA6, 0x01,
-        24, 00
+        24, 0
+    ], data);
+}
+
+#[test]
+fn bit() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            bit 0, a
+            bit 1, b
+            bit 2, c
+            bit 3, d
+            bit 4, e
+            bit 5, h
+            bit 6, l
+            bit 7, (hl)
+            bit 0, (ix+1)
+            bit 1, (iy+1)
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0xCB, 0x47,
+        0xCB, 0x48,
+        0xCB, 0x51,
+        0xCB, 0x5A,
+        0xCB, 0x63,
+        0xCB, 0x6C,
+        0xCB, 0x75,
+        0xCB, 0x7E,
+        0xDD, 0xCB, 0x46, 0x01,
+        0xFD, 0xCB, 0x4E, 0x01,
+        24, 0
+    ], data);
+}
+
+#[test]
+fn res() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            res 0, a
+            res 1, b
+            res 2, c
+            res 3, d
+            res 4, e
+            res 5, h
+            res 6, l
+            res 7, (hl)
+            res 0, (ix+1)
+            res 1, (iy+1)
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0xCB, 0x87,
+        0xCB, 0x88,
+        0xCB, 0x91,
+        0xCB, 0x9A,
+        0xCB, 0xA3,
+        0xCB, 0xAC,
+        0xCB, 0xB5,
+        0xCB, 0xBE,
+        0xDD, 0xCB, 0x86, 0x01,
+        0xFD, 0xCB, 0x8E, 0x01,
+        24, 0
+    ], data);
+}
+
+#[test]
+fn call() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            @org $0100
+            test: nop
+
+            call test
+            call nz, test
+            call z, test
+            call nc, test
+            call c, test
+            call po, test
+            call pe, test
+            call p, test
+            call m, test
+
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x00,
+        0xCD, 0x00, 0x01,
+        0xC4, 0x00, 0x01,
+        0xCC, 0x00, 0x01,
+        0xD4, 0x00, 0x01,
+        0xDC, 0x00, 0x01,
+        0xE4, 0x00, 0x01,
+        0xEC, 0x00, 0x01,
+        0xF4, 0x00, 0x01,
+        0xFC, 0x00, 0x01,
+        28, 0x01
     ], data);
 }

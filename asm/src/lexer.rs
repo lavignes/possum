@@ -477,6 +477,50 @@ impl Display for SymbolName {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub enum FlagName {
+    Zero,
+    NotZero,
+    NotCarry,
+    ParityEven,
+    ParityOdd,
+    Positive,
+    Negative,
+}
+
+impl FlagName {
+    fn parse(name: &str) -> Option<Self> {
+        match name {
+            "z" | "Z" => Some(Self::Zero),
+            "nz" | "NZ" => Some(Self::NotZero),
+            "nc" | "NC" => Some(Self::NotCarry),
+            "pe" | "PE" => Some(Self::ParityEven),
+            "po" | "PO" => Some(Self::ParityOdd),
+            "p" | "P" => Some(Self::Positive),
+            "m" | "M" => Some(Self::Negative),
+            _ => None,
+        }
+    }
+}
+
+impl Display for FlagName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Zero => "zero flag",
+                Self::NotZero => "not zero flag",
+                Self::NotCarry => "not carry flag",
+                Self::ParityEven => "parity even flag",
+                Self::ParityOdd => "parity odd flag",
+                Self::Positive => "positive flag",
+                Self::Negative => "negative/minus flag",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum DirectiveName {
     Org,
     Here,
@@ -603,6 +647,10 @@ pub enum Token {
         loc: SourceLoc,
         name: RegisterName,
     },
+    Flag {
+        loc: SourceLoc,
+        name: FlagName,
+    },
     Symbol {
         loc: SourceLoc,
         name: SymbolName,
@@ -625,6 +673,7 @@ impl Token {
             Self::Operation { loc, .. } => *loc,
             Self::Directive { loc, .. } => *loc,
             Self::Register { loc, .. } => *loc,
+            Self::Flag { loc, .. } => *loc,
             Self::Symbol { loc, .. } => *loc,
             Self::Label { loc, .. } => *loc,
         }
@@ -665,6 +714,7 @@ impl<'a> Display for DisplayToken<'a> {
             Token::Operation { name, .. } => write!(f, "operation: \"{name}\""),
             Token::Directive { name, .. } => write!(f, "directive: \"{name}\""),
             Token::Register { name, .. } => write!(f, "register: \"{name}\""),
+            Token::Flag { name, .. } => write!(f, "{name}"),
             Token::Symbol { name, .. } => write!(f, "symbol: \"{name}\""),
             Token::Label { value, .. } => {
                 let str_interner = str_interner.as_ref().borrow();
@@ -1139,6 +1189,13 @@ impl<R: Read> Iterator for Lexer<R> {
 
                         if let Some(name) = RegisterName::parse(&self.buffer) {
                             return Some(Ok(Token::Register {
+                                loc: self.tok_loc,
+                                name,
+                            }));
+                        }
+
+                        if let Some(name) = FlagName::parse(&self.buffer) {
+                            return Some(Ok(Token::Flag {
                                 loc: self.tok_loc,
                                 name,
                             }));
