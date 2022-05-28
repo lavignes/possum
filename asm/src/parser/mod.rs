@@ -2805,10 +2805,50 @@ where
                         }
                     }
 
+                    OperationName::Cpd => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xA9);
+                    }
+
+                    OperationName::Cpdr => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xB9);
+                    }
+
+                    OperationName::Cpi => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xA1);
+                    }
+
+                    OperationName::Cpir => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xB1);
+                    }
+
+                    OperationName::Cpl => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0x2F);
+                    }
+
+                    OperationName::Daa => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0x27);
+                    }
+
                     OperationName::Nop => {
                         self.next()?;
                         self.here += 1;
-                        self.data.push(0);
+                        self.data.push(0x00);
                     }
 
                     OperationName::Res => {
