@@ -2546,6 +2546,265 @@ where
                         }
                     }
 
+                    OperationName::Ccf => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0x3F);
+                    }
+
+                    OperationName::Cp => {
+                        self.next()?;
+                        match self.next()? {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+
+                                match self.peek()? {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 1;
+                                        self.data.push(0xBF);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 1;
+                                        self.data.push(0xB8);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 1;
+                                        self.data.push(0xB9);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 1;
+                                        self.data.push(0xBA);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 1;
+                                        self.data.push(0xBB);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 1;
+                                        self.data.push(0xBC);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 1;
+                                        self.data.push(0xBD);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::IXH,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 2;
+                                        self.data.push(0xDD);
+                                        self.data.push(0xBC);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::IXL,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 2;
+                                        self.data.push(0xDD);
+                                        self.data.push(0xBD);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::IYH,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 2;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xBC);
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::IYL,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.here += 2;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xBD);
+                                    }
+
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        match self.next()? {
+                                            Some(Token::Register {
+                                                name: RegisterName::HL,
+                                                ..
+                                            }) => {
+                                                self.here += 1;
+                                                self.data.push(0xBE);
+                                                self.expect_symbol(SymbolName::ParenClose)?;
+                                            }
+
+                                            Some(Token::Register {
+                                                name: RegisterName::IX,
+                                                ..
+                                            }) => {
+                                                self.expect_symbol(SymbolName::Plus)?;
+                                                self.here += 3;
+                                                self.data.push(0xDD);
+                                                self.data.push(0xBE);
+                                                let (loc, expr) = self.expr()?;
+                                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                                    if (value as u32) > (u8::MAX as u32) {
+                                                        return Err((
+                                                            loc,
+                                                            ParserError(format!(
+                                                                "Expression result ({value}) will not fit in a byte"
+                                                            )),
+                                                        ));
+                                                    }
+                                                    self.data.push(value as u8);
+                                                } else {
+                                                    self.holes.push(Hole::byte(
+                                                        loc,
+                                                        self.data.len(),
+                                                        expr,
+                                                    ));
+                                                    self.data.push(0);
+                                                }
+                                                self.expect_symbol(SymbolName::ParenClose)?;
+                                            }
+
+                                            Some(Token::Register {
+                                                name: RegisterName::IY,
+                                                ..
+                                            }) => {
+                                                self.expect_symbol(SymbolName::Plus)?;
+                                                self.here += 3;
+                                                self.data.push(0xFD);
+                                                self.data.push(0xBE);
+                                                let (loc, expr) = self.expr()?;
+                                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                                    if (value as u32) > (u8::MAX as u32) {
+                                                        return Err((
+                                                            loc,
+                                                            ParserError(format!(
+                                                                "Expression result ({value}) will not fit in a byte"
+                                                            )),
+                                                        ));
+                                                    }
+                                                    self.data.push(value as u8);
+                                                } else {
+                                                    self.holes.push(Hole::byte(
+                                                        loc,
+                                                        self.data.len(),
+                                                        expr,
+                                                    ));
+                                                    self.data.push(0);
+                                                }
+                                                self.expect_symbol(SymbolName::ParenClose)?;
+                                            }
+
+                                            Some(_) => {
+                                                self.here += 2;
+                                                self.data.push(0xFE);
+                                                let (loc, expr) = self.expr()?;
+                                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                                    if (value as u32) > (u8::MAX as u32) {
+                                                        return Err((
+                                                            loc,
+                                                            ParserError(format!(
+                                                                "Expression result ({value}) will not fit in a byte"
+                                                            )),
+                                                        ));
+                                                    }
+                                                    self.data.push(value as u8);
+                                                } else {
+                                                    self.holes.push(Hole::byte(
+                                                        loc,
+                                                        self.data.len(),
+                                                        expr,
+                                                    ));
+                                                    self.data.push(0);
+                                                }
+                                                self.expect_symbol(SymbolName::ParenClose)?;
+                                            }
+                                            None => return self.end_of_input_err(),
+                                        }
+                                    }
+
+                                    Some(_) => {
+                                        self.here += 2;
+                                        self.data.push(0xFE);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((
+                                                    loc,
+                                                    ParserError(format!(
+                                                        "Expression result ({value}) will not fit in a byte"
+                                                    )),
+                                                ));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }
+                                    }
+                                    None => return self.end_of_input_err(),
+                                }
+                            }
+
+                            Some(tok) => {
+                                return Err((
+                                    self.loc(),
+                                    ParserError(format!(
+                                        "Unexpected {}, expected register \"a\"",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
+
+                            _ => return self.end_of_input_err(),
+                        }
+                    }
+
                     OperationName::Nop => {
                         self.next()?;
                         self.here += 1;
