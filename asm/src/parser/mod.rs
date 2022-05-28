@@ -3019,6 +3019,99 @@ where
                         }
                     }
 
+                    OperationName::Ei => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0xFB);
+                    }
+
+                    OperationName::Ex => {
+                        self.next()?;
+                        match self.next()? {
+                            None => return self.end_of_input_err(),
+
+                            Some(Token::Register { name: RegisterName::AF, .. }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_register(RegisterName::AFPrime)?;
+                                self.here += 1;
+                                self.data.push(0x08);
+                            }
+                            
+                            Some(Token::Register { name: RegisterName::DE, .. }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_register(RegisterName::HL)?;
+                                self.here += 1;
+                                self.data.push(0xEB);
+                            }
+
+                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                self.expect_register(RegisterName::SP)?;
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                                self.expect_symbol(SymbolName::Comma)?;
+
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+
+                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                        self.here += 1;
+                                        self.data.push(0xE3);
+                                    }
+                                    
+                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                        self.here += 2;
+                                        self.data.push(0xDD);
+                                        self.data.push(0xE3);
+                                    }
+                                    
+                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                        self.here += 2;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xE3);
+                                    }
+
+                                    Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected the registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                }
+                            }
+
+                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected the registers \"af\", \"de\", or \"(sp)\"", tok.as_display(&self.str_interner))))),
+                        }
+                    }
+
+                    OperationName::Exx => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0xD9);
+                    }
+
+                    OperationName::Halt => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0x76);
+                    }
+
+                    OperationName::Im => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        match self.next()? {
+                            None => return self.end_of_input_err(),
+
+                            Some(Token::Number { value: 0, .. }) => {
+                                self.data.push(0x46);
+                            }
+
+                            Some(Token::Number { value: 1, .. }) => {
+                                self.data.push(0x56);
+                            }
+
+                            Some(Token::Number { value: 2, .. }) => {
+                                self.data.push(0x5E);
+                            }
+
+                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected the numbers 0, 1, or 2", tok.as_display(&self.str_interner))))),
+                        }
+                    }
+
                     OperationName::Nop => {
                         self.next()?;
                         self.here += 1;

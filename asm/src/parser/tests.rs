@@ -655,6 +655,138 @@ fn djnz() {
 }
 
 #[test]
+fn ei() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            ei
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0xFB,
+        1, 0x00
+    ], data);
+}
+
+#[test]
+fn ex() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            ex af, af'
+            ex de, hl
+            ex (sp), hl
+            ex (sp), ix
+            ex (sp), iy
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x08,
+        0xEB,
+        0xE3,
+        0xDD, 0xE3,
+        0xFD, 0xE3,
+        7, 0x00
+    ], data);
+}
+
+#[test]
+fn exx() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            exx
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0xD9,
+        1, 0x00
+    ], data);
+}
+
+#[test]
+fn halt() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            halt
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x76,
+        1, 0x00
+    ], data);
+}
+
+#[test]
+fn im() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            im 0
+            im 1
+            im 2
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0xED, 0x46,
+        0xED, 0x56,
+        0xED, 0x5E,
+        6, 0x00
+    ], data);
+}
+
+#[test]
 fn res() {
     let parser = parser(&[(
         "/test.asm",
