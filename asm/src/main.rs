@@ -70,8 +70,8 @@ fn main() -> ExitCode {
         }
     }
 
-    let ast = match parser.parse(full_cwd.as_path(), args.file) {
-        Ok(ast) => ast,
+    let module = match parser.parse(full_cwd.as_path(), args.file) {
+        Ok(module) => module,
         Err(e) => {
             eprintln!("{e}");
             return ExitCode::FAILURE;

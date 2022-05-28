@@ -70,143 +70,143 @@ impl LexerError {
 
 #[derive(Debug, Copy, Clone)]
 pub enum OperationName {
-    Nop,
-    Ld,
-    Inc,
-    Dec,
-    Rlca,
-    Ex,
-    Add,
-    Rrca,
-    Djnz,
-    Rla,
-    Jr,
-    Rra,
-    Daa,
-    Cpl,
-    Scf,
-    Ccf,
-    Halt,
     Adc,
-    Sub,
-    Sbc,
+    Add,
     And,
-    Xor,
-    Or,
-    Cp,
-    Ret,
-    Pop,
-    Jp,
-    Call,
-    Push,
-    Rst,
-    Out,
-    Exx,
-    In,
-    Di,
-    Ei,
-    Neg,
-    Retn,
-    Im,
-    Reti,
-    Ldi,
-    Cpi,
-    Ini,
-    Outi,
-    Ldd,
-    Cpd,
-    Ind,
-    Outd,
-    Ldir,
-    Cpir,
-    Inir,
-    Otir,
-    Lddr,
-    Cpdr,
-    Indr,
-    Otdr,
-    Rlc,
-    Rrc,
-    Rl,
-    Rr,
-    Sla,
-    Sra,
-    Sll,
-    Srl,
     Bit,
+    Call,
+    Ccf,
+    Cp,
+    Cpd,
+    Cpdr,
+    Cpi,
+    Cpir,
+    Cpl,
+    Daa,
+    Dec,
+    Di,
+    Djnz,
+    Ei,
+    Ex,
+    Exx,
+    Halt,
+    Im,
+    In,
+    Inc,
+    Ind,
+    Indr,
+    Ini,
+    Inir,
+    Jp,
+    Jr,
+    Ld,
+    Ldd,
+    Lddr,
+    Ldi,
+    Ldir,
+    Neg,
+    Nop,
+    Or,
+    Otdr,
+    Otir,
+    Out,
+    Outd,
+    Outi,
+    Pop,
+    Push,
     Res,
+    Ret,
+    Reti,
+    Retn,
+    Rl,
+    Rla,
+    Rlc,
+    Rlca,
+    Rr,
+    Rra,
+    Rrc,
+    Rrca,
+    Rst,
+    Sbc,
+    Scf,
     Set,
+    Sla,
+    Sll,
+    Sra,
+    Srl,
+    Sub,
+    Xor,
 }
 
 impl OperationName {
     fn parse(name: &str) -> Option<Self> {
         match name {
-            "nop" | "NOP" => Some(Self::Nop),
-            "ld" | "LD" => Some(Self::Ld),
-            "inc" | "INC" => Some(Self::Inc),
-            "dec" | "DEC" => Some(Self::Dec),
-            "rlca" | "RLCA" => Some(Self::Rlca),
-            "ex" | "EX" => Some(Self::Ex),
-            "add" | "ADD" => Some(Self::Add),
-            "rrca" | "RRCA" => Some(Self::Rrca),
-            "djnz" | "DJNZ" => Some(Self::Djnz),
-            "rla" | "RLA" => Some(Self::Rla),
-            "jr" | "JR" => Some(Self::Jr),
-            "rra" | "RRA" => Some(Self::Rra),
-            "daa" | "DAA" => Some(Self::Daa),
-            "cpl" | "CPL" => Some(Self::Cpl),
-            "scf" | "SCF" => Some(Self::Scf),
-            "ccf" | "CCF" => Some(Self::Ccf),
-            "halt" | "HALT" => Some(Self::Halt),
             "adc" | "ADC" => Some(Self::Adc),
-            "sub" | "SUB" => Some(Self::Sub),
-            "sbc" | "SBC" => Some(Self::Sbc),
+            "add" | "ADD" => Some(Self::Add),
             "and" | "AND" => Some(Self::And),
-            "xor" | "XOR" => Some(Self::Xor),
-            "or" | "OR" => Some(Self::Or),
-            "cp" | "CP" => Some(Self::Cp),
-            "ret" | "RET" => Some(Self::Ret),
-            "pop" | "POP" => Some(Self::Pop),
-            "jp" | "JP" => Some(Self::Jp),
-            "call" | "CALL" => Some(Self::Call),
-            "push" | "PUSH" => Some(Self::Push),
-            "rst" | "RST" => Some(Self::Rst),
-            "out" | "OUT" => Some(Self::Out),
-            "exx" | "EXX" => Some(Self::Exx),
-            "in" | "IN" => Some(Self::In),
-            "di" | "DI" => Some(Self::Di),
-            "ei" | "EI" => Some(Self::Ei),
-            "neg" | "NEG" => Some(Self::Neg),
-            "retn" | "RETN" => Some(Self::Retn),
-            "im" | "IM" => Some(Self::Im),
-            "reti" | "RETI" => Some(Self::Reti),
-            "ldi" | "LDI" => Some(Self::Ldi),
-            "cpi" | "CPI" => Some(Self::Cpi),
-            "ini" | "INI" => Some(Self::Ini),
-            "outi" | "OUTI" => Some(Self::Outi),
-            "ldd" | "LDD" => Some(Self::Ldd),
-            "cpd" | "CPD" => Some(Self::Cpd),
-            "ind" | "IND" => Some(Self::Ind),
-            "outd" | "OUTD" => Some(Self::Outd),
-            "ldir" | "LDIR" => Some(Self::Ldir),
-            "cpir" | "CPIR" => Some(Self::Cpir),
-            "inir" | "INIR" => Some(Self::Inir),
-            "otir" | "OTIR" => Some(Self::Otir),
-            "lddr" | "LDDR" => Some(Self::Lddr),
-            "cpdr" | "CPDR" => Some(Self::Cpdr),
-            "indr" | "INDR" => Some(Self::Indr),
-            "otdr" | "OTDR" => Some(Self::Otdr),
-            "rlc" | "RLC" => Some(Self::Rlc),
-            "rrc" | "RRC" => Some(Self::Rrc),
-            "rl" | "RL" => Some(Self::Rl),
-            "rr" | "RR" => Some(Self::Rr),
-            "sla" | "SLA" => Some(Self::Sla),
-            "sra" | "SRA" => Some(Self::Sra),
-            "sll" | "SLL" => Some(Self::Sll),
-            "srl" | "SRL" => Some(Self::Srl),
             "bit" | "BIT" => Some(Self::Bit),
+            "call" | "CALL" => Some(Self::Call),
+            "ccf" | "CCF" => Some(Self::Ccf),
+            "cp" | "CP" => Some(Self::Cp),
+            "cpd" | "CPD" => Some(Self::Cpd),
+            "cpdr" | "CPDR" => Some(Self::Cpdr),
+            "cpi" | "CPI" => Some(Self::Cpi),
+            "cpir" | "CPIR" => Some(Self::Cpir),
+            "cpl" | "CPL" => Some(Self::Cpl),
+            "daa" | "DAA" => Some(Self::Daa),
+            "dec" | "DEC" => Some(Self::Dec),
+            "di" | "DI" => Some(Self::Di),
+            "djnz" | "DJNZ" => Some(Self::Djnz),
+            "ei" | "EI" => Some(Self::Ei),
+            "ex" | "EX" => Some(Self::Ex),
+            "exx" | "EXX" => Some(Self::Exx),
+            "halt" | "HALT" => Some(Self::Halt),
+            "im" | "IM" => Some(Self::Im),
+            "in" | "IN" => Some(Self::In),
+            "inc" | "INC" => Some(Self::Inc),
+            "ind" | "IND" => Some(Self::Ind),
+            "indr" | "INDR" => Some(Self::Indr),
+            "ini" | "INI" => Some(Self::Ini),
+            "inir" | "INIR" => Some(Self::Inir),
+            "jp" | "JP" => Some(Self::Jp),
+            "jr" | "JR" => Some(Self::Jr),
+            "ld" | "LD" => Some(Self::Ld),
+            "ldd" | "LDD" => Some(Self::Ldd),
+            "lddr" | "LDDR" => Some(Self::Lddr),
+            "ldi" | "LDI" => Some(Self::Ldi),
+            "ldir" | "LDIR" => Some(Self::Ldir),
+            "neg" | "NEG" => Some(Self::Neg),
+            "nop" | "NOP" => Some(Self::Nop),
+            "or" | "OR" => Some(Self::Or),
+            "otdr" | "OTDR" => Some(Self::Otdr),
+            "otir" | "OTIR" => Some(Self::Otir),
+            "out" | "OUT" => Some(Self::Out),
+            "outd" | "OUTD" => Some(Self::Outd),
+            "outi" | "OUTI" => Some(Self::Outi),
+            "pop" | "POP" => Some(Self::Pop),
+            "push" | "PUSH" => Some(Self::Push),
             "res" | "RES" => Some(Self::Res),
+            "ret" | "RET" => Some(Self::Ret),
+            "reti" | "RETI" => Some(Self::Reti),
+            "retn" | "RETN" => Some(Self::Retn),
+            "rl" | "RL" => Some(Self::Rl),
+            "rla" | "RLA" => Some(Self::Rla),
+            "rlc" | "RLC" => Some(Self::Rlc),
+            "rlca" | "RLCA" => Some(Self::Rlca),
+            "rr" | "RR" => Some(Self::Rr),
+            "rra" | "RRA" => Some(Self::Rra),
+            "rrc" | "RRC" => Some(Self::Rrc),
+            "rrca" | "RRCA" => Some(Self::Rrca),
+            "rst" | "RST" => Some(Self::Rst),
+            "sbc" | "SBC" => Some(Self::Sbc),
+            "scf" | "SCF" => Some(Self::Scf),
             "set" | "SET" => Some(Self::Set),
+            "sla" | "SLA" => Some(Self::Sla),
+            "sll" | "SLL" => Some(Self::Sll),
+            "sra" | "SRA" => Some(Self::Sra),
+            "srl" | "SRL" => Some(Self::Srl),
+            "sub" | "SUB" => Some(Self::Sub),
+            "xor" | "XOR" => Some(Self::Xor),
             _ => None,
         }
     }
@@ -289,7 +289,7 @@ impl Display for OperationName {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RegisterName {
     A,
     B,
@@ -372,7 +372,7 @@ impl Display for RegisterName {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum SymbolName {
     Tilde,
     Bang,
@@ -397,6 +397,8 @@ pub enum SymbolName {
     GreaterEqual,
     ShiftLeft,
     ShiftRight,
+    ShiftLeftLogical,
+    ShiftRightLogical,
     Div,
     Question,
 }
@@ -427,6 +429,8 @@ impl SymbolName {
             ">=" => Some(Self::GreaterEqual),
             "<<" => Some(Self::ShiftLeft),
             ">>" => Some(Self::ShiftRight),
+            "<:" => Some(Self::ShiftLeftLogical),
+            ":>" => Some(Self::ShiftRightLogical),
             "/" => Some(Self::Div),
             "?" => Some(Self::Question),
             _ => None,
@@ -463,6 +467,8 @@ impl Display for SymbolName {
                 Self::GreaterEqual => ">=",
                 Self::ShiftLeft => "<<",
                 Self::ShiftRight => ">>",
+                Self::ShiftLeftLogical => "<:",
+                Self::ShiftRightLogical => ":>",
                 Self::Div => "/",
                 Self::Question => "?",
             }
@@ -484,6 +490,7 @@ pub enum DirectiveName {
     Else,
     End,
     Echo,
+    Die,
     Db,
     Dw,
     Ds,
@@ -499,13 +506,14 @@ impl DirectiveName {
             "@macro" | "@MACRO" => Some(Self::Macro),
             "@enum" | "@ENUM" => Some(Self::Enum),
             "@struct" | "@STRUCT" => Some(Self::Struct),
-            "@symbol" | "@SYMBOL" => Some(Self::Symbol),
+            "@def" | "@DEF" => Some(Self::Symbol),
             "@if" | "@IF" => Some(Self::If),
             "@ifdef" | "@IFDEF" => Some(Self::Ifdef),
             "@ifndef" | "@IFNDEF" => Some(Self::Ifndef),
             "@else" | "@ELSE" => Some(Self::Else),
             "@end" | "@END" => Some(Self::End),
             "@echo" | "@ECHO" => Some(Self::Echo),
+            "@die" | "@DIE" => Some(Self::Die),
             "@db" | "@DB" => Some(Self::Db),
             "@dw" | "@DW" => Some(Self::Dw),
             "@ds" | "@DS" => Some(Self::Ds),
@@ -527,13 +535,14 @@ impl Display for DirectiveName {
                 Self::Macro => "@macro",
                 Self::Enum => "@enum",
                 Self::Struct => "@struct",
-                Self::Symbol => "@symbol",
+                Self::Symbol => "@def",
                 Self::If => "@if",
                 Self::Ifdef => "@ifdef",
                 Self::Ifndef => "@ifndef",
                 Self::Else => "@else",
                 Self::End => "@end",
                 Self::Echo => "@echo",
+                Self::Die => "@die",
                 Self::Db => "@db",
                 Self::Dw => "@dw",
                 Self::Ds => "@ds",
@@ -620,6 +629,50 @@ impl Token {
             Self::Label { loc, .. } => *loc,
         }
     }
+
+    #[inline]
+    pub fn as_display<'a>(
+        &'a self,
+        str_interner: &'a Rc<RefCell<StrInterner>>,
+    ) -> DisplayToken<'a> {
+        DisplayToken {
+            inner: self,
+            str_interner,
+        }
+    }
+}
+
+pub struct DisplayToken<'a> {
+    inner: &'a Token,
+    str_interner: &'a Rc<RefCell<StrInterner>>,
+}
+
+impl<'a> Display for DisplayToken<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let Self {
+            inner,
+            str_interner,
+        } = *self;
+        match *inner {
+            Token::NewLine { .. } => write!(f, "line break"),
+            Token::Comment { .. } => write!(f, "comment"),
+            Token::String { value, .. } => {
+                let str_interner = str_interner.as_ref().borrow();
+                let value = str_interner.get(value).unwrap();
+                write!(f, "string: \"{value}\"")
+            }
+            Token::Number { value, .. } => write!(f, "number: {value}"),
+            Token::Operation { name, .. } => write!(f, "operation: \"{name}\""),
+            Token::Directive { name, .. } => write!(f, "directive: \"{name}\""),
+            Token::Register { name, .. } => write!(f, "register: \"{name}\""),
+            Token::Symbol { name, .. } => write!(f, "symbol: \"{name}\""),
+            Token::Label { value, .. } => {
+                let str_interner = str_interner.as_ref().borrow();
+                let value = str_interner.get(value).unwrap();
+                write!(f, "label: \"{value}\"")
+            }
+        }
+    }
 }
 
 pub struct Lexer<R> {
@@ -695,6 +748,7 @@ impl<R: Read> Lexer<R> {
                 | ';'
                 | ','
                 | '@'
+                | ')'
                 | '\n'
         )
     }
@@ -1252,9 +1306,10 @@ mod tests {
     #[test]
     fn symbols() {
         let text = r#"
-            ~ ! % ^ & && * ( ) - == + | || : , < > <= >= << >> / ?
+            ~ ! % ^ & && * ( ) - == + | || : , < > <= >= << >> <: :> / ?
         "#;
         let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(
             lexer.next(),
             Some(Ok(Token::Symbol {
@@ -1412,6 +1467,20 @@ mod tests {
         assert!(matches!(
             lexer.next(),
             Some(Ok(Token::Symbol {
+                name: SymbolName::ShiftLeftLogical,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Symbol {
+                name: SymbolName::ShiftRightLogical,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Symbol {
                 name: SymbolName::Div,
                 ..
             }))
@@ -1423,6 +1492,7 @@ mod tests {
                 ..
             }))
         ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
     }
 
@@ -1627,6 +1697,9 @@ mod tests {
             @macro foo arg1, arg2
                 add arg1, arg2
             @end
+            
+            @echo "hello"
+            @die
             
             ; comment
             foo a, b

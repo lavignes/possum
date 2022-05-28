@@ -3,6 +3,36 @@ use crate::{
     symtab::{Symbol, Symtab},
 };
 
+#[derive(Copy, Clone, Debug)]
+pub enum ExprNode {
+    Value(i32),
+    Label(StrRef),
+    Invert,
+    Not,
+    Neg,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    ShiftLeft,
+    ShiftRight,
+    ShiftLeftLogical,
+    ShiftRightLogical,
+    And,
+    Or,
+    Xor,
+    AndLogical,
+    OrLogical,
+    LessThan,
+    LessThanEqual,
+    GreaterThan,
+    GreaterThanEqual,
+    Equal,
+    NotEqual,
+    Ternary,
+}
+
 #[derive(Clone, Debug)]
 pub struct Expr {
     nodes: Vec<ExprNode>,
@@ -10,154 +40,140 @@ pub struct Expr {
 
 impl Expr {
     #[inline]
-    pub fn evaluate(&self, symtab: &Symtab) -> Option<i32> {
-        Self::eval(symtab, &self.nodes, 0)
+    pub fn new(nodes: Vec<ExprNode>) -> Self {
+        Self { nodes }
     }
 
     #[inline]
-    pub fn value(value: i32) -> Self {
-        Self {
-            nodes: vec![ExprNode::Value(value)],
+    pub fn evaluate(&self, symtab: &Symtab) -> Option<i32> {
+        let mut stack = Vec::new();
+        for &node in &self.nodes {
+            match node {
+                ExprNode::Value(value) => stack.push(value),
+                ExprNode::Label(strref) => match symtab.get(strref)? {
+                    Symbol::Value(value) => stack.push(*value),
+                    Symbol::Expr(expr) => stack.push(expr.evaluate(symtab)?),
+                },
+                ExprNode::Invert => {
+                    let value = stack.pop().unwrap();
+                    stack.push(!value);
+                }
+                ExprNode::Not => {
+                    let value = stack.pop().unwrap();
+                    stack.push((value == 0) as i32);
+                }
+                ExprNode::Neg => {
+                    let value = stack.pop().unwrap();
+                    stack.push(-value);
+                }
+                ExprNode::Add => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs.wrapping_add(rhs));
+                }
+                ExprNode::Sub => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs.wrapping_sub(rhs));
+                }
+                ExprNode::Mul => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs.wrapping_mul(rhs));
+                }
+                ExprNode::Div => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs.wrapping_div(rhs));
+                }
+                ExprNode::Mod => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs.wrapping_rem(rhs));
+                }
+                ExprNode::ShiftLeft => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs.wrapping_shl(rhs as u32));
+                }
+                ExprNode::ShiftRight => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs.wrapping_shr(rhs as u32));
+                }
+                ExprNode::ShiftLeftLogical => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((lhs as u32).wrapping_shl(rhs as u32) as i32);
+                }
+                ExprNode::ShiftRightLogical => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((lhs as u32).wrapping_shr(rhs as u32) as i32);
+                }
+                ExprNode::And => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs & rhs);
+                }
+                ExprNode::Or => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs | rhs);
+                }
+                ExprNode::Xor => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(lhs & rhs);
+                }
+                ExprNode::AndLogical => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(((lhs != 0) && (rhs != 0)) as i32);
+                }
+                ExprNode::OrLogical => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push(((lhs != 0) || (rhs != 0)) as i32);
+                }
+                ExprNode::LessThan => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((lhs < rhs) as i32);
+                }
+                ExprNode::LessThanEqual => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((lhs <= rhs) as i32);
+                }
+                ExprNode::GreaterThan => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((lhs > rhs) as i32);
+                }
+                ExprNode::GreaterThanEqual => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((lhs >= rhs) as i32);
+                }
+                ExprNode::Equal => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((lhs == rhs) as i32);
+                }
+                ExprNode::NotEqual => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((lhs != rhs) as i32);
+                }
+                ExprNode::Ternary => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    let cond = stack.pop().unwrap();
+                    stack.push(if cond != 0 { lhs } else { rhs });
+                }
+            }
         }
+        stack.pop()
     }
-
-    fn eval(symtab: &Symtab, nodes: &Vec<ExprNode>, index: usize) -> Option<i32> {
-        match nodes[index] {
-            ExprNode::Value(value) => Some(value),
-            ExprNode::Label(label) => match symtab.get(label) {
-                Some(Symbol::Expr(_)) => None,
-                Some(Symbol::Value(value)) => Some(*value as i32),
-                _ => None,
-            },
-            ExprNode::Invert(index) => Self::eval(symtab, nodes, index).map(|value| !value),
-            ExprNode::Not(index) => {
-                Self::eval(symtab, nodes, index).map(|value| (value != 0) as i32)
-            }
-            ExprNode::Neg(index) => Self::eval(symtab, nodes, index).map(|value| -value),
-            ExprNode::Add(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs.wrapping_add(rhs))
-            }
-            ExprNode::Sub(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs.wrapping_sub(rhs))
-            }
-            ExprNode::Mul(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs.wrapping_mul(rhs))
-            }
-            ExprNode::Div(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs.wrapping_div(rhs))
-            }
-            ExprNode::Mod(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs.wrapping_rem(rhs))
-            }
-            ExprNode::ShiftLeft(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs.wrapping_shl(rhs as u32))
-            }
-            ExprNode::ShiftRight(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs.wrapping_shr(rhs as u32))
-            }
-            ExprNode::And(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs & rhs)
-            }
-            ExprNode::Or(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs | rhs)
-            }
-            ExprNode::Xor(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(lhs ^ rhs)
-            }
-            ExprNode::AndLogical(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(((lhs != 0) && (rhs != 0)) as i32)
-            }
-            ExprNode::OrLogical(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(((lhs != 0) || (rhs != 0)) as i32)
-            }
-            ExprNode::LessThan(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some((lhs < rhs) as i32)
-            }
-            ExprNode::LessThanEqual(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some((lhs <= rhs) as i32)
-            }
-            ExprNode::GreaterThan(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some((lhs > rhs) as i32)
-            }
-            ExprNode::GreaterThanEqual(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some((lhs >= rhs) as i32)
-            }
-            ExprNode::Equal(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some((lhs == rhs) as i32)
-            }
-            ExprNode::NotEquals(lhs, rhs) => {
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some((lhs != rhs) as i32)
-            }
-            ExprNode::Ternary(condition, lhs, rhs) => {
-                let condition = Self::eval(symtab, nodes, condition)?;
-                let lhs = Self::eval(symtab, nodes, lhs)?;
-                let rhs = Self::eval(symtab, nodes, rhs)?;
-                Some(if condition != 0 { lhs } else { rhs })
-            }
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum ExprNode {
-    Value(i32),
-    Label(StrRef),
-    Invert(usize),
-    Not(usize),
-    Neg(usize),
-    Add(usize, usize),
-    Sub(usize, usize),
-    Mul(usize, usize),
-    Div(usize, usize),
-    Mod(usize, usize),
-    ShiftLeft(usize, usize),
-    ShiftRight(usize, usize),
-    And(usize, usize),
-    Or(usize, usize),
-    Xor(usize, usize),
-    AndLogical(usize, usize),
-    OrLogical(usize, usize),
-    LessThan(usize, usize),
-    LessThanEqual(usize, usize),
-    GreaterThan(usize, usize),
-    GreaterThanEqual(usize, usize),
-    Equal(usize, usize),
-    NotEquals(usize, usize),
-    Ternary(usize, usize, usize),
 }
