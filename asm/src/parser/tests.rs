@@ -1150,85 +1150,97 @@ fn ld() {
             ld d, (ix+1)
             ld d, (iy+1)
             ld d, $42
+            ld e, a
+            ld e, b
+            ld e, c
+            ld e, d
+            ld e, e
+            ld e, h
+            ld e, l
+            ld e, ixh
+            ld e, ixl
+            ld e, iyh
+            ld e, iyl
+            ld e, (hl)
+            ld e, (ix+1)
+            ld e, (iy+1)
+            ld e, $42
+            ld h, a
+            ld h, b
+            ld h, c
+            ld h, d
+            ld h, e
+            ld h, h
+            ld h, l
+            ld h, (hl)
+            ld h, (ix+1)
+            ld h, (iy+1)
+            ld h, $42
+            ld l, a
+            ld l, b
+            ld l, c
+            ld l, d
+            ld l, e
+            ld l, h
+            ld l, l
+            ld l, (hl)
+            ld l, (ix+1)
+            ld l, (iy+1)
+            ld l, $42
+            ld ixh, a
+            ld ixh, b
+            ld ixh, c
+            ld ixh, d
+            ld ixh, e
+            ld ixh, ixh
+            ld ixh, ixl
+            ld ixh, $42
+            ld ixl, a
+            ld ixl, b
+            ld ixl, c
+            ld ixl, d
+            ld ixl, e
+            ld ixl, ixh
+            ld ixl, ixl
+            ld ixl, $42
+            ld iyh, a
+            ld iyh, b
+            ld iyh, c
+            ld iyh, d
+            ld iyh, e
+            ld iyh, iyh
+            ld iyh, iyl
+            ld iyh, $42
+            ld iyl, a
+            ld iyl, b
+            ld iyl, c
+            ld iyl, d
+            ld iyl, e
+            ld iyl, iyh
+            ld iyl, iyl
+            ld iyl, $42
 
-            ;ld e, a
-            ;ld e, b
-            ;ld e, c
-            ;ld e, d
-            ;ld e, e
-            ;ld e, h
-            ;ld e, l
-            ;ld e, ixh
-            ;ld e, ixl
-            ;ld e, iyh
-            ;ld e, iyl
-            ;ld e, (hl)
-            ;ld e, (ix+1)
-            ;ld e, (iy+1)
-            ;ld e, $42
+            ld r, a
+            ld i, a
 
-            ;ld h, a
-            ;ld h, b
-            ;ld h, c
-            ;ld h, d
-            ;ld h, e
-            ;ld h, h
-            ;ld h, l
-            ;ld h, (hl)
-            ;ld h, (ix+1)
-            ;ld h, (iy+1)
-            ;ld h, $42
-
-            ;ld l, a
-            ;ld l, b
-            ;ld l, c
-            ;ld l, d
-            ;ld l, e
-            ;ld l, h
-            ;ld l, l
-            ;ld l, (hl)
-            ;ld l, (ix+1)
-            ;ld l, (iy+1)
-            ;ld l, $42
-
-            ;ld ixh, a
-            ;ld ixh, b
-            ;ld ixh, c
-            ;ld ixh, d
-            ;ld ixh, e
-            ;ld ixh, ixh
-            ;ld ixh, ixl
-            ;ld ixh, iyh
-            ;ld ixh, iyl
-            ;ld ixh, $42
-
-            ;ld ixl, a
-            ;ld ixl, b
-            ;ld ixl, c
-            ;ld ixl, d
-            ;ld ixl, e
-            ;ld ixl, ixh
-            ;ld ixl, ixl
-            ;ld ixl, iyh
-            ;ld ixl, iyl
-            ;ld ixl, $42
-
-            ;ld r, a
-            ;ld i, a
-
-            ;ld sp, hl
-            ;ld sp, ix
-            ;ld sp, iy
+            ld sp, hl
+            ld sp, ix
+            ld sp, iy
+            ld sp, test
+            
             ;ld bc, (test)
-            ;ld de, (test)
-            ;ld hl, (test)
-            ;ld ix, (test)
-            ;ld iy, (test)
-            ;ld sp, test
             ;ld bc, test
+            
+            ;ld de, (test)
             ;ld de, test
+            
+            ;ld hl, (test)
             ;ld hl, test
+
+            ;ld ix, (test)
             ;ld ix, test
+
+            ;ld iy, (test)
             ;ld iy, test
 
             ;ld (bc), a
@@ -1327,7 +1339,6 @@ fn ld() {
         0xDD, 0x4E, 0x01,
         0xFD, 0x4E, 0x01,
         0x0E, 0x42,
-
         0x57,
         0x50,
         0x51,
@@ -1343,8 +1354,84 @@ fn ld() {
         0xDD, 0x56, 0x01,
         0xFD, 0x56, 0x01,
         0x16, 0x42,
+        0x5F,
+        0x58,
+        0x59,
+        0x5A,
+        0x5B,
+        0x5C,
+        0x5D,
+        0xDD, 0x5C,
+        0xDD, 0x5D,
+        0xFD, 0x5C,
+        0xFD, 0x5D,
+        0x5E,
+        0xDD, 0x5E, 0x01,
+        0xFD, 0x5E, 0x01,
+        0x1E, 0x42,
+        0x67,
+        0x60,
+        0x61,
+        0x62,
+        0x63,
+        0x64,
+        0x65,
+        0x66,
+        0xDD, 0x66, 0x01,
+        0xFD, 0x66, 0x01,
+        0x26, 0x42,
+        0x6F,
+        0x68,
+        0x69,
+        0x6A,
+        0x6B,
+        0x6C,
+        0x6D,
+        0x6E,
+        0xDD, 0x6E, 0x01,
+        0xFD, 0x6E, 0x01,
+        0x2E, 0x42,
+        0xDD, 0x67,
+        0xDD, 0x60,
+        0xDD, 0x61,
+        0xDD, 0x62,
+        0xDD, 0x63,
+        0xDD, 0x64,
+        0xDD, 0x65,
+        0xDD, 0x26, 0x42,
+        0xDD, 0x6F,
+        0xDD, 0x68,
+        0xDD, 0x69,
+        0xDD, 0x6A,
+        0xDD, 0x6B,
+        0xDD, 0x6C,
+        0xDD, 0x6D,
+        0xDD, 0x2E, 0x42,
+        0xFD, 0x67,
+        0xFD, 0x60,
+        0xFD, 0x61,
+        0xFD, 0x62,
+        0xFD, 0x63,
+        0xFD, 0x64,
+        0xFD, 0x65,
+        0xFD, 0x26, 0x42,
+        0xFD, 0x6F,
+        0xFD, 0x68,
+        0xFD, 0x69,
+        0xFD, 0x6A,
+        0xFD, 0x6B,
+        0xFD, 0x6C,
+        0xFD, 0x6D,
+        0xFD, 0x2E, 0x42,
+        0xED, 0x4F,
+        0xED, 0x47,
 
-        105, 0x00
+        0xF9,
+        0xDD, 0xF9,
+        0xFD, 0xF9,
+        0x31, 0x00, 0x00,
+
+        240, 0x00
     ], data);
 }
 
