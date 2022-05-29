@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cell::RefCell, fmt::{self, format}, io::Read, iter, path::Path, rc::Rc};
+use std::{borrow::Borrow, cell::RefCell, fmt, io::Read, iter, path::Path, rc::Rc};
 
 use fxhash::FxHashMap;
 
@@ -150,7 +150,9 @@ where
             }
             match self.stash {
                 // Skip comment tokens
-                Some(Token::Comment { .. }) => self.stash = None,
+                Some(Token::Comment { .. }) => {
+                    self.stash = None;
+                }
 
                 Some(_) => return Ok(self.stash.as_ref()),
 
@@ -284,7 +286,7 @@ where
         let loc = self.expr_prec_1(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Question,
                 ..
             }) => {
@@ -314,11 +316,11 @@ where
         let loc = self.expr_prec_2(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::DoublePipe,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::DoublePipe,
                     ..
                 }) = self.peek()?
@@ -342,11 +344,11 @@ where
         let loc = self.expr_prec_3(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::DoubleAmpersand,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::DoubleAmpersand,
                     ..
                 }) = self.peek()?
@@ -370,11 +372,11 @@ where
         let loc = self.expr_prec_4(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Pipe,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Pipe,
                     ..
                 }) = self.peek()?
@@ -398,11 +400,11 @@ where
         let loc = self.expr_prec_5(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Caret,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Caret,
                     ..
                 }) = self.peek()?
@@ -426,11 +428,11 @@ where
         let loc = self.expr_prec_6(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Ampersand,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Caret,
                     ..
                 }) = self.peek()?
@@ -454,11 +456,11 @@ where
         let loc = self.expr_prec_7(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Ampersand,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Ampersand,
                     ..
                 }) = self.peek()?
@@ -482,11 +484,11 @@ where
         let loc = self.expr_prec_8(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Equal,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Equal,
                     ..
                 }) = self.peek()?
@@ -498,11 +500,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::NotEqual,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::NotEqual,
                     ..
                 }) = self.peek()?
@@ -527,11 +529,11 @@ where
         let loc = self.expr_prec_9(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::LessThan,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::LessThan,
                     ..
                 }) = self.peek()?
@@ -543,11 +545,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::LessEqual,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::LessEqual,
                     ..
                 }) = self.peek()?
@@ -559,11 +561,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::GreaterThan,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::GreaterThan,
                     ..
                 }) = self.peek()?
@@ -575,11 +577,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::GreaterEqual,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::GreaterEqual,
                     ..
                 }) = self.peek()?
@@ -604,11 +606,11 @@ where
         let loc = self.expr_prec_10(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::ShiftLeft,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::ShiftLeft,
                     ..
                 }) = self.peek()?
@@ -620,11 +622,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::ShiftRight,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::ShiftRight,
                     ..
                 }) = self.peek()?
@@ -636,11 +638,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::ShiftLeftLogical,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::ShiftLeftLogical,
                     ..
                 }) = self.peek()?
@@ -652,11 +654,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::ShiftRightLogical,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::ShiftRightLogical,
                     ..
                 }) = self.peek()?
@@ -681,11 +683,11 @@ where
         let loc = self.expr_prec_11(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Plus,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Plus,
                     ..
                 }) = self.peek()?
@@ -697,11 +699,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Minus,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Minus,
                     ..
                 }) = self.peek()?
@@ -726,11 +728,11 @@ where
         let loc = self.expr_prec_12(nodes)?;
 
         match self.peek()? {
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Star,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Star,
                     ..
                 }) = self.peek()?
@@ -742,11 +744,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Div,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Div,
                     ..
                 }) = self.peek()?
@@ -758,11 +760,11 @@ where
                 Ok(loc)
             }
 
-            Some(&Token::Symbol {
+            Some(Token::Symbol {
                 name: SymbolName::Mod,
                 ..
             }) => {
-                while let Some(&Token::Symbol {
+                while let Some(Token::Symbol {
                     name: SymbolName::Mod,
                     ..
                 }) = self.peek()?
@@ -2535,7 +2537,7 @@ where
                                 return Err((
                                     loc,
                                     ParserError(format!(
-                                        "Expression result ({value}) will not fix in a word"
+                                        "Expression result ({value}) will not fit in a word"
                                     )),
                                 ));
                             }
@@ -3009,12 +3011,18 @@ where
                         expr.push(ExprNode::Value(self.here as i32));
                         expr.push(ExprNode::Sub);
                         if let Some(value) = expr.evaluate(&self.symtab) {
-                            if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32))  {
-                                return Err((loc, ParserError(format!("Jump distance ({value}) will not fit in a byte"))));
+                            if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32)) {
+                                return Err((
+                                    loc,
+                                    ParserError(format!(
+                                        "Jump distance ({value}) will not fit in a byte"
+                                    )),
+                                ));
                             }
                             self.data.push(value as u8);
                         } else {
-                            self.holes.push(Hole::signed_byte(loc, self.data.len(), expr));
+                            self.holes
+                                .push(Hole::signed_byte(loc, self.data.len(), expr));
                             self.data.push(0);
                         }
                     }
@@ -3108,7 +3116,511 @@ where
                                 self.data.push(0x5E);
                             }
 
-                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected the numbers 0, 1, or 2", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    ParserError(format!(
+                                        "Unexpected {}, expected the numbers 0, 1, or 2",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
+                        }
+                    }
+
+                    OperationName::In => {
+                        self.next()?;
+                        self.here += 2;
+                        match self.next()? {
+                            None => return self.end_of_input_err(),
+
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_symbol(SymbolName::ParenOpen)?;
+                                match self.peek()? {
+                                    None => return self.end_of_input_err(),
+
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                        self.data.push(0xED);
+                                        self.data.push(0x78);
+                                    }
+
+                                    Some(_) => {
+                                        self.data.push(0xDB);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+                                }
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
+                                self.data.push(0xED);
+                                self.data.push(0x40);
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_symbol(SymbolName::ParenOpen)?;
+                                self.expect_register(RegisterName::C)?;
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
+                                self.data.push(0xED);
+                                self.data.push(0x48);
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_symbol(SymbolName::ParenOpen)?;
+                                self.expect_register(RegisterName::C)?;
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
+                                self.data.push(0xED);
+                                self.data.push(0x50);
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_symbol(SymbolName::ParenOpen)?;
+                                self.expect_register(RegisterName::C)?;
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
+                                self.data.push(0xED);
+                                self.data.push(0x58);
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_symbol(SymbolName::ParenOpen)?;
+                                self.expect_register(RegisterName::C)?;
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
+                                self.data.push(0xED);
+                                self.data.push(0x60);
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_symbol(SymbolName::ParenOpen)?;
+                                self.expect_register(RegisterName::C)?;
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
+                                self.data.push(0xED);
+                                self.data.push(0x68);
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_symbol(SymbolName::ParenOpen)?;
+                                self.expect_register(RegisterName::C)?;
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    ParserError(format!(
+                                        "Unexpected {}, expected a register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
+                        }
+                    }
+
+                    OperationName::Inc => {
+                        self.next()?;
+                        match self.next()? {
+                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x3C);
+                            }
+
+                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x04);
+                            }
+
+                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x0C);
+                            }
+
+                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x14);
+                            }
+
+                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x1C);
+                            }
+                            
+                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x24);
+                            }
+
+                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x2C);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0x24);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0x2C);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0x24);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0x2C);
+                            }
+                            
+                            Some(Token::Register { name: RegisterName::BC, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x03);
+                            }
+
+                            Some(Token::Register { name: RegisterName::DE, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x13);
+                            }
+
+                            Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x23);
+                            }
+
+                            Some(Token::Register { name: RegisterName::SP, .. }) => {
+                                self.here += 1;
+                                self.data.push(0x33);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0x23);
+                            }
+
+                            Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0x23);
+                            }
+
+                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+
+                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                        self.here += 1;
+                                        self.data.push(0x34);
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+
+                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 3;
+                                        self.data.push(0xDD);
+                                        self.data.push(0x34);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+                                    
+                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 3;
+                                        self.data.push(0xFD);
+                                        self.data.push(0x34);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+
+                                    Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                }
+                            }
+
+                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected a register", tok.as_display(&self.str_interner))))),
+                            None => return self.end_of_input_err(),
+                        }
+                    }
+
+                    OperationName::Ind => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xAA);
+                    }
+
+                    OperationName::Indr => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xBA);
+                    }
+
+                    OperationName::Ini => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xA2);
+                    }
+
+                    OperationName::Inir => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xB2);
+                    }
+
+                    OperationName::Jp => {
+                        self.next()?;
+                        match self.peek()? {
+                            None => return self.end_of_input_err(),
+
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
+                                self.next()?;
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+
+                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                        self.here += 1;
+                                        self.data.push(0xE9);
+                                    }
+                                    
+                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                        self.here += 2;
+                                        self.data.push(0xDD);
+                                        self.data.push(0xE9);
+                                    }
+                                    
+                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                        self.here += 2;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xE9);
+                                    }
+
+                                    Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                }
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+
+                            Some(_) => {
+                                self.here += 3;
+                                match self.peek()? {
+                                    None => return self.end_of_input_err(),
+                                    Some(Token::Flag {
+                                        name: FlagName::Zero,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.data.push(0xCA);
+                                        self.expect_symbol(SymbolName::Comma)?;
+                                    }
+                                    Some(Token::Flag {
+                                        name: FlagName::NotZero,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.data.push(0xC2);
+                                        self.expect_symbol(SymbolName::Comma)?;
+                                    }
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.data.push(0xDA);
+                                        self.expect_symbol(SymbolName::Comma)?;
+                                    }
+                                    Some(Token::Flag {
+                                        name: FlagName::NotCarry,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.data.push(0xD2);
+                                        self.expect_symbol(SymbolName::Comma)?;
+                                    }
+                                    Some(Token::Flag {
+                                        name: FlagName::ParityEven,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.data.push(0xEA);
+                                        self.expect_symbol(SymbolName::Comma)?;
+                                    }
+                                    Some(Token::Flag {
+                                        name: FlagName::ParityOdd,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.data.push(0xE2);
+                                        self.expect_symbol(SymbolName::Comma)?;
+                                    }
+                                    Some(Token::Flag {
+                                        name: FlagName::Positive,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.data.push(0xF2);
+                                        self.expect_symbol(SymbolName::Comma)?;
+                                    }
+                                    Some(Token::Flag {
+                                        name: FlagName::Negative,
+                                        ..
+                                    }) => {
+                                        self.next()?;
+                                        self.data.push(0xFA);
+                                        self.expect_symbol(SymbolName::Comma)?;
+                                    }
+                                    Some(_) => {
+                                        self.data.push(0xC3);
+                                    }
+                                }
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u16::MAX as u32) {
+                                        return Err((
+                                            loc,
+                                            ParserError(format!(
+                                                "Expression result ({value}) will not fit in a word"
+                                            )),
+                                        ));
+                                    }
+                                    self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                } else {
+                                    self.data.push(0);
+                                    self.data.push(0);
+                                }
+                            }
+                        }
+                    }
+
+                    OperationName::Jr => {
+                        self.next()?;
+                        self.here += 2;
+                        match self.peek()? {
+                            None => return self.end_of_input_err(),
+
+                            Some(Token::Flag {
+                                name: FlagName::NotZero,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.data.push(0x20);
+                                self.expect_symbol(SymbolName::Comma)?;
+                            }
+
+                            Some(Token::Flag {
+                                name: FlagName::Zero,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.data.push(0x28);
+                                self.expect_symbol(SymbolName::Comma)?;
+                            }
+
+                            Some(Token::Flag {
+                                name: FlagName::NotCarry,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.data.push(0x30);
+                                self.expect_symbol(SymbolName::Comma)?;
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.data.push(0x38);
+                                self.expect_symbol(SymbolName::Comma)?;
+                            }
+
+                            Some(_) => {
+                                self.data.push(0x18);
+                            }
+                        }
+                        let (loc, mut expr) = self.expr()?;
+                        // Make the expression relative to @here
+                        expr.push(ExprNode::Value(self.here as i32));
+                        expr.push(ExprNode::Sub);
+                        if let Some(value) = expr.evaluate(&self.symtab) {
+                            if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32)) {
+                                return Err((
+                                    loc,
+                                    ParserError(format!(
+                                        "Jump distance ({value}) will not fit in a byte"
+                                    )),
+                                ));
+                            }
+                            self.data.push(value as u8);
+                        } else {
+                            self.holes
+                                .push(Hole::signed_byte(loc, self.data.len(), expr));
+                            self.data.push(0);
                         }
                     }
 

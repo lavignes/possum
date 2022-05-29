@@ -311,6 +311,7 @@ pub enum RegisterName {
     PC,
     SP,
     AFPrime,
+    I,
 }
 
 impl RegisterName {
@@ -336,6 +337,7 @@ impl RegisterName {
             "pc" | "PC" => Some(Self::PC),
             "sp" | "SP" => Some(Self::SP),
             "af'" | "AF'" => Some(Self::AFPrime),
+            "i" | "I" => Some(Self::I),
             _ => None,
         }
     }
@@ -367,6 +369,7 @@ impl Display for RegisterName {
                 Self::PC => "pc",
                 Self::SP => "sp",
                 Self::AFPrime => "af'",
+                Self::I => "i",
             }
         )
     }
@@ -1556,7 +1559,7 @@ mod tests {
     #[test]
     fn regnames() {
         let text = r#"
-            a b c d e h l af bc de hl ix iy ixl ixh iyl iyh sp pc af'
+            a b c d e h l af bc de hl ix iy ixl ixh iyl iyh sp pc af' i
         "#;
         let mut lexer = lexer(text);
         assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
@@ -1697,6 +1700,13 @@ mod tests {
             lexer.next(),
             Some(Ok(Token::Register {
                 name: RegisterName::AFPrime,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Register {
+                name: RegisterName::I,
                 ..
             }))
         ));
