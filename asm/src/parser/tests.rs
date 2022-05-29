@@ -1235,40 +1235,39 @@ fn ld() {
             ld ix, test
             ld iy, (test)
             ld iy, test
-
-            ;ld (bc), a
-            ;ld (de), a
-            ;ld (hl), a
-            ;ld (hl), b
-            ;ld (hl), c
-            ;ld (hl), d
-            ;ld (hl), e
-            ;ld (hl), h
-            ;ld (hl), l
-            ;ld (hl), $42
-            ;ld (ix+1), a
-            ;ld (ix+1), b
-            ;ld (ix+1), c
-            ;ld (ix+1), d
-            ;ld (ix+1), e
-            ;ld (ix+1), h
-            ;ld (ix+1), l
-            ;ld (iy+1), a
-            ;ld (iy+1), b
-            ;ld (iy+1), c
-            ;ld (iy+1), d
-            ;ld (iy+1), e
-            ;ld (iy+1), h
-            ;ld (iy+1), l
-
-            ;ld (test), a
-            ;ld (test), bc
-            ;ld (test), de
-            ;ld (test), hl
-            ;ld (test), sp
-            ;ld (test), ix
-            ;ld (test), iy
-
+            ld (bc), a
+            ld (de), a
+            ld (hl), a
+            ld (hl), b
+            ld (hl), c
+            ld (hl), d
+            ld (hl), e
+            ld (hl), h
+            ld (hl), l
+            ld (hl), $42
+            ld (ix+1), a
+            ld (ix+1), b
+            ld (ix+1), c
+            ld (ix+1), d
+            ld (ix+1), e
+            ld (ix+1), h
+            ld (ix+1), l
+            ld (ix+1), $42
+            ld (iy+1), a
+            ld (iy+1), b
+            ld (iy+1), c
+            ld (iy+1), d
+            ld (iy+1), e
+            ld (iy+1), h
+            ld (iy+1), l
+            ld (iy+1), $42
+            ld (test), a
+            ld (test), bc
+            ld (test), de
+            ld (test), hl
+            ld (test), sp
+            ld (test), ix
+            ld (test), iy
             @dw @here
         "#,
     )]);
@@ -1432,8 +1431,42 @@ fn ld() {
         0xDD, 0x21, 0x00, 0x00,
         0xFD, 0x2A, 0x00, 0x00,
         0xFD, 0x21, 0x00, 0x00,
+        0x02,
+        0x12,
+        0x77,
+        0x70,
+        0x71,
+        0x72,
+        0x73,
+        0x74,
+        0x75,
+        0x36, 0x42,
+        0xDD, 0x77, 0x01,
+        0xDD, 0x70, 0x01,
+        0xDD, 0x71, 0x01,
+        0xDD, 0x72, 0x01,
+        0xDD, 0x73, 0x01,
+        0xDD, 0x74, 0x01,
+        0xDD, 0x75, 0x01,
+        0xDD, 0x36, 0x01, 0x42,
+        0xFD, 0x77, 0x01,
+        0xFD, 0x70, 0x01,
+        0xFD, 0x71, 0x01,
+        0xFD, 0x72, 0x01,
+        0xFD, 0x73, 0x01,
+        0xFD, 0x74, 0x01,
+        0xFD, 0x75, 0x01,
+        0xFD, 0x36, 0x01, 0x42,
+       
+        0x32, 0x00, 0x00,
+        0xED, 0x43, 0x00, 0x00,
+        0xED, 0x53, 0x00, 0x00,
+        0x22, 0x00, 0x00,
+        0xED, 0x73, 0x00, 0x00,
+        0xDD, 0x22, 0x00, 0x00,
+        0xFD, 0x22, 0x00, 0x00,
 
-        20, 0x01
+        107, 0x01 
     ], data);
 }
 
@@ -1441,7 +1474,7 @@ fn ld() {
 fn res() {
     let parser = parser(&[(
         "/test.asm",
-        r#"
+        r#" 
             res 0, a
             res 1, b
             res 2, c
