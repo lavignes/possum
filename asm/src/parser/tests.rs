@@ -1080,6 +1080,275 @@ fn jr() {
 }
 
 #[test]
+fn ld() {
+    let parser = parser(&[(
+        "/test.asm",
+        r#"
+            test:
+            ld a, a
+            ld a, b
+            ld a, c
+            ld a, d
+            ld a, e
+            ld a, h
+            ld a, l
+            ld a, ixh
+            ld a, ixl
+            ld a, iyh
+            ld a, iyl
+            ld a, i
+            ld a, r
+            ld a, (bc)
+            ld a, (de)
+            ld a, (hl)
+            ld a, (ix+1)
+            ld a, (iy+1)
+            ld a, (test)
+            ld a, $42
+            ld b, a
+            ld b, b
+            ld b, c
+            ld b, d
+            ld b, e
+            ld b, h
+            ld b, l
+            ld b, ixh
+            ld b, ixl
+            ld b, iyh
+            ld b, iyl
+            ld b, (hl)
+            ld b, (ix+1)
+            ld b, (iy+1)
+            ld b, $42
+            ld c, a
+            ld c, b
+            ld c, c
+            ld c, d
+            ld c, e
+            ld c, h
+            ld c, l
+            ld c, ixh
+            ld c, ixl
+            ld c, iyh
+            ld c, iyl
+            ld c, (hl)
+            ld c, (ix+1)
+            ld c, (iy+1)
+            ld c, $42
+            ld d, a
+            ld d, b
+            ld d, c
+            ld d, d
+            ld d, e
+            ld d, h
+            ld d, l
+            ld d, ixh
+            ld d, ixl
+            ld d, iyh
+            ld d, iyl
+            ld d, (hl)
+            ld d, (ix+1)
+            ld d, (iy+1)
+            ld d, $42
+
+            ;ld e, a
+            ;ld e, b
+            ;ld e, c
+            ;ld e, d
+            ;ld e, e
+            ;ld e, h
+            ;ld e, l
+            ;ld e, ixh
+            ;ld e, ixl
+            ;ld e, iyh
+            ;ld e, iyl
+            ;ld e, (hl)
+            ;ld e, (ix+1)
+            ;ld e, (iy+1)
+            ;ld e, $42
+
+            ;ld h, a
+            ;ld h, b
+            ;ld h, c
+            ;ld h, d
+            ;ld h, e
+            ;ld h, h
+            ;ld h, l
+            ;ld h, (hl)
+            ;ld h, (ix+1)
+            ;ld h, (iy+1)
+            ;ld h, $42
+
+            ;ld l, a
+            ;ld l, b
+            ;ld l, c
+            ;ld l, d
+            ;ld l, e
+            ;ld l, h
+            ;ld l, l
+            ;ld l, (hl)
+            ;ld l, (ix+1)
+            ;ld l, (iy+1)
+            ;ld l, $42
+
+            ;ld ixh, a
+            ;ld ixh, b
+            ;ld ixh, c
+            ;ld ixh, d
+            ;ld ixh, e
+            ;ld ixh, ixh
+            ;ld ixh, ixl
+            ;ld ixh, iyh
+            ;ld ixh, iyl
+            ;ld ixh, $42
+
+            ;ld ixl, a
+            ;ld ixl, b
+            ;ld ixl, c
+            ;ld ixl, d
+            ;ld ixl, e
+            ;ld ixl, ixh
+            ;ld ixl, ixl
+            ;ld ixl, iyh
+            ;ld ixl, iyl
+            ;ld ixl, $42
+
+            ;ld r, a
+            ;ld i, a
+
+            ;ld sp, hl
+            ;ld sp, ix
+            ;ld sp, iy
+            ;ld bc, (test)
+            ;ld de, (test)
+            ;ld hl, (test)
+            ;ld ix, (test)
+            ;ld iy, (test)
+            ;ld sp, test
+            ;ld bc, test
+            ;ld de, test
+            ;ld hl, test
+            ;ld ix, test
+            ;ld iy, test
+
+            ;ld (bc), a
+            ;ld (de), a
+            ;ld (hl), a
+            ;ld (hl), b
+            ;ld (hl), c
+            ;ld (hl), d
+            ;ld (hl), e
+            ;ld (hl), h
+            ;ld (hl), l
+            ;ld (hl), $42
+            ;ld (ix+1), a
+            ;ld (ix+1), b
+            ;ld (ix+1), c
+            ;ld (ix+1), d
+            ;ld (ix+1), e
+            ;ld (ix+1), h
+            ;ld (ix+1), l
+            ;ld (iy+1), a
+            ;ld (iy+1), b
+            ;ld (iy+1), c
+            ;ld (iy+1), d
+            ;ld (iy+1), e
+            ;ld (iy+1), h
+            ;ld (iy+1), l
+
+            ;ld (test), a
+            ;ld (test), bc
+            ;ld (test), de
+            ;ld (test), hl
+            ;ld (test), sp
+            ;ld (test), ix
+            ;ld (test), iy
+
+            @dw @here
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    parser
+        .parse("/", "test.asm")
+        .unwrap()
+        .assemble(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x7F,
+        0x78,
+        0x79,
+        0x7A,
+        0x7B,
+        0x7C,
+        0x7D,
+        0xDD, 0x7C,
+        0xDD, 0x7D,
+        0xFD, 0x7C,
+        0xFD, 0x7D,
+        0xED, 0x57,
+        0xED, 0x5F,
+        0x0A,
+        0x1A,
+        0x7E,
+        0xDD, 0x7E, 0x01,
+        0xFD, 0x7E, 0x01,
+        0x3A, 0x00, 0x00,
+        0x3E, 0x42,
+        0x47,
+        0x40,
+        0x41,
+        0x42,
+        0x43,
+        0x44,
+        0x45,
+        0xDD, 0x44,
+        0xDD, 0x45,
+        0xFD, 0x44,
+        0xFD, 0x45,
+        0x46,
+        0xDD, 0x46, 0x01,
+        0xFD, 0x46, 0x01,
+        0x06, 0x42,
+        0x4F,
+        0x48,
+        0x49,
+        0x4A,
+        0x4B,
+        0x4C,
+        0x4D,
+        0xDD, 0x4C,
+        0xDD, 0x4D,
+        0xFD, 0x4C,
+        0xFD, 0x4D,
+        0x4E,
+        0xDD, 0x4E, 0x01,
+        0xFD, 0x4E, 0x01,
+        0x0E, 0x42,
+
+        0x57,
+        0x50,
+        0x51,
+        0x52,
+        0x53,
+        0x54,
+        0x55,
+        0xDD, 0x54,
+        0xDD, 0x55,
+        0xFD, 0x54,
+        0xFD, 0x55,
+        0x56,
+        0xDD, 0x56, 0x01,
+        0xFD, 0x56, 0x01,
+        0x16, 0x42,
+
+        105, 0x00
+    ], data);
+}
+
+#[test]
 fn res() {
     let parser = parser(&[(
         "/test.asm",
