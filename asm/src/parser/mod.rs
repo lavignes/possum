@@ -4760,6 +4760,142 @@ where
                                 }
                             }
 
+                            Some(Token::Register { name: RegisterName::BC, .. }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                if indirect {
+                                    self.here += 4;
+                                    self.next()?;
+                                    self.data.push(0xED);
+                                    self.data.push(0x4B);
+                                } else {
+                                    self.here += 3;
+                                    self.data.push(0x01);
+                                }
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u16::MAX as u32) {
+                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                    }
+                                    self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                } else {
+                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.data.push(0);
+                                    self.data.push(0);
+                                }
+                                if indirect {
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                }
+                            }
+
+                            Some(Token::Register { name: RegisterName::DE, .. }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                if indirect {
+                                    self.here += 4;
+                                    self.next()?;
+                                    self.data.push(0xED);
+                                    self.data.push(0x5B);
+                                } else {
+                                    self.here += 3;
+                                    self.data.push(0x11);
+                                }
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u16::MAX as u32) {
+                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                    }
+                                    self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                } else {
+                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.data.push(0);
+                                    self.data.push(0);
+                                }
+                                if indirect {
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                }
+                            }
+
+                            Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.here += 3;
+                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                if indirect {
+                                    self.next()?;
+                                    self.data.push(0x2A);
+                                } else {
+                                    self.data.push(0x21);
+                                }
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u16::MAX as u32) {
+                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                    }
+                                    self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                } else {
+                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.data.push(0);
+                                    self.data.push(0);
+                                }
+                                if indirect {
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                }
+                            }
+
+                            Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.here += 4;
+                                self.data.push(0xDD);
+                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                if indirect {
+                                    self.next()?;
+                                    self.data.push(0x2A);
+                                } else {
+                                    self.data.push(0x21);
+                                }
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u16::MAX as u32) {
+                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                    }
+                                    self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                } else {
+                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.data.push(0);
+                                    self.data.push(0);
+                                }
+                                if indirect {
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                }
+                            }
+
+                            Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.here += 4;
+                                self.data.push(0xFD);
+                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                if indirect {
+                                    self.next()?;
+                                    self.data.push(0x2A);
+                                } else {
+                                    self.data.push(0x21);
+                                }
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u16::MAX as u32) {
+                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                    }
+                                    self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                } else {
+                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.data.push(0);
+                                    self.data.push(0);
+                                }
+                                if indirect {
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                }
+                            }
+
                             _ => todo!(),
                         }
                     }

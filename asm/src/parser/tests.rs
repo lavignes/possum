@@ -1219,29 +1219,22 @@ fn ld() {
             ld iyl, iyh
             ld iyl, iyl
             ld iyl, $42
-
             ld r, a
             ld i, a
-
             ld sp, hl
             ld sp, ix
             ld sp, iy
             ld sp, test
-            
-            ;ld bc, (test)
-            ;ld bc, test
-            
-            ;ld de, (test)
-            ;ld de, test
-            
-            ;ld hl, (test)
-            ;ld hl, test
-
-            ;ld ix, (test)
-            ;ld ix, test
-
-            ;ld iy, (test)
-            ;ld iy, test
+            ld bc, (test)
+            ld bc, test
+            ld de, (test)
+            ld de, test
+            ld hl, (test)
+            ld hl, test
+            ld ix, (test)
+            ld ix, test
+            ld iy, (test)
+            ld iy, test
 
             ;ld (bc), a
             ;ld (de), a
@@ -1425,13 +1418,22 @@ fn ld() {
         0xFD, 0x2E, 0x42,
         0xED, 0x4F,
         0xED, 0x47,
-
         0xF9,
         0xDD, 0xF9,
         0xFD, 0xF9,
         0x31, 0x00, 0x00,
+        0xED, 0x4B, 0x00, 0x00,
+        0x01, 0x00, 0x00,
+        0xED, 0x5B, 0x00, 0x00,
+        0x11, 0x00, 0x00,
+        0x2A, 0x00, 0x00,
+        0x21, 0x00, 0x00,
+        0xDD, 0x2A, 0x00, 0x00,
+        0xDD, 0x21, 0x00, 0x00,
+        0xFD, 0x2A, 0x00, 0x00,
+        0xFD, 0x21, 0x00, 0x00,
 
-        240, 0x00
+        20, 0x01
     ], data);
 }
 
