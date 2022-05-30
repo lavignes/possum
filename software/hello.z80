@@ -1,21 +1,21 @@
-PIPE_PORT: equ $f0
+@def PIPE_PORT, $f0
 
-	org $0000
+@org $0000
 
 start:
 	ld hl, HELLO
 	ld b, HELLO_END - HELLO
-	call print_string
+	call .print
 	halt
 
-print_string:
+.print:
 	ld a, (hl)
 	out (PIPE_PORT), a
 	inc hl
 	dec b
-	djnz, print_string
+	djnz .print
 	ret
 
 HELLO:
-	db "Howdy Cowboy\n"
+	@db "Howdy Cowboy\n"
 HELLO_END:

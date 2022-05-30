@@ -5,7 +5,7 @@ use crate::{
     fileman::{FileManager, FileSystem},
     intern::StrInterner,
     lexer::SourceLoc,
-    symtab::Symtab,
+    symtab::{Symbol, Symtab},
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -90,10 +90,40 @@ impl<S: FileSystem> Module<S> {
     }
 
     pub fn link(mut self, writer: &mut dyn Write) -> Result<(), LinkerError> {
-        // TODO: Need to scan for unresolved symbol and report them nicely
+        for (strref, loc) in self.symtab.references() {
+            let interner = self.str_interner.as_ref().borrow();
+            let label = interner.get(*strref).unwrap();
+            let path = self.file_manager.path(loc.pathref).unwrap();
+            match self.symtab.get(*strref) {
+                None => {
+                    return Err(LinkerError(format!(
+                        "In \"{}\"\n\n{}:{}:{}: Undefined symbol: \"{label}\"",
+                        path.display(),
+                        path.file_name().unwrap().to_str().unwrap(),
+                        loc.line,
+                        loc.column
+                    )));
+                }
+                Some(Symbol::Expr(expr)) => {
+                    if expr.evaluate(&self.symtab).is_none() {
+                        return Err(LinkerError(format!(
+                            "In \"{}\"\n\n{}:{}:{}: Undefined symbol: \"{label}\"",
+                            path.display(),
+                            path.file_name().unwrap().to_str().unwrap(),
+                            loc.line,
+                            loc.column
+                        )));
+                    }
+                }
+                _ => {}
+            }
+        }
+
         for link in &self.links {
             match link {
-                Link::Byte { offset, expr, .. } => {
+                Link::Byte {
+                    loc, offset, expr, ..
+                } => {
                     if let Some(value) = expr.evaluate(&self.symtab) {
                         if (value as u32) > (u8::MAX as u32) {
                             return Err(LinkerError(format!(
@@ -102,10 +132,19 @@ impl<S: FileSystem> Module<S> {
                         }
                         self.data[*offset] = value as u8;
                     } else {
-                        return Err(LinkerError(format!("Expression could not be solved")));
+                        let path = self.file_manager.path(loc.pathref).unwrap();
+                        return Err(LinkerError(format!(
+                            "In \"{}\"\n\n{}:{}:{}: Expression could not be solved",
+                            path.display(),
+                            path.file_name().unwrap().to_str().unwrap(),
+                            loc.line,
+                            loc.column
+                        )));
                     }
                 }
-                Link::SignedByte { offset, expr, .. } => {
+                Link::SignedByte {
+                    loc, offset, expr, ..
+                } => {
                     if let Some(value) = expr.evaluate(&self.symtab) {
                         if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32)) {
                             return Err(LinkerError(format!(
@@ -114,10 +153,19 @@ impl<S: FileSystem> Module<S> {
                         }
                         self.data[*offset] = value as u8;
                     } else {
-                        return Err(LinkerError(format!("Expression could not be solved")));
+                        let path = self.file_manager.path(loc.pathref).unwrap();
+                        return Err(LinkerError(format!(
+                            "In \"{}\"\n\n{}:{}:{}: Expression could not be solved",
+                            path.display(),
+                            path.file_name().unwrap().to_str().unwrap(),
+                            loc.line,
+                            loc.column
+                        )));
                     }
                 }
-                Link::Word { offset, expr, .. } => {
+                Link::Word {
+                    loc, offset, expr, ..
+                } => {
                     if let Some(value) = expr.evaluate(&self.symtab) {
                         if (value as u32) > (u16::MAX as u32) {
                             return Err(LinkerError(format!(
@@ -128,11 +176,22 @@ impl<S: FileSystem> Module<S> {
                         self.data[*offset] = bytes[0];
                         self.data[*offset + 1] = bytes[1];
                     } else {
-                        return Err(LinkerError(format!("Expression could not be solved")));
+                        let path = self.file_manager.path(loc.pathref).unwrap();
+                        return Err(LinkerError(format!(
+                            "In \"{}\"\n\n{}:{}:{}: Expression could not be solved",
+                            path.display(),
+                            path.file_name().unwrap().to_str().unwrap(),
+                            loc.line,
+                            loc.column
+                        )));
                     }
                 }
                 Link::Space {
-                    offset, len, expr, ..
+                    loc,
+                    offset,
+                    len,
+                    expr,
+                    ..
                 } => {
                     if let Some(value) = expr.evaluate(&self.symtab) {
                         if (value as u32) > (u8::MAX as u32) {
@@ -144,7 +203,14 @@ impl<S: FileSystem> Module<S> {
                             self.data[i] = value as u8;
                         }
                     } else {
-                        return Err(LinkerError(format!("Expression could not be solved")));
+                        let path = self.file_manager.path(loc.pathref).unwrap();
+                        return Err(LinkerError(format!(
+                            "In \"{}\"\n\n{}:{}:{}: Expression could not be solved",
+                            path.display(),
+                            path.file_name().unwrap().to_str().unwrap(),
+                            loc.line,
+                            loc.column
+                        )));
                     }
                 }
             }

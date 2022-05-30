@@ -866,14 +866,19 @@ where
                     LabelKind::Global | LabelKind::Direct => value,
 
                     LabelKind::Local => {
-                        let interner = self.str_interner.as_ref().borrow_mut();
-                        let label = interner.get(value).unwrap();
                         if let Some(namespace) = self.active_namespace {
-                            let global = interner.get(namespace).unwrap();
+                            let direct_label = {
+                                let interner = self.str_interner.as_ref().borrow_mut();
+                                let label = interner.get(value).unwrap();
+                                let global = interner.get(namespace).unwrap();
+                                format!("{global}{label}")
+                            };
                             self.str_interner
                                 .borrow_mut()
-                                .intern(format!("{global}{label}"))
+                                .intern(direct_label)
                         } else {
+                            let interner = self.str_interner.as_ref().borrow_mut();
+                            let label = interner.get(value).unwrap();
                             return Err((loc, AssemblerError(format!("The local label \"{label}\" is being defined but there was no global label defined before it"))));
                         }
                     }
@@ -888,13 +893,16 @@ where
                             if let Some(value) = expr.evaluate(&self.symtab) {
                                 nodes.push(ExprNode::Value(value));
                             } else {
-                                nodes.push(ExprNode::Label(value));
+                                nodes.push(ExprNode::Label(direct));
                             }
                         }
                     }
                 } else {
-                    nodes.push(ExprNode::Label(value));
+                    nodes.push(ExprNode::Label(direct));
                 }
+                // Important to record where in expressions we reference
+                // symbols, so we can barf at link time
+                self.symtab.touch(direct, loc);
                 Ok(loc)
             }
 
@@ -932,17 +940,27 @@ where
 
                 Some(&Token::Label { loc, value, kind }) => {
                     let direct = match kind {
-                        LabelKind::Global | LabelKind::Direct => value,
+                        LabelKind::Global => {
+                            self.active_namespace = Some(value);
+                            value
+                        }
+
+                        LabelKind::Direct => value,
 
                         LabelKind::Local => {
-                            let interner = self.str_interner.as_ref().borrow_mut();
-                            let label = interner.get(value).unwrap();
                             if let Some(namespace) = self.active_namespace {
-                                let global = interner.get(namespace).unwrap();
+                                let direct_label = {
+                                    let interner = self.str_interner.as_ref().borrow_mut();
+                                    let label = interner.get(value).unwrap();
+                                    let global = interner.get(namespace).unwrap();
+                                    format!("{global}{label}")
+                                };
                                 self.str_interner
                                     .borrow_mut()
-                                    .intern(format!("{global}{label}"))
+                                    .intern(direct_label)
                             } else {
+                                let interner = self.str_interner.as_ref().borrow_mut();
+                                let label = interner.get(value).unwrap();
                                 return Err((loc, AssemblerError(format!("The local label \"{label}\" is being defined but there was no global label defined before it"))));
                             }
                         }
@@ -2641,6 +2659,7 @@ where
                             }
                             self.data.extend_from_slice(&(value as u16).to_le_bytes());
                         } else {
+                            self.links.push(Link::word(loc, self.data.len(), expr));
                             self.data.push(0);
                             self.data.push(0);
                         }
@@ -3648,6 +3667,7 @@ where
                                     }
                                     self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                 } else {
+                                    self.links.push(Link::word(loc, self.data.len(), expr));
                                     self.data.push(0);
                                     self.data.push(0);
                                 }
@@ -5895,7 +5915,7 @@ where
                                                     self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }  
-                                            }  
+                                            } 
   
                                             Some(Token::Register { name: RegisterName::IY, .. }) => {
                                                 self.expect_symbol(SymbolName::Plus)?;
