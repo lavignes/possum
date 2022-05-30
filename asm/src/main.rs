@@ -1,12 +1,12 @@
 #![feature(result_option_inspect)]
 
+mod assembler;
 mod charreader;
 mod expr;
 mod fileman;
 mod intern;
 mod lexer;
-mod module;
-mod parser;
+mod linker;
 mod symtab;
 
 use std::{
@@ -17,7 +17,7 @@ use std::{
     process::ExitCode,
 };
 
-use crate::{fileman::RealFileSystem, intern::StrInterner, parser::Parser};
+use crate::{assembler::Assembler, fileman::RealFileSystem, intern::StrInterner};
 
 #[derive(clap::Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -61,16 +61,16 @@ fn main() -> ExitCode {
     let cwd = env::current_dir().unwrap();
     let full_cwd = fs::canonicalize(cwd).unwrap();
     let file_system = RealFileSystem::new();
-    let mut parser = Parser::new(file_system);
+    let mut assembler = Assembler::new(file_system);
 
     for path in &args.include {
-        if let Err(e) = parser.add_search_path(full_cwd.as_path(), path) {
+        if let Err(e) = assembler.add_search_path(full_cwd.as_path(), path) {
             eprintln!("{e}");
             return ExitCode::FAILURE;
         }
     }
 
-    let module = match parser.parse(full_cwd.as_path(), args.file) {
+    let module = match assembler.assemble(full_cwd.as_path(), args.file) {
         Ok(module) => module,
         Err(e) => {
             eprintln!("{e}");
@@ -78,5 +78,11 @@ fn main() -> ExitCode {
         }
     };
 
-    ExitCode::SUCCESS
+    match module.link(&mut output) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
 }

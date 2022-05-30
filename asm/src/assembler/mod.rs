@@ -10,7 +10,7 @@ use crate::{
         DirectiveName, FlagName, LabelKind, Lexer, LexerError, OperationName, RegisterName,
         SourceLoc, SymbolName, Token,
     },
-    module::{Hole, Module},
+    linker::{Link, Module},
     symtab::{Symbol, Symtab},
     StrInterner,
 };
@@ -33,15 +33,15 @@ struct Macro {
 
 #[derive(thiserror::Error, Debug)]
 #[error("{0}")]
-pub struct ParserError(String);
+pub struct AssemblerError(String);
 
-impl From<LexerError> for (SourceLoc, ParserError) {
+impl From<LexerError> for (SourceLoc, AssemblerError) {
     fn from(e: LexerError) -> Self {
-        (e.loc(), ParserError(format!("{e}")))
+        (e.loc(), AssemblerError(format!("{e}")))
     }
 }
 
-pub struct Parser<S, R> {
+pub struct Assembler<S, R> {
     file_manager: FileManager<S>,
     str_interner: Rc<RefCell<StrInterner>>,
     lexers: Vec<Lexer<R>>,
@@ -49,7 +49,7 @@ pub struct Parser<S, R> {
     macros: FxHashMap<StrRef, Macro>,
     symtab: Symtab,
     data: Vec<u8>,
-    holes: Vec<Hole>,
+    links: Vec<Link>,
 
     stash: Option<Token>,
     loc: Option<SourceLoc>,
@@ -58,7 +58,7 @@ pub struct Parser<S, R> {
     active_namespace: Option<StrRef>,
 }
 
-impl<S, R> Parser<S, R>
+impl<S, R> Assembler<S, R>
 where
     S: FileSystem<Reader = R>,
     R: Read,
@@ -72,7 +72,7 @@ where
             macros: FxHashMap::default(),
             symtab: Symtab::new(),
             data: Vec::new(),
-            holes: Vec::new(),
+            links: Vec::new(),
 
             stash: None,
             loc: None,
@@ -86,10 +86,10 @@ where
         &mut self,
         cwd: C,
         path: P,
-    ) -> Result<(), ParserError> {
+    ) -> Result<(), AssemblerError> {
         let path = path.as_ref();
         self.file_manager.add_search_path(cwd, path).map_err(|e| {
-            ParserError(format!(
+            AssemblerError(format!(
                 "Failed to find include path \"{}\": {e}",
                 path.display()
             ))
@@ -98,22 +98,22 @@ where
     }
 
     #[must_use]
-    pub fn parse<C: AsRef<Path>, P: AsRef<Path>>(
+    pub fn assemble<C: AsRef<Path>, P: AsRef<Path>>(
         mut self,
         cwd: C,
         path: P,
-    ) -> Result<Module<S>, ParserError> {
+    ) -> Result<Module<S>, AssemblerError> {
         let path = path.as_ref();
         let (pathref, reader) = match self.file_manager.reader(cwd, path) {
             Ok(Some(tup)) => tup,
             Ok(None) => {
-                return Err(ParserError(format!(
+                return Err(AssemblerError(format!(
                     "File not found: \"{}\"",
                     path.display()
                 )))
             }
             Err(e) => {
-                return Err(ParserError(format!(
+                return Err(AssemblerError(format!(
                     "Failed to open \"{}\" for reading: {e}",
                     path.display()
                 )))
@@ -131,10 +131,10 @@ where
             file_manager,
             symtab,
             data,
-            holes,
+            links,
             ..
         } = self;
-        Ok(Module::new(str_interner, file_manager, symtab, data, holes))
+        Ok(Module::new(str_interner, file_manager, symtab, data, links))
     }
 
     #[inline]
@@ -176,7 +176,7 @@ where
         Ok(self.stash.take())
     }
 
-    fn trace_error(&self, loc: SourceLoc, e: ParserError) -> ParserError {
+    fn trace_error(&self, loc: SourceLoc, e: AssemblerError) -> AssemblerError {
         let mut msg = String::new();
         let fmt_msg = &mut msg as &mut dyn fmt::Write;
 
@@ -206,22 +206,22 @@ where
         )
         .unwrap();
         writeln!(fmt_msg, "{e}").unwrap();
-        ParserError(msg)
+        AssemblerError(msg)
     }
 
-    fn end_of_input_err<T>(&mut self) -> Result<T, (SourceLoc, ParserError)> {
-        Err((self.loc(), ParserError(format!("Unexpected end of input"))))
+    fn end_of_input_err<T>(&mut self) -> Result<T, (SourceLoc, AssemblerError)> {
+        Err((self.loc(), AssemblerError(format!("Unexpected end of input"))))
     }
 
     #[inline]
     #[must_use]
-    fn expect_symbol(&mut self, sym: SymbolName) -> Result<(), (SourceLoc, ParserError)> {
+    fn expect_symbol(&mut self, sym: SymbolName) -> Result<(), (SourceLoc, AssemblerError)> {
         match self.next()? {
             Some(Token::Symbol { loc, name }) => {
                 if name != sym {
                     Err((
                         loc,
-                        ParserError(format!("Unexpected symbol: \"{name}\", expected \"{sym}\"")),
+                        AssemblerError(format!("Unexpected symbol: \"{name}\", expected \"{sym}\"")),
                     ))
                 } else {
                     Ok(())
@@ -229,7 +229,7 @@ where
             }
             Some(tok) => Err((
                 tok.loc(),
-                ParserError(format!(
+                AssemblerError(format!(
                     "Unexpected \"{}\", expected the symbol \"{sym}\"",
                     tok.as_display(&self.str_interner)
                 )),
@@ -240,13 +240,13 @@ where
 
     #[inline]
     #[must_use]
-    fn expect_register(&mut self, reg: RegisterName) -> Result<(), (SourceLoc, ParserError)> {
+    fn expect_register(&mut self, reg: RegisterName) -> Result<(), (SourceLoc, AssemblerError)> {
         match self.next()? {
             Some(Token::Register { loc, name }) => {
                 if name != reg {
                     Err((
                         loc,
-                        ParserError(format!(
+                        AssemblerError(format!(
                             "Unexpected register: \"{name}\", expected the register \"{reg}\""
                         )),
                     ))
@@ -256,7 +256,7 @@ where
             }
             Some(tok) => Err((
                 tok.loc(),
-                ParserError(format!(
+                AssemblerError(format!(
                     "Unexpected \"{}\", expected the register \"{reg}\"",
                     tok.as_display(&self.str_interner)
                 )),
@@ -266,13 +266,13 @@ where
     }
 
     #[must_use]
-    fn const_expr(&mut self) -> Result<(SourceLoc, Option<i32>), (SourceLoc, ParserError)> {
+    fn const_expr(&mut self) -> Result<(SourceLoc, Option<i32>), (SourceLoc, AssemblerError)> {
         self.expr()
             .map(|(loc, expr)| (loc, expr.evaluate(&self.symtab)))
     }
 
     #[must_use]
-    fn expr(&mut self) -> Result<(SourceLoc, Expr), (SourceLoc, ParserError)> {
+    fn expr(&mut self) -> Result<(SourceLoc, Expr), (SourceLoc, AssemblerError)> {
         let mut nodes = Vec::new();
         let loc = self.expr_prec_0(&mut nodes)?;
         Ok((loc, Expr::new(nodes)))
@@ -282,7 +282,7 @@ where
     fn expr_prec_0(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_1(nodes)?;
 
         match self.peek()? {
@@ -295,7 +295,7 @@ where
                 if self.peeked_symbol(SymbolName::Colon)?.is_none() {
                     return Err((
                         self.loc(),
-                        ParserError(format!("Expected a \":\" in ternary expression")),
+                        AssemblerError(format!("Expected a \":\" in ternary expression")),
                     ));
                 }
                 self.next()?;
@@ -312,7 +312,7 @@ where
     fn expr_prec_1(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_2(nodes)?;
 
         match self.peek()? {
@@ -340,7 +340,7 @@ where
     fn expr_prec_2(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_3(nodes)?;
 
         match self.peek()? {
@@ -368,7 +368,7 @@ where
     fn expr_prec_3(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_4(nodes)?;
 
         match self.peek()? {
@@ -396,7 +396,7 @@ where
     fn expr_prec_4(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_5(nodes)?;
 
         match self.peek()? {
@@ -424,7 +424,7 @@ where
     fn expr_prec_5(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_6(nodes)?;
 
         match self.peek()? {
@@ -452,7 +452,7 @@ where
     fn expr_prec_6(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_7(nodes)?;
 
         match self.peek()? {
@@ -480,7 +480,7 @@ where
     fn expr_prec_7(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_8(nodes)?;
 
         match self.peek()? {
@@ -525,7 +525,7 @@ where
     fn expr_prec_8(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_9(nodes)?;
 
         match self.peek()? {
@@ -602,7 +602,7 @@ where
     fn expr_prec_9(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_10(nodes)?;
 
         match self.peek()? {
@@ -679,7 +679,7 @@ where
     fn expr_prec_10(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_11(nodes)?;
 
         match self.peek()? {
@@ -724,7 +724,7 @@ where
     fn expr_prec_11(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_12(nodes)?;
 
         match self.peek()? {
@@ -785,7 +785,7 @@ where
     fn expr_prec_12(
         &mut self,
         nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, ParserError)> {
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         match self.peek()? {
             Some(&Token::Symbol {
                 loc,
@@ -826,7 +826,7 @@ where
                 if self.peeked_symbol(SymbolName::ParenClose)?.is_none() {
                     return Err((
                         self.loc(),
-                        ParserError(format!("Expected a \")\" to close expression")),
+                        AssemblerError(format!("Expected a \")\" to close expression")),
                     ));
                 }
                 self.next()?;
@@ -847,7 +847,7 @@ where
                 }
                 _ => Err((
                     loc,
-                    ParserError(format!(
+                    AssemblerError(format!(
                         "Only \"@here\" directives are allowed in expressions"
                     )),
                 )),
@@ -867,7 +867,7 @@ where
                                 .borrow_mut()
                                 .intern(format!("{global}{label}"))
                         } else {
-                            return Err((loc, ParserError(format!("The local label \"{label}\" is being defined but there was no global label defined before it"))));
+                            return Err((loc, AssemblerError(format!("The local label \"{label}\" is being defined but there was no global label defined before it"))));
                         }
                     }
                 };
@@ -893,7 +893,7 @@ where
 
             Some(&tok) => Err((
                 tok.loc(),
-                ParserError(format!(
+                AssemblerError(format!(
                     "Unexpected {} in expression",
                     tok.as_display(&self.str_interner)
                 )),
@@ -908,7 +908,7 @@ where
     fn peeked_symbol(
         &mut self,
         sym: SymbolName,
-    ) -> Result<Option<Token>, (SourceLoc, ParserError)> {
+    ) -> Result<Option<Token>, (SourceLoc, AssemblerError)> {
         match self.peek()? {
             Some(&tok @ Token::Symbol { name, .. }) if name == sym => Ok(Some(tok)),
             _ => Ok(None),
@@ -916,7 +916,7 @@ where
     }
 
     #[must_use]
-    fn parse_all(&mut self) -> Result<(), (SourceLoc, ParserError)> {
+    fn parse_all(&mut self) -> Result<(), (SourceLoc, AssemblerError)> {
         loop {
             match self.peek()? {
                 Some(Token::NewLine { .. }) => {
@@ -936,7 +936,7 @@ where
                                     .borrow_mut()
                                     .intern(format!("{global}{label}"))
                             } else {
-                                return Err((loc, ParserError(format!("The local label \"{label}\" is being defined but there was no global label defined before it"))));
+                                return Err((loc, AssemblerError(format!("The local label \"{label}\" is being defined but there was no global label defined before it"))));
                             }
                         }
                     };
@@ -946,7 +946,7 @@ where
                         let label = interner.get(direct).unwrap();
                         return Err((
                             loc,
-                            ParserError(format!("The label \"{label}\" was already defined")),
+                            AssemblerError(format!("The label \"{label}\" was already defined")),
                         ));
                     }
                     self.symtab.insert(direct, Symbol::Value(self.here as i32));
@@ -966,14 +966,14 @@ where
                                 if (value as u32) > (u16::MAX as u32) {
                                     return Err((
                                         loc,
-                                        ParserError(format!(
+                                        AssemblerError(format!(
                                             "\"@org\" expression result ({}) is not a valid address", value
                                         )),
                                     ));
                                 }
                                 value as u16
                             },
-                            (loc, None) => return Err((loc, ParserError(format!("The expression following an \"@org\" directive must be immediately solvable")))),
+                            (loc, None) => return Err((loc, AssemblerError(format!("The expression following an \"@org\" directive must be immediately solvable")))),
                         };
                     }
 
@@ -993,7 +993,7 @@ where
                                     (_, Some(value)) => {
                                         println!("{value}");
                                     },
-                                    (loc, None) => return Err((loc, ParserError(format!("An expression following an \"@echo\" directive must be immediately solvable")))),
+                                    (loc, None) => return Err((loc, AssemblerError(format!("An expression following an \"@echo\" directive must be immediately solvable")))),
                                 }
                             }
 
@@ -1009,13 +1009,13 @@ where
                                 self.next()?;
                                 let interner = self.str_interner.as_ref().borrow_mut();
                                 let value = interner.get(value).unwrap();
-                                return Err((loc, ParserError(format!("{value}"))));
+                                return Err((loc, AssemblerError(format!("{value}"))));
                             }
 
                             Some(_) => {
                                 match self.const_expr()? {
-                                    (_, Some(value)) => return Err((loc, ParserError(format!("{value}")))),
-                                    (loc, None) => return Err((loc, ParserError(format!("An expression following an \"@die\" directive must be immediately solvable")))),
+                                    (_, Some(value)) => return Err((loc, AssemblerError(format!("{value}")))),
+                                    (loc, None) => return Err((loc, AssemblerError(format!("An expression following an \"@die\" directive must be immediately solvable")))),
                                 }
                             }
 
@@ -1039,14 +1039,14 @@ where
                                             .borrow_mut()
                                             .intern(format!("{global}{label}"))
                                     } else {
-                                        return Err((loc, ParserError(format!("The local symbol \"{label}\" is being defined but there was no global label defined before it"))));
+                                        return Err((loc, AssemblerError(format!("The local symbol \"{label}\" is being defined but there was no global label defined before it"))));
                                     }
                                 }
                             },
                             _ => {
                                 return Err((
                                     loc,
-                                    ParserError(format!("A symbol name is required")),
+                                    AssemblerError(format!("A symbol name is required")),
                                 ))
                             }
                         };
@@ -1057,7 +1057,7 @@ where
                             let label = interner.get(direct).unwrap();
                             return Err((
                                 loc,
-                                ParserError(format!("The symbol \"{label}\" was already defined")),
+                                AssemblerError(format!("The symbol \"{label}\" was already defined")),
                             ));
                         }
                         self.expect_symbol(SymbolName::Comma)?;
@@ -1079,7 +1079,7 @@ where
                                     if (self.here as usize) + bytes.len() > (u16::MAX as usize) {
                                         return Err((
                                             loc,
-                                            ParserError(format!(
+                                            AssemblerError(format!(
                                                 "\"@db\" bytes extend past address $FFFF"
                                             )),
                                         ));
@@ -1095,7 +1095,7 @@ where
                                         if (value as u32) > (u8::MAX as u32) {
                                             return Err((
                                                     loc,
-                                                    ParserError(format!(
+                                                    AssemblerError(format!(
                                                         "\"@db\" expression result ({value}) will not fit in a byte"
                                                     )),
                                                 ));
@@ -1103,14 +1103,14 @@ where
                                         if (self.here as usize) + 1 > (u16::MAX as usize) {
                                             return Err((
                                                 loc,
-                                                ParserError(format!(
+                                                AssemblerError(format!(
                                                     "\"@db\" bytes extend past address $FFFF"
                                                 )),
                                             ));
                                         }
                                         self.data.push(value as u8);
                                     } else {
-                                        self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                        self.links.push(Link::byte(loc, self.data.len(), expr));
                                         self.data.push(0);
                                     }
                                 }
@@ -1136,7 +1136,7 @@ where
                                         if (value as u32) > (u16::MAX as u32) {
                                             return Err((
                                                     loc,
-                                                    ParserError(format!(
+                                                    AssemblerError(format!(
                                                         "\"@dw\" expression result ({value}) will not fit in a word"
                                                     )),
                                                 ));
@@ -1144,14 +1144,14 @@ where
                                         if (self.here as usize) + 1 > (u16::MAX as usize) {
                                             return Err((
                                                 loc,
-                                                ParserError(format!(
+                                                AssemblerError(format!(
                                                     "\"@dw\" bytes extend past address $FFFF"
                                                 )),
                                             ));
                                         }
                                         self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                     } else {
-                                        self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                        self.links.push(Link::word(loc, self.data.len(), expr));
                                         self.data.push(0);
                                         self.data.push(0);
                                     }
@@ -1173,7 +1173,7 @@ where
                             (loc, None) => {
                                 return Err((
                                     loc,
-                                    ParserError(format!(
+                                    AssemblerError(format!(
                                     "The size of a \"@ds\" directive must be immediately solvable"
                                 )),
                                 ))
@@ -1182,7 +1182,7 @@ where
                                 if (size as u32) > (u16::MAX as u32) {
                                     return Err((
                                             loc,
-                                            ParserError(format!(
+                                            AssemblerError(format!(
                                                 "\"@ds\" size expression result ({size}) will not fit in a word"
                                             )),
                                         ));
@@ -1190,7 +1190,7 @@ where
                                 if (self.here as usize) + (size as usize) > (u16::MAX as usize) {
                                     return Err((
                                         loc,
-                                        ParserError(format!(
+                                        AssemblerError(format!(
                                             "\"@ds\" size extends past address $FFFF"
                                         )),
                                     ));
@@ -1207,15 +1207,15 @@ where
                                 if (value as u32) > (u8::MAX as u32) {
                                     return Err((
                                             loc,
-                                            ParserError(format!(
+                                            AssemblerError(format!(
                                                 "\"@ds\" value expression result ({value}) will not fit in a byte"
                                             )),
                                         ));
                                 }
                                 value as u8
                             } else {
-                                self.holes
-                                    .push(Hole::space(loc, self.data.len(), size, expr));
+                                self.links
+                                    .push(Link::space(loc, self.data.len(), size, expr));
                                 0
                             }
                         } else {
@@ -1369,14 +1369,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                         loc,
-                                                        ParserError(format!(
+                                                        AssemblerError(format!(
                                                             "Expression result ({value}) will not fit in a byte"
                                                         )),
                                                     ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -1399,14 +1399,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                         loc,
-                                                        ParserError(format!(
+                                                        AssemblerError(format!(
                                                             "Expression result ({value}) will not fit in a byte"
                                                         )),
                                                     ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -1424,14 +1424,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                         loc,
-                                                        ParserError(format!(
+                                                        AssemblerError(format!(
                                                             "Expression result ({value}) will not fit in a byte"
                                                         )),
                                                     ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -1452,14 +1452,14 @@ where
                                             if (value as u32) > (u8::MAX as u32) {
                                                 return Err((
                                                     loc,
-                                                    ParserError(format!(
+                                                    AssemblerError(format!(
                                                         "Expression result ({value}) will not fit in a byte"
                                                     )),
                                                 ));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -1511,8 +1511,8 @@ where
 
                                     Some(tok) => {
                                         return Err((
-                                            loc,
-                                            ParserError(format!(
+                                            tok.loc(),
+                                            AssemblerError(format!(
                                                 "Unexpected {}, expected register \"bc\", \"de\", \"hl\" or \"sp\"",
                                                 tok.as_display(&self.str_interner)
                                             )),
@@ -1524,8 +1524,8 @@ where
 
                             Some(tok) => {
                                 return Err((
-                                    self.loc(),
-                                    ParserError(format!(
+                                    tok.loc(),
+                                    AssemblerError(format!(
                                         "Unexpected {}, expected register \"a\" or \"hl\"",
                                         tok.as_display(&self.str_interner)
                                     )),
@@ -1677,14 +1677,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                         loc,
-                                                        ParserError(format!(
+                                                        AssemblerError(format!(
                                                             "Expression result ({value}) will not fit in a byte"
                                                         )),
                                                     ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -1707,14 +1707,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                         loc,
-                                                        ParserError(format!(
+                                                        AssemblerError(format!(
                                                             "Expression result ({value}) will not fit in a byte"
                                                         )),
                                                     ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -1732,14 +1732,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                         loc,
-                                                        ParserError(format!(
+                                                        AssemblerError(format!(
                                                             "Expression result ({value}) will not fit in a byte"
                                                         )),
                                                     ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -1760,14 +1760,14 @@ where
                                             if (value as u32) > (u8::MAX as u32) {
                                                 return Err((
                                                     loc,
-                                                    ParserError(format!(
+                                                    AssemblerError(format!(
                                                         "Expression result ({value}) will not fit in a byte"
                                                     )),
                                                 ));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -1815,8 +1815,8 @@ where
 
                                     Some(tok) => {
                                         return Err((
-                                            loc,
-                                            ParserError(format!(
+                                            tok.loc(),
+                                            AssemblerError(format!(
                                                 "Unexpected {}, expected register \"bc\", \"de\", \"hl\" or \"sp\"",
                                                 tok.as_display(&self.str_interner)
                                             )),
@@ -1870,8 +1870,8 @@ where
 
                                     Some(tok) => {
                                         return Err((
-                                            loc,
-                                            ParserError(format!(
+                                            tok.loc(),
+                                            AssemblerError(format!(
                                                 "Unexpected {}, expected register \"bc\", \"de\", \"ix\" or \"sp\"",
                                                 tok.as_display(&self.str_interner)
                                             )),
@@ -1925,8 +1925,8 @@ where
 
                                     Some(tok) => {
                                         return Err((
-                                            loc,
-                                            ParserError(format!(
+                                            tok.loc(),
+                                            AssemblerError(format!(
                                                 "Unexpected {}, expected register \"bc\", \"de\", \"iy\" or \"sp\"",
                                                 tok.as_display(&self.str_interner)
                                             )),
@@ -1938,8 +1938,8 @@ where
 
                             Some(tok) => {
                                 return Err((
-                                    self.loc(),
-                                    ParserError(format!(
+                                    tok.loc(),
+                                    AssemblerError(format!(
                                         "Unexpected {}, expected register \"a\" or \"hl\"",
                                         tok.as_display(&self.str_interner)
                                     )),
@@ -1952,254 +1952,210 @@ where
 
                     OperationName::And => {
                         self.next()?;
-                        match self.next()? {
+                        match self.peek()? {
+                            None => return self.end_of_input_err(),
                             Some(Token::Register {
                                 name: RegisterName::A,
                                 ..
                             }) => {
-                                self.expect_symbol(SymbolName::Comma)?;
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xA7);
+                            }
 
-                                match self.peek()? {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xA0);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xA1);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xA2);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xA3);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xA4);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xA5);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::IXH,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0xA4);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::IXL,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0xA5);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::IYH,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0xA4);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::IYL,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0xA5);
+                            }
+
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
+                                self.next()?;
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
                                     Some(Token::Register {
-                                        name: RegisterName::A,
+                                        name: RegisterName::HL,
                                         ..
                                     }) => {
-                                        self.next()?;
                                         self.here += 1;
-                                        self.data.push(0xA7);
+                                        self.data.push(0xA6);
+                                        self.expect_symbol(SymbolName::ParenClose)?;
                                     }
 
                                     Some(Token::Register {
-                                        name: RegisterName::B,
+                                        name: RegisterName::IX,
                                         ..
                                     }) => {
-                                        self.next()?;
-                                        self.here += 1;
-                                        self.data.push(0xA0);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::C,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 1;
-                                        self.data.push(0xA1);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::D,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 1;
-                                        self.data.push(0xA2);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::E,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 1;
-                                        self.data.push(0xA3);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::H,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 1;
-                                        self.data.push(0xA4);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::L,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 1;
-                                        self.data.push(0xA5);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::IXH,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 2;
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 3;
                                         self.data.push(0xDD);
-                                        self.data.push(0xA4);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::IXL,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 2;
-                                        self.data.push(0xDD);
-                                        self.data.push(0xA5);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::IYH,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 2;
-                                        self.data.push(0xFD);
-                                        self.data.push(0xA4);
-                                    }
-
-                                    Some(Token::Register {
-                                        name: RegisterName::IYL,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        self.here += 2;
-                                        self.data.push(0xFD);
-                                        self.data.push(0xA5);
-                                    }
-
-                                    Some(Token::Symbol {
-                                        name: SymbolName::ParenOpen,
-                                        ..
-                                    }) => {
-                                        self.next()?;
-                                        match self.next()? {
-                                            Some(Token::Register {
-                                                name: RegisterName::HL,
-                                                ..
-                                            }) => {
-                                                self.here += 1;
-                                                self.data.push(0xA6);
-                                                self.expect_symbol(SymbolName::ParenClose)?;
-                                            }
-
-                                            Some(Token::Register {
-                                                name: RegisterName::IX,
-                                                ..
-                                            }) => {
-                                                self.expect_symbol(SymbolName::Plus)?;
-                                                self.here += 3;
-                                                self.data.push(0xDD);
-                                                self.data.push(0xA6);
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((
-                                                            loc,
-                                                            ParserError(format!(
-                                                                "Expression result ({value}) will not fit in a byte"
-                                                            )),
-                                                        ));
-                                                    }
-                                                    self.data.push(value as u8);
-                                                } else {
-                                                    self.holes.push(Hole::byte(
-                                                        loc,
-                                                        self.data.len(),
-                                                        expr,
-                                                    ));
-                                                    self.data.push(0);
-                                                }
-                                                self.expect_symbol(SymbolName::ParenClose)?;
-                                            }
-
-                                            Some(Token::Register {
-                                                name: RegisterName::IY,
-                                                ..
-                                            }) => {
-                                                self.expect_symbol(SymbolName::Plus)?;
-                                                self.here += 3;
-                                                self.data.push(0xFD);
-                                                self.data.push(0xA6);
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((
-                                                            loc,
-                                                            ParserError(format!(
-                                                                "Expression result ({value}) will not fit in a byte"
-                                                            )),
-                                                        ));
-                                                    }
-                                                    self.data.push(value as u8);
-                                                } else {
-                                                    self.holes.push(Hole::byte(
-                                                        loc,
-                                                        self.data.len(),
-                                                        expr,
-                                                    ));
-                                                    self.data.push(0);
-                                                }
-                                                self.expect_symbol(SymbolName::ParenClose)?;
-                                            }
-
-                                            Some(_) => {
-                                                self.here += 2;
-                                                self.data.push(0xE6);
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((
-                                                            loc,
-                                                            ParserError(format!(
-                                                                "Expression result ({value}) will not fit in a byte"
-                                                            )),
-                                                        ));
-                                                    }
-                                                    self.data.push(value as u8);
-                                                } else {
-                                                    self.holes.push(Hole::byte(
-                                                        loc,
-                                                        self.data.len(),
-                                                        expr,
-                                                    ));
-                                                    self.data.push(0);
-                                                }
-                                                self.expect_symbol(SymbolName::ParenClose)?;
-                                            }
-                                            None => return self.end_of_input_err(),
-                                        }
-                                    }
-
-                                    Some(_) => {
-                                        self.here += 2;
-                                        self.data.push(0xE6);
+                                        self.data.push(0xA6);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
                                                 return Err((
                                                     loc,
-                                                    ParserError(format!(
+                                                    AssemblerError(format!(
                                                         "Expression result ({value}) will not fit in a byte"
                                                     )),
                                                 ));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(
+                                                loc,
+                                                self.data.len(),
+                                                expr,
+                                            ));
                                             self.data.push(0);
                                         }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
                                     }
-                                    None => return self.end_of_input_err(),
+
+                                    Some(Token::Register {
+                                        name: RegisterName::IY,
+                                        ..
+                                    }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 3;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xA6);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((
+                                                    loc,
+                                                    AssemblerError(format!(
+                                                        "Expression result ({value}) will not fit in a byte"
+                                                    )),
+                                                ));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.links.push(Link::byte(
+                                                loc,
+                                                self.data.len(),
+                                                expr,
+                                            ));
+                                            self.data.push(0);
+                                        }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
                             }
 
-                            Some(tok) => {
-                                return Err((
-                                    self.loc(),
-                                    ParserError(format!(
-                                        "Unexpected {}, expected register \"a\"",
-                                        tok.as_display(&self.str_interner)
-                                    )),
-                                ))
+                            Some(_) => {
+                                self.here += 2;
+                                self.data.push(0xE6);
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u8::MAX as u32) {
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!(
+                                                "Expression result ({value}) will not fit in a byte"
+                                            )),
+                                        ));
+                                    }
+                                    self.data.push(value as u8);
+                                } else {
+                                    self.links.push(Link::byte(loc, self.data.len(), expr));
+                                    self.data.push(0);
+                                }
                             }
-
-                            _ => return self.end_of_input_err(),
                         }
                     }
 
@@ -2209,14 +2165,14 @@ where
                             (loc, None) => {
                                 return Err((
                                     loc,
-                                    ParserError(format!("Bit index must be immediately solvable")),
+                                    AssemblerError(format!("Bit index must be immediately solvable")),
                                 ))
                             }
                             (loc, Some(value)) => {
                                 if value < 0 || value > 7 {
                                     return Err((
                                         loc,
-                                        ParserError(format!(
+                                        AssemblerError(format!(
                                             "Bit index ({value}) must be between 0 and 7"
                                         )),
                                     ));
@@ -2399,11 +2355,11 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                                 self.expect_symbol(SymbolName::ParenClose)?;
@@ -2428,25 +2384,25 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                                 self.expect_symbol(SymbolName::ParenClose)?;
                                             }
 
-                                            Some(tok) => return Err((loc, ParserError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                             None => return self.end_of_input_err(),
                                         }
                                     }
 
                                     Some(tok) => {
                                         return Err((
-                                            loc,
-                                            ParserError(format!(
+                                            tok.loc(),
+                                            AssemblerError(format!(
                                                 "Unexpected {}, expected a register",
                                                 tok.as_display(&self.str_interner)
                                             )),
@@ -2536,7 +2492,7 @@ where
                             if (value as u32) > (u16::MAX as u32) {
                                 return Err((
                                     loc,
-                                    ParserError(format!(
+                                    AssemblerError(format!(
                                         "Expression result ({value}) will not fit in a word"
                                     )),
                                 ));
@@ -2695,14 +2651,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                             loc,
-                                                            ParserError(format!(
+                                                            AssemblerError(format!(
                                                                 "Expression result ({value}) will not fit in a byte"
                                                             )),
                                                         ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -2725,14 +2681,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                             loc,
-                                                            ParserError(format!(
+                                                            AssemblerError(format!(
                                                                 "Expression result ({value}) will not fit in a byte"
                                                             )),
                                                         ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -2750,14 +2706,14 @@ where
                                                     if (value as u32) > (u8::MAX as u32) {
                                                         return Err((
                                                             loc,
-                                                            ParserError(format!(
+                                                            AssemblerError(format!(
                                                                 "Expression result ({value}) will not fit in a byte"
                                                             )),
                                                         ));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(
+                                                    self.links.push(Link::byte(
                                                         loc,
                                                         self.data.len(),
                                                         expr,
@@ -2778,14 +2734,14 @@ where
                                             if (value as u32) > (u8::MAX as u32) {
                                                 return Err((
                                                     loc,
-                                                    ParserError(format!(
+                                                    AssemblerError(format!(
                                                         "Expression result ({value}) will not fit in a byte"
                                                     )),
                                                 ));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -2795,8 +2751,8 @@ where
 
                             Some(tok) => {
                                 return Err((
-                                    self.loc(),
-                                    ParserError(format!(
+                                    tok.loc(),
+                                    AssemblerError(format!(
                                         "Unexpected {}, expected register \"a\"",
                                         tok.as_display(&self.str_interner)
                                     )),
@@ -2959,11 +2915,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
@@ -2977,21 +2933,21 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
                                     }
 
-                                    Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
                             }
 
-                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected a register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected a register", tok.as_display(&self.str_interner))))),
                             None => return self.end_of_input_err(),
                         }
                     }
@@ -3014,15 +2970,15 @@ where
                             if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32)) {
                                 return Err((
                                     loc,
-                                    ParserError(format!(
+                                    AssemblerError(format!(
                                         "Jump distance ({value}) will not fit in a byte"
                                     )),
                                 ));
                             }
                             self.data.push(value as u8);
                         } else {
-                            self.holes
-                                .push(Hole::signed_byte(loc, self.data.len(), expr));
+                            self.links
+                                .push(Link::signed_byte(loc, self.data.len(), expr));
                             self.data.push(0);
                         }
                     }
@@ -3077,11 +3033,11 @@ where
                                         self.data.push(0xE3);
                                     }
 
-                                    Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected the registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected the registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
                             }
 
-                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected the registers \"af\", \"de\", or \"(sp)\"", tok.as_display(&self.str_interner))))),
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected the registers \"af\", \"de\", or \"(sp)\"", tok.as_display(&self.str_interner))))),
                         }
                     }
 
@@ -3119,7 +3075,7 @@ where
                             Some(tok) => {
                                 return Err((
                                     tok.loc(),
-                                    ParserError(format!(
+                                    AssemblerError(format!(
                                         "Unexpected {}, expected the numbers 0, 1, or 2",
                                         tok.as_display(&self.str_interner)
                                     )),
@@ -3158,11 +3114,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
@@ -3245,7 +3201,7 @@ where
                             Some(tok) => {
                                 return Err((
                                     tok.loc(),
-                                    ParserError(format!(
+                                    AssemblerError(format!(
                                         "Unexpected {}, expected a register",
                                         tok.as_display(&self.str_interner)
                                     )),
@@ -3366,11 +3322,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
@@ -3384,21 +3340,21 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
                                     }
 
-                                    Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
                             }
 
-                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected a register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected a register", tok.as_display(&self.str_interner))))),
                             None => return self.end_of_input_err(),
                         }
                     }
@@ -3461,7 +3417,7 @@ where
                                         self.data.push(0xE9);
                                     }
 
-                                    Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
@@ -3543,7 +3499,7 @@ where
                                     if (value as u32) > (u16::MAX as u32) {
                                         return Err((
                                             loc,
-                                            ParserError(format!(
+                                            AssemblerError(format!(
                                                 "Expression result ({value}) will not fit in a word"
                                             )),
                                         ));
@@ -3611,15 +3567,15 @@ where
                             if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32)) {
                                 return Err((
                                     loc,
-                                    ParserError(format!(
+                                    AssemblerError(format!(
                                         "Jump distance ({value}) will not fit in a byte"
                                     )),
                                 ));
                             }
                             self.data.push(value as u8);
                         } else {
-                            self.holes
-                                .push(Hole::signed_byte(loc, self.data.len(), expr));
+                            self.links
+                                .push(Link::signed_byte(loc, self.data.len(), expr));
                             self.data.push(0);
                         }
                     }
@@ -3734,17 +3690,17 @@ where
                                                         self.data.push(0xFD);
                                                         self.data.push(0x7E);
                                                     }
-                                                    _ => return Err((loc, ParserError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
+                                                    _ => return Err((loc, AssemblerError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
                                                 }
                                                 self.expect_symbol(SymbolName::Plus)?;
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
@@ -3754,11 +3710,11 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u16::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                                     }
                                                     self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                                 } else {
-                                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                                    self.links.push(Link::word(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                     self.data.push(0);
                                                 }
@@ -3772,11 +3728,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -3867,21 +3823,21 @@ where
                                                         self.data.push(0xFD);
                                                         self.data.push(0x46);
                                                     }
-                                                    _ => return Err((loc, ParserError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
+                                                    _ => return Err((loc, AssemblerError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
                                                 }
                                                 self.expect_symbol(SymbolName::Plus)?;
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
-                                            Some(&tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                            Some(&tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
                                     }
@@ -3891,11 +3847,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -3986,21 +3942,21 @@ where
                                                         self.data.push(0xFD);
                                                         self.data.push(0x4E);
                                                     }
-                                                    _ => return Err((loc, ParserError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
+                                                    _ => return Err((loc, AssemblerError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
                                                 }
                                                 self.expect_symbol(SymbolName::Plus)?;
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
-                                            Some(&tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                            Some(&tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
                                     }
@@ -4010,11 +3966,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4105,21 +4061,21 @@ where
                                                         self.data.push(0xFD);
                                                         self.data.push(0x56);
                                                     }
-                                                    _ => return Err((loc, ParserError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
+                                                    _ => return Err((loc, AssemblerError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
                                                 }
                                                 self.expect_symbol(SymbolName::Plus)?;
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
-                                            Some(&tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                            Some(&tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
                                     }
@@ -4129,11 +4085,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4224,21 +4180,21 @@ where
                                                         self.data.push(0xFD);
                                                         self.data.push(0x5E);
                                                     }
-                                                    _ => return Err((loc, ParserError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
+                                                    _ => return Err((loc, AssemblerError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
                                                 }
                                                 self.expect_symbol(SymbolName::Plus)?;
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
-                                            Some(&tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                            Some(&tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
                                     }
@@ -4248,11 +4204,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4319,21 +4275,21 @@ where
                                                         self.data.push(0xFD);
                                                         self.data.push(0x66);
                                                     }
-                                                    _ => return Err((loc, ParserError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
+                                                    _ => return Err((loc, AssemblerError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
                                                 }
                                                 self.expect_symbol(SymbolName::Plus)?;
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
-                                            Some(&tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                            Some(&tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
                                     }
@@ -4343,11 +4299,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4414,21 +4370,21 @@ where
                                                         self.data.push(0xFD);
                                                         self.data.push(0x6E);
                                                     }
-                                                    _ => return Err((loc, ParserError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
+                                                    _ => return Err((loc, AssemblerError(format!("Unexpected register \"{name}\", expected register \"ix\" or \"iy\"")))),
                                                 }
                                                 self.expect_symbol(SymbolName::Plus)?;
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
-                                            Some(&tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                            Some(&tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
                                     }
@@ -4438,11 +4394,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4502,11 +4458,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4566,11 +4522,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4630,11 +4586,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4694,11 +4650,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                     }
@@ -4748,11 +4704,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u16::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                             }
                                             self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                         } else {
-                                            self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                            self.links.push(Link::word(loc, self.data.len(), expr));
                                             self.data.push(0);
                                             self.data.push(0);
                                         }
@@ -4775,11 +4731,11 @@ where
                                 let (loc, expr) = self.expr()?;
                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                     if (value as u32) > (u16::MAX as u32) {
-                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                     }
                                     self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                 } else {
-                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.links.push(Link::word(loc, self.data.len(), expr));
                                     self.data.push(0);
                                     self.data.push(0);
                                 }
@@ -4803,11 +4759,11 @@ where
                                 let (loc, expr) = self.expr()?;
                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                     if (value as u32) > (u16::MAX as u32) {
-                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                     }
                                     self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                 } else {
-                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.links.push(Link::word(loc, self.data.len(), expr));
                                     self.data.push(0);
                                     self.data.push(0);
                                 }
@@ -4829,11 +4785,11 @@ where
                                 let (loc, expr) = self.expr()?;
                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                     if (value as u32) > (u16::MAX as u32) {
-                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                     }
                                     self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                 } else {
-                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.links.push(Link::word(loc, self.data.len(), expr));
                                     self.data.push(0);
                                     self.data.push(0);
                                 }
@@ -4856,11 +4812,11 @@ where
                                 let (loc, expr) = self.expr()?;
                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                     if (value as u32) > (u16::MAX as u32) {
-                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                     }
                                     self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                 } else {
-                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.links.push(Link::word(loc, self.data.len(), expr));
                                     self.data.push(0);
                                     self.data.push(0);
                                 }
@@ -4883,11 +4839,11 @@ where
                                 let (loc, expr) = self.expr()?;
                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                     if (value as u32) > (u16::MAX as u32) {
-                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                     }
                                     self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                 } else {
-                                    self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                    self.links.push(Link::word(loc, self.data.len(), expr));
                                     self.data.push(0);
                                     self.data.push(0);
                                 }
@@ -4962,11 +4918,11 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
@@ -4979,11 +4935,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         let offset = if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             value as u8
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len() + 1, expr));
+                                            self.links.push(Link::byte(loc, self.data.len() + 1, expr));
                                             0
                                         };
                                         self.expect_symbol(SymbolName::ParenClose)?;
@@ -5039,11 +4995,11 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
@@ -5056,11 +5012,11 @@ where
                                         let (loc, expr) = self.expr()?;
                                         let offset = if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                             }
                                             value as u8
                                         } else {
-                                            self.holes.push(Hole::byte(loc, self.data.len() + 1, expr));
+                                            self.links.push(Link::byte(loc, self.data.len() + 1, expr));
                                             0
                                         };
                                         self.expect_symbol(SymbolName::ParenClose)?;
@@ -5116,11 +5072,11 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }
                                             }
@@ -5165,15 +5121,15 @@ where
                                                 self.data.push(0xFD);
                                                 self.data.push(0x22);
                                             }
-                                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected registers \"a\", \"bc\", \"de\", \"hl\", \"sp\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"a\", \"bc\", \"de\", \"hl\", \"sp\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u16::MAX as u32) {
-                                                return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a word"))));
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                             }
                                             self.data.extend_from_slice(&(value as u16).to_le_bytes());
                                         } else {
-                                            self.holes.push(Hole::word(loc, self.data.len(), expr));
+                                            self.links.push(Link::word(loc, self.data.len(), expr));
                                             self.data.push(0);
                                             self.data.push(0);
                                         }
@@ -5181,8 +5137,43 @@ where
                                 }
                             }
 
-                            Some(tok) => return Err((tok.loc(), ParserError(format!("Unexpected {}, expected a valid \"ld\" destination", tok.as_display(&self.str_interner))))),
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected a valid \"ld\" destination", tok.as_display(&self.str_interner))))),
                         }
+                    }
+
+                    OperationName::Ldd => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xA8);
+                    }
+
+                    OperationName::Lddr => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xB8);
+                    }
+
+                    OperationName::Ldi => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xA0);
+                    }
+
+                    OperationName::Ldir => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xB0);
+                    }
+
+                    OperationName::Neg => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0x44);
                     }
 
                     OperationName::Nop => {
@@ -5191,20 +5182,387 @@ where
                         self.data.push(0x00);
                     }
 
+                    OperationName::Or => {
+                        self.next()?;
+                        match self.peek()? {
+                            None => return self.end_of_input_err(),
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xB7);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xB0);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xB1);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xB2);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xB3);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xB4);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 1;
+                                self.data.push(0xB5);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::IXH,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0xB4);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::IXL,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0xB5);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::IYH,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0xB4);
+                            }
+
+                            Some(Token::Register {
+                                name: RegisterName::IYL,
+                                ..
+                            }) => {
+                                self.next()?;
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0xB5);
+                            }
+
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
+                                self.next()?;
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+                                    Some(Token::Register {
+                                        name: RegisterName::HL,
+                                        ..
+                                    }) => {
+                                        self.here += 1;
+                                        self.data.push(0xB6);
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::IX,
+                                        ..
+                                    }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 3;
+                                        self.data.push(0xDD);
+                                        self.data.push(0xB6);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((
+                                                    loc,
+                                                    AssemblerError(format!(
+                                                        "Expression result ({value}) will not fit in a byte"
+                                                    )),
+                                                ));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.links.push(Link::byte(
+                                                loc,
+                                                self.data.len(),
+                                                expr,
+                                            ));
+                                            self.data.push(0);
+                                        }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+
+                                    Some(Token::Register {
+                                        name: RegisterName::IY,
+                                        ..
+                                    }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 3;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xB6);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((
+                                                    loc,
+                                                    AssemblerError(format!(
+                                                        "Expression result ({value}) will not fit in a byte"
+                                                    )),
+                                                ));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.links.push(Link::byte(
+                                                loc,
+                                                self.data.len(),
+                                                expr,
+                                            ));
+                                            self.data.push(0);
+                                        }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
+                                    }
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                }
+                            }
+
+                            Some(_) => {
+                                self.here += 2;
+                                self.data.push(0xF6);
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u8::MAX as u32) {
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!(
+                                                "Expression result ({value}) will not fit in a byte"
+                                            )),
+                                        ));
+                                    }
+                                    self.data.push(value as u8);
+                                } else {
+                                    self.links.push(Link::byte(loc, self.data.len(), expr));
+                                    self.data.push(0);
+                                }
+                            }
+                        }
+                    }
+
+                    OperationName::Otdr => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xBB);
+                    }
+
+                    OperationName::Otir => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xB3);
+                    }
+
+                    OperationName::Out => {
+                        self.next()?;
+                        self.here += 2;
+                        self.expect_symbol(SymbolName::ParenOpen)?;
+                        match self.peek()? {
+                            None => return self.end_of_input_err(),
+
+                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                                self.next()?;
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.data.push(0xED);
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                        self.data.push(0x79);
+                                    }
+                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                        self.data.push(0x41);
+                                    }
+                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                        self.data.push(0x49);
+                                    }
+                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                        self.data.push(0x51);
+                                    }
+                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                        self.data.push(0x59);
+                                    }
+                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                        self.data.push(0x61);
+                                    }
+                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                        self.data.push(0x69);
+                                    }
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected a register", tok.as_display(&self.str_interner))))),
+                                }
+                            }
+
+                            Some(_) => {
+                                self.data.push(0xD3);
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u8::MAX as u32) {
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!(
+                                                "Expression result ({value}) will not fit in a byte"
+                                            )),
+                                        ));
+                                    }
+                                    self.data.push(value as u8);
+                                } else {
+                                    self.links.push(Link::byte(loc, self.data.len(), expr));
+                                    self.data.push(0);
+                                }
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                                self.expect_symbol(SymbolName::Comma)?;
+                                self.expect_register(RegisterName::A)?;
+                            }
+                        }
+                    }
+
+                    OperationName::Outd => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xAB);
+                    }
+
+                    OperationName::Outi => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0xA3);
+                    }
+
+                    OperationName::Pop => {
+                        self.next()?;
+                        match self.next()? {
+                            None => return self.end_of_input_err(),
+                            Some(Token::Register { name: RegisterName::BC, .. }) => {
+                                self.here += 1;
+                                self.data.push(0xC1);
+                            }
+                            Some(Token::Register { name: RegisterName::DE, .. }) => {
+                                self.here += 1;
+                                self.data.push(0xD1);
+                            }
+                            Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                self.here += 1;
+                                self.data.push(0xE1);
+                            }
+                            Some(Token::Register { name: RegisterName::AF, .. }) => {
+                                self.here += 1;
+                                self.data.push(0xF1);
+                            }
+                            Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0xE1);
+                            }
+                            Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0xE1);
+                            }
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"bc\", \"de\", \"hl\", \"af\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                        }
+                    }
+
+                    OperationName::Push => {
+                        self.next()?;
+                        match self.next()? {
+                            None => return self.end_of_input_err(),
+                            Some(Token::Register { name: RegisterName::BC, .. }) => {
+                                self.here += 1;
+                                self.data.push(0xC5);
+                            }
+                            Some(Token::Register { name: RegisterName::DE, .. }) => {
+                                self.here += 1;
+                                self.data.push(0xD5);
+                            }
+                            Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                self.here += 1;
+                                self.data.push(0xE5);
+                            }
+                            Some(Token::Register { name: RegisterName::AF, .. }) => {
+                                self.here += 1;
+                                self.data.push(0xF5);
+                            }
+                            Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xDD);
+                                self.data.push(0xE5);
+                            }
+                            Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xFD);
+                                self.data.push(0xE5);
+                            }
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"bc\", \"de\", \"hl\", \"af\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                        }
+                    }
+
                     OperationName::Res => {
                         self.next()?;
                         match self.const_expr()? {
                             (loc, None) => {
                                 return Err((
                                     loc,
-                                    ParserError(format!("Bit index must be immediately solvable")),
+                                    AssemblerError(format!("Bit index must be immediately solvable")),
                                 ))
                             }
                             (loc, Some(value)) => {
                                 if value < 0 || value > 7 {
                                     return Err((
                                         loc,
-                                        ParserError(format!(
+                                        AssemblerError(format!(
                                             "Bit index ({value}) must be between 0 and 7"
                                         )),
                                     ));
@@ -5213,6 +5571,7 @@ where
                                 self.expect_symbol(SymbolName::Comma)?;
 
                                 match self.next()? {
+                                    None => return self.end_of_input_err(),
                                     Some(Token::Register {
                                         name: RegisterName::A,
                                         ..
@@ -5351,6 +5710,7 @@ where
                                         ..
                                     }) => {
                                         match self.next()? {
+                                            None => return self.end_of_input_err(),
                                             Some(Token::Register { name: RegisterName::HL, .. }) => {
                                                 self.here += 2;
                                                 self.data.push(0xCB);
@@ -5365,7 +5725,6 @@ where
                                                     7 => 0xBE,
                                                     _ => unreachable!(),
                                                 });  
-                                                self.expect_symbol(SymbolName::ParenClose)?;
                                             }  
   
                                             Some(Token::Register { name: RegisterName::IX, .. }) => {
@@ -5387,14 +5746,13 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }  
                                                     self.data.push(value as u8);
                                                 } else {  
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }  
-                                                self.expect_symbol(SymbolName::ParenClose)?;
                                             }  
   
                                             Some(Token::Register { name: RegisterName::IY, .. }) => {
@@ -5416,34 +5774,387 @@ where
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, ParserError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                     }  
                                                     self.data.push(value as u8);
                                                 } else {  
-                                                    self.holes.push(Hole::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }  
-                                                self.expect_symbol(SymbolName::ParenClose)?;
-                                            }  
+                                            } 
   
-                                            Some(tok) => return Err((loc, ParserError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
-                                            None => return self.end_of_input_err(),
+                                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
                                     }
 
                                     Some(tok) => {
                                         return Err((
-                                            loc,
-                                            ParserError(format!(
+                                            tok.loc(),
+                                            AssemblerError(format!(
                                                 "Unexpected {}, expected a register",
                                                 tok.as_display(&self.str_interner)
                                             )),
                                         ))
                                     }
-                                    None => return self.end_of_input_err(),
                                 }
                             }
                         }
+                    }
+
+                    OperationName::Ret => {
+                        self.next()?;
+                        self.here += 1;
+                        match self.peek()? {
+                            None => return self.end_of_input_err()?,
+                            Some(Token::Flag { name: FlagName::NotZero, .. }) => {
+                                self.next()?;
+                                self.data.push(0xC0);
+                            }
+                            Some(Token::Flag { name: FlagName::Zero, .. }) => {
+                                self.next()?;
+                                self.data.push(0xC8);
+                            }
+                            Some(Token::Flag { name: FlagName::NotCarry, .. }) => {
+                                self.next()?;
+                                self.data.push(0xD0);
+                            }
+                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                                self.next()?;
+                                self.data.push(0xD8);
+                            }
+                            Some(Token::Flag { name: FlagName::ParityOdd, .. }) => {
+                                self.next()?;
+                                self.data.push(0xE0);
+                            }
+                            Some(Token::Flag { name: FlagName::ParityEven, .. }) => {
+                                self.next()?;
+                                self.data.push(0xE8);
+                            }
+                            Some(Token::Flag { name: FlagName::Positive, .. }) => {
+                                self.next()?;
+                                self.data.push(0xF0);
+                            }
+                            Some(Token::Flag { name: FlagName::Negative, .. }) => {
+                                self.next()?;
+                                self.data.push(0xF8);
+                            }
+                            Some(_) => {
+                                self.data.push(0xC9);
+                            }
+                        }
+                    }
+
+                    OperationName::Reti => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0x4D);
+                    }
+
+                    OperationName::Retn => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0x45);
+                    }
+
+                    OperationName::Rl => {
+                        self.next()?;
+                        match self.next()? {
+                            None => return self.end_of_input_err(),
+                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x17);
+                            }
+                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x10);
+                            }
+                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x11);
+                            }
+                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x12);
+                            }
+                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x13);
+                            }
+                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x14);
+                            }
+                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x15);
+                            }
+                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                        self.here += 2;
+                                        self.data.push(0xCB);
+                                        self.data.push(0x16);
+                                    }
+                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 4;
+                                        self.data.push(0xDD);
+                                        self.data.push(0xCB);
+                                        self.data.push(0x16);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }  
+                                            self.data.push(value as u8);
+                                        } else {  
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }  
+                                    }
+                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 4;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xCB);
+                                        self.data.push(0x16);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }  
+                                            self.data.push(value as u8);
+                                        } else {  
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        } 
+                                    }
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                }
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                        }
+                    }
+
+                    OperationName::Rla => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0x17);
+                    }
+
+                    OperationName::Rlc => {
+                        self.next()?;
+                        match self.next()? {
+                            None => return self.end_of_input_err(),
+                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x07);
+                            }
+                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x00);
+                            }
+                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x01);
+                            }
+                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x02);
+                            }
+                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x03);
+                            }
+                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x04);
+                            }
+                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x05);
+                            }
+                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                        self.here += 2;
+                                        self.data.push(0xCB);
+                                        self.data.push(0x06);
+                                    }
+                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 4;
+                                        self.data.push(0xDD);
+                                        self.data.push(0xCB);
+                                        self.data.push(0x06);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }  
+                                            self.data.push(value as u8);
+                                        } else {  
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }  
+                                    }
+                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 4;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xCB);
+                                        self.data.push(0x06);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }  
+                                            self.data.push(value as u8);
+                                        } else {  
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        } 
+                                    }
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                }
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                        }
+                    }
+                    
+                    OperationName::Rlca => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0x07);
+                    }
+
+                    OperationName::Rld => {
+                        self.next()?;
+                        self.here += 2;
+                        self.data.push(0xED);
+                        self.data.push(0x6F);
+                    }
+
+                    OperationName::Rr => {
+                        self.next()?;
+                        match self.next()? {
+                            None => return self.end_of_input_err(),
+                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x1F);
+                            }
+                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x18);
+                            }
+                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x19);
+                            }
+                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x1A);
+                            }
+                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x1B);
+                            }
+                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x1C);
+                            }
+                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                                self.here += 2;
+                                self.data.push(0xCB);
+                                self.data.push(0x1D);
+                            }
+                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                        self.here += 2;
+                                        self.data.push(0xCB);
+                                        self.data.push(0x1E);
+                                    }
+                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 4;
+                                        self.data.push(0xDD);
+                                        self.data.push(0xCB);
+                                        self.data.push(0x1E);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }  
+                                            self.data.push(value as u8);
+                                        } else {  
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }  
+                                    }
+                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                        self.expect_symbol(SymbolName::Plus)?;
+                                        self.here += 4;
+                                        self.data.push(0xFD);
+                                        self.data.push(0xCB);
+                                        self.data.push(0x1E);
+                                        let (loc, expr) = self.expr()?;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                            }  
+                                            self.data.push(value as u8);
+                                        } else {  
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        } 
+                                    }
+                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
+                                }
+                                self.expect_symbol(SymbolName::ParenClose)?;
+                            }
+                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                        }
+                    }
+
+                    OperationName::Rra => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0x1F);
+                    }
+
+                    OperationName::Rrca => {
+                        self.next()?;
+                        self.here += 1;
+                        self.data.push(0x0F);
                     }
 
                     _ => todo!(),

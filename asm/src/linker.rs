@@ -12,7 +12,7 @@ use crate::{
     symtab::Symtab,
 };
 
-pub enum Hole {
+pub enum Link {
     Byte {
         loc: SourceLoc,
         offset: usize,
@@ -36,7 +36,7 @@ pub enum Hole {
     },
 }
 
-impl Hole {
+impl Link {
     #[inline]
     pub fn byte(loc: SourceLoc, offset: usize, expr: Expr) -> Self {
         Self::Byte { loc, offset, expr }
@@ -68,7 +68,7 @@ pub struct Module<S> {
     file_manager: FileManager<S>,
     symtab: Symtab,
     data: Vec<u8>,
-    holes: Vec<Hole>,
+    links: Vec<Link>,
 }
 
 impl<S: FileSystem> Module<S> {
@@ -78,19 +78,19 @@ impl<S: FileSystem> Module<S> {
         file_manager: FileManager<S>,
         symtab: Symtab,
         data: Vec<u8>,
-        holes: Vec<Hole>,
+        links: Vec<Link>,
     ) -> Self {
         Self {
             str_interner,
             file_manager,
             symtab,
             data,
-            holes,
+            links,
         }
     }
 
-    pub fn assemble(&self, writer: &mut dyn Write) -> io::Result<()> {
-        // TODO: fill holes
+    pub fn link(&self, writer: &mut dyn Write) -> io::Result<()> {
+        // TODO: link
         writer.write(&self.data)?;
         Ok(())
     }
