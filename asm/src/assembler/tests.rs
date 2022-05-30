@@ -347,21 +347,21 @@ fn cp() {
     let assembler = assembler(&[(
         "/test.asm",
         r#"
-            cp a, a
-            cp a, b
-            cp a, c
-            cp a, d
-            cp a, e
-            cp a, h
-            cp a, l
-            cp a, ixh
-            cp a, ixl
-            cp a, iyh
-            cp a, iyl
-            cp a, (hl)
-            cp a, $42
-            cp a, (ix+1)
-            cp a, (iy+1)
+            cp a
+            cp b
+            cp c
+            cp d
+            cp e
+            cp h
+            cp l
+            cp ixh
+            cp ixl
+            cp iyh
+            cp iyl
+            cp (hl)
+            cp $42
+            cp (ix+1)
+            cp (iy+1)
             @dw @here
         "#,
     )]);
@@ -1224,6 +1224,7 @@ fn ld() {
             ld sp, hl
             ld sp, ix
             ld sp, iy
+            ld sp, (test)
             ld sp, test
             ld bc, (test)
             ld bc, test
@@ -1420,6 +1421,7 @@ fn ld() {
         0xF9,
         0xDD, 0xF9,
         0xFD, 0xF9,
+        0xED, 0x7B, 0x00, 0x00,
         0x31, 0x00, 0x00,
         0xED, 0x4B, 0x00, 0x00,
         0x01, 0x00, 0x00,
@@ -1464,7 +1466,7 @@ fn ld() {
         0xED, 0x73, 0x00, 0x00,
         0xDD, 0x22, 0x00, 0x00,
         0xFD, 0x22, 0x00, 0x00,
-        107, 0x01 
+        112, 0x01 
     ], data);
 }
 
