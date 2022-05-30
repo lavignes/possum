@@ -90,6 +90,7 @@ impl<S: FileSystem> Module<S> {
     }
 
     pub fn link(mut self, writer: &mut dyn Write) -> Result<(), LinkerError> {
+        // TODO: Need to scan for unresolved symbol and report them nicely
         for link in &self.links {
             match link {
                 Link::Byte { offset, expr, .. } => {

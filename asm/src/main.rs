@@ -65,7 +65,7 @@ fn main() -> ExitCode {
 
     for path in &args.include {
         if let Err(e) = assembler.add_search_path(full_cwd.as_path(), path) {
-            eprintln!("{e}");
+            eprintln!("[ERROR]: {e}");
             return ExitCode::FAILURE;
         }
     }
@@ -73,7 +73,7 @@ fn main() -> ExitCode {
     let module = match assembler.assemble(full_cwd.as_path(), args.file) {
         Ok(module) => module,
         Err(e) => {
-            eprintln!("{e}");
+            eprintln!("[ERROR]: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -81,7 +81,7 @@ fn main() -> ExitCode {
     match module.link(&mut output) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("{e}");
+            eprintln!("[ERROR]: {e}");
             ExitCode::FAILURE
         }
     }

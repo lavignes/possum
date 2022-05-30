@@ -992,13 +992,13 @@ where
                                 self.next()?;
                                 let interner = self.str_interner.as_ref().borrow_mut();
                                 let value = interner.get(value).unwrap();
-                                println!("{value}");
+                                eprintln!("{value}");
                             }
 
                             Some(_) => {
                                 match self.const_expr()? {
                                     (_, Some(value)) => {
-                                        println!("{value}");
+                                        eprintln!("{value}");
                                     },
                                     (loc, None) => return Err((loc, AssemblerError(format!("An expression following an \"@echo\" directive must be immediately solvable")))),
                                 }
@@ -1366,7 +1366,7 @@ where
                         }
                     }
 
-                    _ => todo!(),
+                    name => todo!("{name}"),
                 },
 
                 Some(Token::Operation { name, .. }) => match name {
