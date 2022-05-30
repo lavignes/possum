@@ -68,7 +68,7 @@ Strings are enclosed by double-quotation marks (`"`):
     @echo "Hello World"
 ```
 
-Most standard C-languge string escape sequences are suportted:
+Most standard C-language string escape sequences are supported:
 
 ```
     @echo "A new line\n"
@@ -385,7 +385,7 @@ The main use of `@org` is for defining relocatable code.
 **The `@org` directive does not add any padding to your output.
 Use `@ds` to advance the program counter and add filler bytes.**
 
-### `@struct` and `@ends
+### `@struct` and `@ends`
 
 The `@struct` directive provides syntactic sugar for declaring
 structured data. You use structs to define offsets for *fields* in
