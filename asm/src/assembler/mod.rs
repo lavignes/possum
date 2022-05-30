@@ -868,7 +868,7 @@ where
                     LabelKind::Local => {
                         if let Some(namespace) = self.active_namespace {
                             let direct_label = {
-                                let interner = self.str_interner.as_ref().borrow_mut();
+                                let interner = self.str_interner.as_ref().borrow();
                                 let label = interner.get(value).unwrap();
                                 let global = interner.get(namespace).unwrap();
                                 format!("{global}{label}")
@@ -877,7 +877,7 @@ where
                                 .borrow_mut()
                                 .intern(direct_label)
                         } else {
-                            let interner = self.str_interner.as_ref().borrow_mut();
+                            let interner = self.str_interner.as_ref().borrow();
                             let label = interner.get(value).unwrap();
                             return Err((loc, AssemblerError(format!("The local label \"{label}\" is being defined but there was no global label defined before it"))));
                         }
@@ -950,7 +950,7 @@ where
                         LabelKind::Local => {
                             if let Some(namespace) = self.active_namespace {
                                 let direct_label = {
-                                    let interner = self.str_interner.as_ref().borrow_mut();
+                                    let interner = self.str_interner.as_ref().borrow();
                                     let label = interner.get(value).unwrap();
                                     let global = interner.get(namespace).unwrap();
                                     format!("{global}{label}")
@@ -959,7 +959,7 @@ where
                                     .borrow_mut()
                                     .intern(direct_label)
                             } else {
-                                let interner = self.str_interner.as_ref().borrow_mut();
+                                let interner = self.str_interner.as_ref().borrow();
                                 let label = interner.get(value).unwrap();
                                 return Err((loc, AssemblerError(format!("The local label \"{label}\" is being defined but there was no global label defined before it"))));
                             }
@@ -1008,7 +1008,7 @@ where
                         match self.peek()? {
                             Some(&Token::String { value, ..  }) => {
                                 self.next()?;
-                                let interner = self.str_interner.as_ref().borrow_mut();
+                                let interner = self.str_interner.as_ref().borrow();
                                 let value = interner.get(value).unwrap();
                                 eprintln!("{value}");
                             }
@@ -1032,7 +1032,7 @@ where
                         match self.peek()? {
                             Some(&Token::String { value, ..  }) => {
                                 self.next()?;
-                                let interner = self.str_interner.as_ref().borrow_mut();
+                                let interner = self.str_interner.as_ref().borrow();
                                 let value = interner.get(value).unwrap();
                                 return Err((loc, AssemblerError(format!("{value}"))));
                             }
@@ -1058,7 +1058,7 @@ where
                                 LabelKind::Local => {
                                     if let Some(namespace) = self.active_namespace {
                                         let global_label = {
-                                            let interner = self.str_interner.as_ref().borrow_mut();
+                                            let interner = self.str_interner.as_ref().borrow();
                                             let global = interner.get(namespace).unwrap();
                                             let label = interner.get(value).unwrap();
                                             format!("{global}{label}")
@@ -1067,7 +1067,7 @@ where
                                             .borrow_mut()
                                             .intern(global_label)
                                     } else {
-                                        let interner = self.str_interner.as_ref().borrow_mut();
+                                        let interner = self.str_interner.as_ref().borrow();
                                         let label = interner.get(value).unwrap();
                                         return Err((loc, AssemblerError(format!("The local symbol \"{label}\" is being defined but there was no global label defined before it"))));
                                     }
@@ -1276,7 +1276,7 @@ where
                                         Some(Token::Directive { name: DirectiveName::EndStruct, .. }) => break,
                                         Some(Token::Label { loc, kind: LabelKind::Global, value: field }) => {
                                             let direct_label = {
-                                                let interner = self.str_interner.as_ref().borrow_mut();
+                                                let interner = self.str_interner.as_ref().borrow();
                                                 let global = interner.get(value).unwrap();
                                                 let label = interner.get(field).unwrap();
                                                 format!("{global}.{label}")
@@ -1337,7 +1337,7 @@ where
                                         Some(Token::Directive { name: DirectiveName::EndEnum, .. }) => break,
                                         Some(Token::Label { loc, kind: LabelKind::Global, value: field }) => {
                                             let direct_label = {
-                                                let interner = self.str_interner.as_ref().borrow_mut();
+                                                let interner = self.str_interner.as_ref().borrow();
                                                 let global = interner.get(value).unwrap();
                                                 let label = interner.get(field).unwrap();
                                                 format!("{global}.{label}")
