@@ -64,6 +64,11 @@ impl<S: FileSystem> FileManager<S> {
         self.path_interner.get(pathref)
     }
 
+    #[inline]
+    pub fn intern<C: AsRef<Path>, P: AsRef<Path>>(&mut self, cwd: C, path: P) -> PathRef {
+        self.path_interner.intern(cwd, path)
+    }
+
     pub fn add_search_path<C: AsRef<Path>, P: AsRef<Path>>(
         &mut self,
         cwd: C,
@@ -90,7 +95,7 @@ impl<S: FileSystem> FileManager<S> {
         cwd: C,
         path: P,
     ) -> io::Result<Option<PathRef>> {
-        let cwd = self.path_interner.intern(cwd, ".");
+        let cwd = self.intern(cwd, ".");
         for dir in iter::once(&cwd).chain(&self.search_paths) {
             let dir = self.path_interner.get(*dir).unwrap().to_path_buf();
             let path = dir.join(path.as_ref());

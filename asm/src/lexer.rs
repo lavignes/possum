@@ -127,6 +127,7 @@ pub enum OperationName {
     Rra,
     Rrc,
     Rrca,
+    Rrd,
     Rst,
     Sbc,
     Scf,
@@ -199,6 +200,7 @@ impl OperationName {
             "rra" | "RRA" => Some(Self::Rra),
             "rrc" | "RRC" => Some(Self::Rrc),
             "rrca" | "RRCA" => Some(Self::Rrca),
+            "rrd" | "RRD" => Some(Self::Rrd),
             "rst" | "RST" => Some(Self::Rst),
             "sbc" | "SBC" => Some(Self::Sbc),
             "scf" | "SCF" => Some(Self::Scf),
@@ -277,6 +279,7 @@ impl Display for OperationName {
                 Self::Rra => "rra",
                 Self::Rrc => "rrc",
                 Self::Rrca => "rrca",
+                Self::Rrd => "rrd",
                 Self::Rst => "rst",
                 Self::Sbc => "sbc",
                 Self::Scf => "scf",
@@ -534,14 +537,17 @@ pub enum DirectiveName {
     Org,
     Here,
     Macro,
+    EndMacro,
     Enum,
+    EndEnum,
     Struct,
+    EndStruct,
     Symbol,
     If,
     Ifdef,
     Ifndef,
     Else,
-    End,
+    Endif,
     Echo,
     Die,
     Db,
@@ -557,14 +563,17 @@ impl DirectiveName {
             "@org" | "@ORG" => Some(Self::Org),
             "@here" | "@HERE" => Some(Self::Here),
             "@macro" | "@MACRO" => Some(Self::Macro),
+            "@endm" | "@ENDM" => Some(Self::EndMacro),
             "@enum" | "@ENUM" => Some(Self::Enum),
+            "@ende" | "@ENDE" => Some(Self::EndEnum),
             "@struct" | "@STRUCT" => Some(Self::Struct),
+            "@ends" | "@ENDS" => Some(Self::EndStruct),
             "@def" | "@DEF" => Some(Self::Symbol),
             "@if" | "@IF" => Some(Self::If),
             "@ifdef" | "@IFDEF" => Some(Self::Ifdef),
             "@ifndef" | "@IFNDEF" => Some(Self::Ifndef),
             "@else" | "@ELSE" => Some(Self::Else),
-            "@end" | "@END" => Some(Self::End),
+            "@endif" | "@ENDIF" => Some(Self::Endif),
             "@echo" | "@ECHO" => Some(Self::Echo),
             "@die" | "@DIE" => Some(Self::Die),
             "@db" | "@DB" => Some(Self::Db),
@@ -586,14 +595,17 @@ impl Display for DirectiveName {
                 Self::Org => "@org",
                 Self::Here => "@here",
                 Self::Macro => "@macro",
+                Self::EndMacro => "@endm",
                 Self::Enum => "@enum",
+                Self::EndEnum => "@ende",
                 Self::Struct => "@struct",
+                Self::EndStruct => "@ends",
                 Self::Symbol => "@def",
                 Self::If => "@if",
                 Self::Ifdef => "@ifdef",
                 Self::Ifndef => "@ifndef",
                 Self::Else => "@else",
-                Self::End => "@end",
+                Self::Endif => "@endif",
                 Self::Echo => "@echo",
                 Self::Die => "@die",
                 Self::Db => "@db",
@@ -747,7 +759,12 @@ pub struct Lexer<R> {
 
 impl<R: Read> Lexer<R> {
     #[inline]
-    pub fn new(str_interner: Rc<RefCell<StrInterner>>, pathref: PathRef, reader: R) -> Self {
+    pub fn new(
+        str_interner: Rc<RefCell<StrInterner>>,
+        included_from: Option<SourceLoc>,
+        pathref: PathRef,
+        reader: R,
+    ) -> Self {
         let loc = SourceLoc {
             pathref,
             line: 1,
@@ -757,7 +774,7 @@ impl<R: Read> Lexer<R> {
             str_interner,
             loc,
             tok_loc: loc,
-            included_from: None,
+            included_from,
             inner: CharReader::new(reader),
             stash: None,
             state: State::Initial,
@@ -1255,7 +1272,7 @@ mod tests {
         let path_interner = Rc::new(RefCell::new(PathInterner::new()));
         let str_interner = Rc::new(RefCell::new(StrInterner::new()));
         let pathref = path_interner.borrow_mut().intern("file.test");
-        Lexer::new(str_interner, pathref, Cursor::new(text))
+        Lexer::new(str_interner, None, pathref, Cursor::new(text))
     }
 
     #[test]
@@ -1776,7 +1793,7 @@ mod tests {
             
             @macro foo arg1, arg2
                 add arg1, arg2
-            @end
+            @endm
             
             @echo "hello"
             @die
