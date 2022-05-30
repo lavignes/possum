@@ -1,8 +1,4 @@
-use std::{
-    cell::RefCell,
-    io::{self, Write},
-    rc::Rc,
-};
+use std::{cell::RefCell, io::Write, rc::Rc};
 
 use crate::{
     expr::Expr,
@@ -11,6 +7,10 @@ use crate::{
     lexer::SourceLoc,
     symtab::Symtab,
 };
+
+#[derive(thiserror::Error, Debug)]
+#[error("{0}")]
+pub struct LinkerError(String);
 
 pub enum Link {
     Byte {
@@ -89,9 +89,69 @@ impl<S: FileSystem> Module<S> {
         }
     }
 
-    pub fn link(&self, writer: &mut dyn Write) -> io::Result<()> {
-        // TODO: link
-        writer.write(&self.data)?;
-        Ok(())
+    pub fn link(mut self, writer: &mut dyn Write) -> Result<(), LinkerError> {
+        for link in &self.links {
+            match link {
+                Link::Byte { offset, expr, .. } => {
+                    if let Some(value) = expr.evaluate(&self.symtab) {
+                        if (value as u32) > (u8::MAX as u32) {
+                            return Err(LinkerError(format!(
+                                "Expression ({value}) does not fit in a byte"
+                            )));
+                        }
+                        self.data[*offset] = value as u8;
+                    } else {
+                        return Err(LinkerError(format!("Expression could not be solved")));
+                    }
+                }
+                Link::SignedByte { offset, expr, .. } => {
+                    if let Some(value) = expr.evaluate(&self.symtab) {
+                        if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32)) {
+                            return Err(LinkerError(format!(
+                                "Expression ({value}) does not fit in a byte"
+                            )));
+                        }
+                        self.data[*offset] = value as u8;
+                    } else {
+                        return Err(LinkerError(format!("Expression could not be solved")));
+                    }
+                }
+                Link::Word { offset, expr, .. } => {
+                    if let Some(value) = expr.evaluate(&self.symtab) {
+                        if (value as u32) > (u16::MAX as u32) {
+                            return Err(LinkerError(format!(
+                                "Expression ({value}) does not fit in a word"
+                            )));
+                        }
+                        let bytes = (value as u16).to_le_bytes();
+                        self.data[*offset] = bytes[0];
+                        self.data[*offset + 1] = bytes[1];
+                    } else {
+                        return Err(LinkerError(format!("Expression could not be solved")));
+                    }
+                }
+                Link::Space {
+                    offset, len, expr, ..
+                } => {
+                    if let Some(value) = expr.evaluate(&self.symtab) {
+                        if (value as u32) > (u8::MAX as u32) {
+                            return Err(LinkerError(format!(
+                                "Expression ({value}) does not fit in a byte"
+                            )));
+                        }
+                        for i in *offset..*offset + *len {
+                            self.data[i] = value as u8;
+                        }
+                    } else {
+                        return Err(LinkerError(format!("Expression could not be solved")));
+                    }
+                }
+            }
+        }
+
+        writer
+            .write(&self.data)
+            .map(|_| {})
+            .map_err(|e| LinkerError(format!("Failed to write output: {e}")))
     }
 }

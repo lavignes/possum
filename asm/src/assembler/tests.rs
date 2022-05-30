@@ -2847,3 +2847,98 @@ fn r#include() {
         0x42,
     ], data);
 }
+
+#[test]
+fn link_byte() {
+    let assembler = assembler(&[(
+        "/test.asm",
+        r#"
+            @db test
+            @def test, $42
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    assembler
+        .assemble("/", "test.asm")
+        .unwrap()
+        .link(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x42,
+    ], data);
+}
+
+#[test]
+fn link_signed_byte() {
+    let assembler = assembler(&[(
+        "/test.asm",
+        r#"
+            jr future
+
+            @org 50
+            future: nop
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    assembler
+        .assemble("/", "test.asm")
+        .unwrap()
+        .link(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x18, 48,
+        0x00,
+    ], data);
+}
+
+#[test]
+fn link_word() {
+    let assembler = assembler(&[(
+        "/test.asm",
+        r#"
+            @dw test
+            @def test, $1234
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    assembler
+        .assemble("/", "test.asm")
+        .unwrap()
+        .link(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x34, 0x12
+    ], data);
+}
+
+#[test]
+fn link_space() {
+    let assembler = assembler(&[(
+        "/test.asm",
+        r#"
+            @ds 3, test
+            @def test, $42
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    assembler
+        .assemble("/", "test.asm")
+        .unwrap()
+        .link(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x42, 0x42, 0x42
+    ], data);
+}
