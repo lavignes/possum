@@ -639,6 +639,7 @@ enum State {
     InSymbol,
     InIdentifier,
     InDirective,
+    InMacro,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -672,6 +673,10 @@ pub enum Token {
         loc: SourceLoc,
         name: DirectiveName,
     },
+    Macro {
+        loc: SourceLoc,
+        value: StrRef,
+    },
     Register {
         loc: SourceLoc,
         name: RegisterName,
@@ -701,6 +706,7 @@ impl Token {
             Self::Number { loc, .. } => *loc,
             Self::Operation { loc, .. } => *loc,
             Self::Directive { loc, .. } => *loc,
+            Self::Macro { loc, .. } => *loc,
             Self::Register { loc, .. } => *loc,
             Self::Flag { loc, .. } => *loc,
             Self::Symbol { loc, .. } => *loc,
@@ -743,6 +749,11 @@ impl<'a> Display for DisplayToken<'a> {
             Token::Operation { name, .. } => write!(f, "operation: \"{name}\""),
             Token::Directive { name, .. } => write!(f, "directive: \"{name}\""),
             Token::Register { name, .. } => write!(f, "register: \"{name}\""),
+            Token::Macro { value, .. } => {
+                let str_interner = str_interner.as_ref().borrow();
+                let value = str_interner.get(value).unwrap();
+                write!(f, "macro: \"{value}\"")
+            }
             Token::Flag { name, .. } => write!(f, "{name}"),
             Token::Symbol { name, .. } => write!(f, "symbol: \"{name}\""),
             Token::Label { value, .. } => {
@@ -833,6 +844,7 @@ impl<R: Read> Lexer<R> {
                 | ','
                 | '@'
                 | ')'
+                | '#'
                 | '\n'
         )
     }
@@ -939,6 +951,13 @@ impl<R: Read> Iterator for Lexer<R> {
 
                     '@' => {
                         self.state = State::InDirective;
+                        self.tok_loc = self.loc;
+                        self.buffer.clear();
+                        self.buffer.push(c);
+                    }
+
+                    '#' => {
+                        self.state = State::InMacro;
                         self.tok_loc = self.loc;
                         self.buffer.clear();
                         self.buffer.push(c);
@@ -1329,6 +1348,24 @@ impl<R: Read> Iterator for Lexer<R> {
                         return Some(Err(LexerError::UnknownDirective {
                             loc: self.tok_loc,
                             msg: self.buffer.clone(),
+                        }));
+                    }
+                },
+
+                State::InMacro => match c {
+                    _ if c.is_alphanumeric() || c == '_' => {
+                        self.buffer.push(c);
+                    }
+
+                    _ => {
+                        self.state = State::Initial;
+                        self.stash = Some(c);
+
+                        self.state = State::Initial;
+                        let value = self.str_interner.borrow_mut().intern(&self.buffer);
+                        return Some(Ok(Token::Macro {
+                            loc: self.tok_loc,
+                            value,
                         }));
                     }
                 },
@@ -1993,7 +2030,7 @@ mod tests {
             @die
             
             ; comment
-            foo a, b
+            #foo a, b
         "#;
         let mut lexer = lexer(text);
         while let Some(result) = lexer.next() {

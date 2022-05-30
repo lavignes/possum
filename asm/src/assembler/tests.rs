@@ -2944,3 +2944,30 @@ fn link_space() {
         0x42, 0x42, 0x42
     ], data);
 }
+
+#[test]
+#[ignore = "not implemented"]
+fn r#macro() {
+    let assembler = assembler(&[(
+        "/test.asm",
+        r#"
+            @macro TEST, x
+                @db x
+            @endm
+
+            #TEST $42
+        "#,
+    )]);
+
+    let mut data = Vec::new();
+    assembler
+        .assemble("/", "test.asm")
+        .unwrap()
+        .link(&mut data)
+        .unwrap();
+
+    #[rustfmt::skip]
+    assert_eq!(vec![
+        0x42
+    ], data);
+}
