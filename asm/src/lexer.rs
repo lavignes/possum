@@ -32,6 +32,9 @@ pub enum LexerError {
     #[error("unrecognized string escape: `{msg}`")]
     UnrecognizedStringEscape { loc: SourceLoc, msg: String },
 
+    #[error("malformed character literal: `{msg}`")]
+    MalformedCharacterLiteral { loc: SourceLoc, msg: String },
+
     #[error("malformed binary number: `{msg}`")]
     MalformedBinaryNumber { loc: SourceLoc, msg: String },
 
@@ -58,6 +61,7 @@ impl LexerError {
             Self::ReadError { loc, .. } => *loc,
             Self::UnexpectedLineBreak { loc } => *loc,
             Self::UnrecognizedStringEscape { loc, .. } => *loc,
+            Self::MalformedCharacterLiteral { loc, .. } => *loc,
             Self::MalformedBinaryNumber { loc, .. } => *loc,
             Self::MalformedDecimalNumber { loc, .. } => *loc,
             Self::MalformedHexidecimalNumber { loc, .. } => *loc,
@@ -625,6 +629,10 @@ enum State {
     InStringEscape,
     InHexStringEscape1,
     InHexStringEscape2,
+    InChar,
+    InCharEscape,
+    InHexCharEscape1,
+    InHexCharEscape2,
     InNumberBase2,
     InNumberBase10,
     InNumberBase16,
@@ -897,6 +905,12 @@ impl<R: Read> Iterator for Lexer<R> {
                         self.buffer.clear();
                     }
 
+                    '\'' => {
+                        self.state = State::InChar;
+                        self.tok_loc = self.loc;
+                        self.buffer.clear();
+                    }
+
                     '%' => {
                         self.state = State::InNumberBase2;
                         self.tok_loc = self.loc;
@@ -1051,6 +1065,138 @@ impl<R: Read> Iterator for Lexer<R> {
                         // so we can parse them, then we overwrite the bytes with the char
                         // value.
                         self.state = State::InString;
+                        self.buffer.push(c.to_ascii_lowercase());
+
+                        let last2 = &self.buffer[self.buffer.len() - 2..self.buffer.len()];
+                        let byte = u8::from_str_radix(last2, 16).unwrap();
+
+                        self.buffer.truncate(self.buffer.len() - 2);
+                        self.buffer.push(byte as char);
+                    }
+
+                    _ => {
+                        return Some(Err(LexerError::UnrecognizedStringEscape {
+                            loc: self.tok_loc,
+                            msg: format!("\\${}{}", self.buffer.chars().last().unwrap(), c),
+                        }));
+                    }
+                },
+
+                State::InChar => match c {
+                    '\n' => {
+                        return Some(Err(LexerError::UnexpectedLineBreak { loc: self.loc }));
+                    }
+
+                    '\'' => {
+                        self.state = State::Initial;
+                        let len = self.buffer.len();
+                        if len == 0 {
+                            return Some(Err(LexerError::MalformedCharacterLiteral {
+                                loc: self.tok_loc,
+                                msg: format!("Character literal cannot have 0 length"),
+                            }));
+                        }
+                        if len > 4 {
+                            return Some(Err(LexerError::MalformedCharacterLiteral {
+                                loc: self.tok_loc,
+                                msg: format!(
+                                    "Character literal length ({len}) is larger than 4 bytes"
+                                ),
+                            }));
+                        }
+                        let mut bytes = [0; 4];
+                        for (i, b) in self.buffer.as_bytes().iter().enumerate() {
+                            bytes[i] = *b;
+                        }
+                        let value = u32::from_le_bytes(bytes);
+                        return Some(Ok(Token::Number {
+                            loc: self.tok_loc,
+                            value,
+                        }));
+                    }
+
+                    '\\' => {
+                        self.state = State::InCharEscape;
+                    }
+
+                    _ => self.buffer.push(c),
+                },
+
+                State::InCharEscape => match c {
+                    '\n' => {
+                        self.state = State::InChar;
+                    }
+
+                    'n' => {
+                        self.state = State::InChar;
+                        self.buffer.push('\n');
+                    }
+
+                    'r' => {
+                        self.state = State::InChar;
+                        self.buffer.push('\r');
+                    }
+
+                    't' => {
+                        self.state = State::InChar;
+                        self.buffer.push('\t');
+                    }
+
+                    '\\' => {
+                        self.state = State::InChar;
+                        self.buffer.push('\\');
+                    }
+
+                    '0' => {
+                        self.state = State::InChar;
+                        self.buffer.push('\0');
+                    }
+
+                    '\"' => {
+                        self.state = State::InChar;
+                        self.buffer.push('\"');
+                    }
+
+                    '$' => {
+                        self.state = State::InHexCharEscape1;
+                    }
+
+                    _ => {
+                        return Some(Err(LexerError::UnrecognizedStringEscape {
+                            loc: self.loc,
+                            msg: format!("\\{c}"),
+                        }));
+                    }
+                },
+
+                State::InHexCharEscape1 => match c {
+                    '\n' => {
+                        return Some(Err(LexerError::UnexpectedLineBreak { loc: self.loc }));
+                    }
+
+                    '0'..='9' | 'a'..='f' | 'A'..='F' => {
+                        self.state = State::InHexCharEscape2;
+                        self.buffer.push(c.to_ascii_lowercase());
+                    }
+
+                    _ => {
+                        return Some(Err(LexerError::UnrecognizedStringEscape {
+                            loc: self.loc,
+                            msg: format!("\\${c}"),
+                        }));
+                    }
+                },
+
+                State::InHexCharEscape2 => match c {
+                    '\n' => {
+                        return Some(Err(LexerError::UnexpectedLineBreak { loc: self.loc }));
+                    }
+
+                    '0'..='9' | 'a'..='f' | 'A'..='F' => {
+                        // Its kinda janky, but we pushed both bytes onto the buffer
+                        // so we can parse them, then we overwrite the bytes with the char
+                        // value.
+                        self.state = State::InChar;
                         self.buffer.push(c.to_ascii_lowercase());
 
                         let last2 = &self.buffer[self.buffer.len() - 2..self.buffer.len()];
@@ -1330,6 +1476,54 @@ mod tests {
         assert!(matches!(
             lexer.next(),
             Some(Ok(Token::String { value, .. })) if value == string
+        ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(lexer.next(), None));
+    }
+
+    #[test]
+    fn char() {
+        let text = r#"
+            'q'
+        "#;
+        let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Number {
+                value,
+                ..
+            })) if value == ('q' as u32)
+        ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(lexer.next(), None));
+    }
+
+    #[test]
+    fn char_escape() {
+        let text = r#"
+            '\n'
+        "#;
+        let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Number { value, .. })) if value == ('\n' as u32)
+        ));
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(lexer.next(), None));
+    }
+
+    #[test]
+    fn char_escape_raw() {
+        let text = r#"
+            '\$7f'
+        "#;
+        let mut lexer = lexer(text);
+        assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
+        assert!(matches!(
+            lexer.next(),
+            Some(Ok(Token::Number { value, .. })) if value == ('\x7f' as u32)
         ));
         assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));
         assert!(matches!(lexer.next(), None));
