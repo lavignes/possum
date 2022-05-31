@@ -1,5 +1,3 @@
-#![feature(result_option_inspect)]
-
 mod assembler;
 mod charreader;
 mod expr;
