@@ -34,7 +34,7 @@ syn region z80Lbl2 start="(" end=")" oneline contains=z80Number,z80Lbl,z80Lbl2,z
 syn match z80Other "[~!%^&*-=|<>/?]"
 
 " Numbers
-syn match z80Number "\<\$[0-9a-fA-F]\+\>"
+syn match z80Number "\$[0-9a-fA-F]\+"
 syn match z80Number "\<%[01]\+\>"
 syn match z80Number "\<\d\+\>"
 
