@@ -18,9 +18,9 @@ syn keyword z80Reg af af' bc de hl ix ixh ixl iy iyh iyl
 syn keyword z80Reg sp pc a b c d e f h l i r
 
 " Directives
-syn keyword z80PreProc @org @here @macro @endm @enum @ende @struct @ends
-syn keyword z80PreProc @def @if @ifdef @ifndef @else @endif @echo @die
-syn keyword z80PreProc @assert @db @dw @ds @include
+syn keyword z80Directive @org @here @macro @endm @enum @ende @struct @ends
+syn keyword z80Directive @def @if @ifdef @ifndef @else @endif @echo @die
+syn keyword z80Directive @assert @db @dw @ds @include
 
 " Strings
 syn region z80String start=/"/ skip=/\\"/ end=/"/ oneline
@@ -70,8 +70,7 @@ HiLink z80Lbl Type
 HiLink z80Lbl2 Type
 HiLink z80Comment Comment
 HiLink z80Inst Statement
-HiLink z80Include Include
-HiLink z80PreProc PreProc
+HiLink z80Directive Statement
 HiLink z80Number Number
 HiLink z80String String
 HiLink z80Other Operator
