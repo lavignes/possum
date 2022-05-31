@@ -29,6 +29,32 @@ Instructions and all built-in keywords are case-insensitive:
     ld a, b
 ```
 
+### Whitespace
+
+For the most part, whitespace has zero semantic impact on PossumASM.
+Most programs need zero line breaks if you dont want them.
+
+This is valid:
+
+```
+add a, b add b, c ret call $1234 @echo "Hello World"
+```
+
+As is this:
+
+```
+subroutine1 inc a ret subroutine2 call subroutine3 subroutine3 dec a ret
+```
+
+### Encoding
+
+PossumASM uses utf-8 encoding. Therefore you can happily put emojis
+in your code with no trouble:
+
+```
+@echo "Howdy Cowboy! 🤠"
+```
+
 ### Numbers
 
 PossumASM supports binary, decimal, and hexadecimal numeric literals.

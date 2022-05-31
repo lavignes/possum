@@ -16,6 +16,6 @@ start:
 	ret
 
 HELLO:
-	@db "Howdy Cowboy\n"
+	@db "Howdy Cowboy 🤠\n"
     @def .len, @here - HELLO
 
