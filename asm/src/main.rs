@@ -30,7 +30,7 @@ struct Args {
     #[clap(parse(from_os_str), short, long)]
     output: Option<PathBuf>,
 
-    /// Paths to search for included files
+    /// Paths to search for included files (Repeatable)
     #[clap(parse(from_os_str), short = 'I', long)]
     include: Vec<PathBuf>,
 }

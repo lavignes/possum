@@ -310,8 +310,7 @@ where
                 nodes.push(ExprNode::Ternary);
                 Ok(loc)
             }
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
+            _ => Ok(loc),
         }
     }
 
@@ -322,24 +321,18 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_2(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::DoublePipe,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::DoublePipe,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_2(nodes)?;
                     nodes.push(ExprNode::OrLogical);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -350,24 +343,18 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_3(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::DoubleAmpersand,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::DoubleAmpersand,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_3(nodes)?;
                     nodes.push(ExprNode::AndLogical);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -378,24 +365,18 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_4(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::Pipe,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::Pipe,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_4(nodes)?;
                     nodes.push(ExprNode::Or);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -406,24 +387,18 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_5(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::Caret,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::Caret,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_5(nodes)?;
                     nodes.push(ExprNode::Xor);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -434,24 +409,18 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_6(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::Ampersand,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::Ampersand,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_6(nodes)?;
                     nodes.push(ExprNode::And);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -462,41 +431,26 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_7(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::Equal,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::Equal,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_7(nodes)?;
                     nodes.push(ExprNode::Equal);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::NotEqual,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
                     name: SymbolName::NotEqual,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_7(nodes)?;
                     nodes.push(ExprNode::NotEqual);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -507,73 +461,42 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_8(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::LessThan,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::LessThan,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_8(nodes)?;
                     nodes.push(ExprNode::LessThan);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::LessEqual,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
                     name: SymbolName::LessEqual,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_8(nodes)?;
                     nodes.push(ExprNode::LessThanEqual);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::GreaterThan,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
                     name: SymbolName::GreaterThan,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_8(nodes)?;
                     nodes.push(ExprNode::GreaterThan);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::GreaterEqual,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
                     name: SymbolName::GreaterEqual,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_8(nodes)?;
                     nodes.push(ExprNode::GreaterThanEqual);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -584,73 +507,42 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_9(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::ShiftLeft,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::ShiftLeft,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_9(nodes)?;
                     nodes.push(ExprNode::ShiftLeft);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::ShiftRight,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
-                    name: SymbolName::ShiftRight,
-                    ..
-                }) = self.peek()?
-                {
-                    self.next()?;
-                    self.expr_prec_9(nodes)?;
-                    nodes.push(ExprNode::ShiftRight);
-                }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::ShiftLeftLogical,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
                     name: SymbolName::ShiftLeftLogical,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_9(nodes)?;
                     nodes.push(ExprNode::ShiftLeftLogical);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::ShiftRightLogical,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
+                    name: SymbolName::ShiftRight,
+                    ..
+                }) => {
+                    self.next()?;
+                    self.expr_prec_9(nodes)?;
+                    nodes.push(ExprNode::ShiftRight);
+                }
+                Some(Token::Symbol {
                     name: SymbolName::ShiftRightLogical,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_9(nodes)?;
                     nodes.push(ExprNode::ShiftRightLogical);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -661,41 +553,26 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_10(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::Plus,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::Plus,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_10(nodes)?;
                     nodes.push(ExprNode::Add);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::Minus,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
                     name: SymbolName::Minus,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_10(nodes)?;
                     nodes.push(ExprNode::Sub);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -706,57 +583,34 @@ where
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
         let loc = self.expr_prec_11(nodes)?;
 
-        match self.peek()? {
-            Some(Token::Symbol {
-                name: SymbolName::Star,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+        loop {
+            match self.peek()? {
+                Some(Token::Symbol {
                     name: SymbolName::Star,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_11(nodes)?;
                     nodes.push(ExprNode::Mul);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::Div,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
                     name: SymbolName::Div,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_11(nodes)?;
                     nodes.push(ExprNode::Div);
                 }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::Mod,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
+                Some(Token::Symbol {
                     name: SymbolName::Mod,
                     ..
-                }) = self.peek()?
-                {
+                }) => {
                     self.next()?;
                     self.expr_prec_11(nodes)?;
-                    nodes.push(ExprNode::Mod);
+                    nodes.push(ExprNode::Rem);
                 }
-                Ok(loc)
+                _ => return Ok(loc),
             }
-
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
         }
     }
 
@@ -782,7 +636,7 @@ where
             }) => {
                 self.next()?;
                 self.expr_prec_11(nodes)?;
-                nodes.push(ExprNode::Not);
+                nodes.push(ExprNode::NotLogical);
                 Ok(loc)
             }
 

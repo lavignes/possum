@@ -8,13 +8,13 @@ pub enum ExprNode {
     Value(i32),
     Label(StrRef),
     Invert,
-    Not,
+    NotLogical,
     Neg,
     Add,
     Sub,
     Mul,
     Div,
-    Mod,
+    Rem,
     ShiftLeft,
     ShiftRight,
     ShiftLeftLogical,
@@ -62,7 +62,7 @@ impl Expr {
                     let value = stack.pop().unwrap();
                     stack.push(!value);
                 }
-                ExprNode::Not => {
+                ExprNode::NotLogical => {
                     let value = stack.pop().unwrap();
                     stack.push((value == 0) as i32);
                 }
@@ -90,7 +90,7 @@ impl Expr {
                     let lhs = stack.pop().unwrap();
                     stack.push(lhs.wrapping_div(rhs));
                 }
-                ExprNode::Mod => {
+                ExprNode::Rem => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
                     stack.push(lhs.wrapping_rem(rhs));

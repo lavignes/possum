@@ -10,6 +10,22 @@ PossumASM is a nice z80 macro assembler.
 * Pretty nice error messages.
 * Global and local labels.
 
+## Command Line
+
+```
+USAGE:
+    possum-asm [OPTIONS] <FILE>
+
+ARGS:
+    <FILE>    Path to input assembly file
+
+OPTIONS:
+    -h, --help                 Print help information
+    -I, --include <INCLUDE>    Paths to search for included files (Repeatable)
+    -o, --output <OUTPUT>      Path to output binary file (Default: stdout)
+    -V, --version              Print version information
+```
+
 ## Syntax
 
 ### Comments

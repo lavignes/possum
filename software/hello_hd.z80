@@ -78,7 +78,7 @@ start:
 
 	ld a, '$'
 	call pip_wrc
-	ld de, SECTOR_BUF + HDIdent.size + HDIdent.size_len + -1
+	ld de, SECTOR_BUF + HDIdent.size + HDIdent.size_len - 1
 	ld a, (de)
 	call pip_wrx
 	dec de
