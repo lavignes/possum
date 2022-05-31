@@ -1,5 +1,3 @@
-; vim: ft=z80 ts=8 sw=8 noet
-
 @def KB_PORT, $f0
 
 start:

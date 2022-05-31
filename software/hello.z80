@@ -17,5 +17,5 @@ start:
 
 HELLO:
 	@db "Howdy Cowboy 🤠\n"
-    @def .len, @here - HELLO
+	@def .len, @here - HELLO
 

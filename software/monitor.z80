@@ -1,6 +1,3 @@
-; vim: ft=z80 ts=8 sw=8 noet
-
-	@org $0000
 start:
 	ld sp, $ffff
 
