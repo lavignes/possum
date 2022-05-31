@@ -1,8 +1,7 @@
 ; vim: ft=z80 ts=8 sw=8 noet
 
-KB_PORT:	equ $f0
+@def KB_PORT, $f0
 
-	org $0000
 start:
 	ld sp, $ffff
 
@@ -15,34 +14,36 @@ exit:
 	jr nz, exit
 	halt
 
-VDC_PORT_STAT:	equ $90
-VDC_PORT_SEL:	equ $90
-VDC_PORT_DATA:	equ $91
+VDC_PORT:
+	@def .STAT,	$90
+	@def .SEL,	$90
+	@def .DATA,	$91
 
-VDC_STAT_VBLANK:        equ $20
-VDC_STAT_STATUS:	equ $80
+VDC_STAT:
+	@def .VBLANK,	$20
+	@def .STATUS,	$80
 
 vdc_init:
-	ld hl, .INIT_VALUES
-	ld b, .INIT_VALUES_END - .INIT_VALUES
+	ld hl, VDC_INIT_VALUES
+	ld b, VDC_INIT_VALUES.len
 	sra b	; divide by 2
-.do_init:
+.send_byte:
 	ld a, (hl)
 	inc hl
 	call vdc_sel
 	ld a, (hl)
 	inc hl
-	out (VDC_PORT_DATA), a
-	djnz .do_init
+	out (VDC_PORT.DATA), a
+	djnz .send_byte
 	ret
 
 vdc_sel:
-	out (VDC_PORT_SEL), a
-	ld d, VDC_STAT_STATUS
-.reg_wt:
-	in a, (VDC_PORT_STAT)
+	out (VDC_PORT.SEL), a
+	ld d, VDC_STAT.STATUS
+.wait:
+	in a, (VDC_PORT.STAT)
 	and d
-	jr z, .reg_wt
+	jr z, .wait
 	ret
 
 hello:
@@ -50,168 +51,168 @@ hello:
 	ld a, 18
 	call vdc_sel
 	ld a, $20
-	out (VDC_PORT_DATA), a
+	out (VDC_PORT.DATA), a
 	ld a, 19
 	call vdc_sel
 	ld a, $00
-	out (VDC_PORT_DATA), a
+	out (VDC_PORT.DATA), a
 
 	; data register
 	ld a, 31
 	call vdc_sel
 
 	; copy charset
-	ld hl, .CHARSET
-	ld de, .CHARSET_END - .CHARSET
-.nchar:
+	ld hl, CHARSET
+	ld de, CHARSET.len
+.next_char:
 	ld b, 8	; write 8 pix rows
 .cdata:
 	ld a, (hl)
 	inc hl
-	out (VDC_PORT_DATA), a
+	out (VDC_PORT.DATA), a
 	djnz .cdata
 
 	ld b, 8	; write 8 padding rows
 	xor a
 .cpad:
-	out (VDC_PORT_DATA), a
+	out (VDC_PORT.DATA), a
 	djnz .cpad
 
 	dec de
 	ld a, d
 	or e
-	jr nz, .nchar
+	jr nz, .next_char
 
 	; select display (cell) $0000
 	ld a, 18
 	call vdc_sel
 	ld a, $00
-	out (VDC_PORT_DATA), a
+	out (VDC_PORT.DATA), a
 	ld a, 19
 	call vdc_sel
 	ld a, $00
-	out (VDC_PORT_DATA), a
+	out (VDC_PORT.DATA), a
 
 	; data register
 	ld a, 31
 	call vdc_sel
 
-	ld hl, .HELLO_MSG
-	ld b, .HELLO_MSG_END - .HELLO_MSG
-.hello_byte:
+	ld hl, HELLO_MSG
+	ld b, HELLO_MSG.len
+.outc:
 	ld a, (hl)
 	inc hl
-	out (VDC_PORT_DATA), a
-	djnz .hello_byte
+	out (VDC_PORT.DATA), a
+	djnz .outc
 
 	; move cursor to end of message
 	ld a, 15
 	call vdc_sel
-	ld a, .HELLO_MSG_END - .HELLO_MSG
-	out (VDC_PORT_DATA), a
+	ld a, HELLO_MSG.len
+	out (VDC_PORT.DATA), a
 
 	ret
 
-.HELLO_MSG:
-	db 1, 2, 3, 3, 4, 0, 5, 4, 6, 3, 7
-.HELLO_MSG_END:
+HELLO_MSG:
+	@db 1, 2, 3, 3, 4, 0, 5, 4, 6, 3, 7
+	@def .len, @here - HELLO_MSG
 
-.INIT_VALUES:
-	db 0, 126	; 126+1 columns
-	db 1, 80	; 80 text columns
-	db 2, 100	; hsync at col 100
-	db 3, $49	; hsync $9-wide vsync $4
-	db 4, 32	; 32+1 rows
-	db 6, 25	; 25 text rows
-	db 7, 30	; vsync at row 30
-	db 9, 7 	; 7+1 rows per cell
-	db 10, %01100000; cursor starts at line 0, blink
-	db 11, 7	; cursor ends at line 7
-	db 12, $00	; screen memory at $0000
-	db 13, $00
-	db 14, $00	; cursor at $0000
-	db 15, $00
-	db 20, $08	; attr memory at $0800
-	db 21, $00
-	db 22, $78	; cell is $8-wide ($7+1 visible)
-	db 23, $08	; cell is $8 tall
-	db 26, %11110000; wht on blk
-	db 28, %00100000; pix data @ $2000
-	db 29, 7	; underline at row 7
-	db 34, 125	; hblank end @ col 125
-	db 35, 100	; hblank start @ 100
-.INIT_VALUES_END:
+VDC_INIT_VALUES:
+	@db 0, 126	; 126+1 columns
+	@db 1, 80	; 80 text columns
+	@db 2, 100	; hsync at col 100
+	@db 3, $49	; hsync $9-wide vsync $4
+	@db 4, 32	; 32+1 rows
+	@db 6, 25	; 25 text rows
+	@db 7, 30	; vsync at row 30
+	@db 9, 7 	; 7+1 rows per cell
+	@db 10, %01100000; cursor starts at line 0, blink
+	@db 11, 7	; cursor ends at line 7
+	@db 12, $00	; screen memory at $0000
+	@db 13, $00
+	@db 14, $00	; cursor at $0000
+	@db 15, $00
+	@db 20, $08	; attr memory at $0800
+	@db 21, $00
+	@db 22, $78	; cell is $8-wide ($7+1 visible)
+	@db 23, $08	; cell is $8 tall
+	@db 26, %11110000; wht on blk
+	@db 28, %00100000; pix data @ $2000
+	@db 29, 7	; underline at row 7
+	@db 34, 125	; hblank end @ col 125
+	@db 35, 100	; hblank start @ 100
+	@def .len, @here - VDC_INIT_VALUES
 
-.CHARSET:
-	db %00000000
-	db %00000000
-	db %00000000
-	db %00000000
-	db %00000000
-	db %00000000
-	db %00000000
-	db %00000000
+CHARSET:
+	@db %00000000
+	@db %00000000
+	@db %00000000
+	@db %00000000
+	@db %00000000
+	@db %00000000
+	@db %00000000
+	@db %00000000
 
-	db %10000010
-	db %10000010
-	db %10000010
-	db %11111110
-	db %10000010
-	db %10000010
-	db %10000010
-	db %00000000
+	@db %10000010
+	@db %10000010
+	@db %10000010
+	@db %11111110
+	@db %10000010
+	@db %10000010
+	@db %10000010
+	@db %00000000
 
-	db %00000000
-	db %00000000
-	db %01111100
-	db %10000010
-	db %11111110
-	db %10000000
-	db %01111100
-	db %00000000
+	@db %00000000
+	@db %00000000
+	@db %01111100
+	@db %10000010
+	@db %11111110
+	@db %10000000
+	@db %01111100
+	@db %00000000
 
-	db %00110000
-	db %00010000
-	db %00010000
-	db %00010000
-	db %00010000
-	db %00010000
-	db %00011000
-	db %00000000
+	@db %00110000
+	@db %00010000
+	@db %00010000
+	@db %00010000
+	@db %00010000
+	@db %00010000
+	@db %00011000
+	@db %00000000
 
-	db %00000000
-	db %00000000
-	db %01111100
-	db %10000010
-	db %10000010
-	db %10000010
-	db %01111100
-	db %00000000
+	@db %00000000
+	@db %00000000
+	@db %01111100
+	@db %10000010
+	@db %10000010
+	@db %10000010
+	@db %01111100
+	@db %00000000
 
-	db %10000010
-	db %10000010
-	db %10000010
-	db %10010010
-	db %10101010
-	db %11000110
-	db %10000010
-	db %00000000
+	@db %10000010
+	@db %10000010
+	@db %10000010
+	@db %10010010
+	@db %10101010
+	@db %11000110
+	@db %10000010
+	@db %00000000
 
-	db %00000000
-	db %00000000
-	db %10111100
-	db %11000010
-	db %10000000
-	db %10000000
-	db %10000000
-	db %00000000
+	@db %00000000
+	@db %00000000
+	@db %10111100
+	@db %11000010
+	@db %10000000
+	@db %10000000
+	@db %10000000
+	@db %00000000
 
-	db %00000010
-	db %00000010
-	db %01111010
-	db %10000110
-	db %10000010
-	db %10000010
-	db %01111100
-	db %00000000
-.CHARSET_END:
+	@db %00000010
+	@db %00000010
+	@db %01111010
+	@db %10000110
+	@db %10000010
+	@db %10000010
+	@db %01111100
+	@db %00000000
+	@def .len, @here - CHARSET
