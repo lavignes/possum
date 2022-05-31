@@ -188,12 +188,12 @@ is **optional**.
 
 ### Expressions
 
-PossumASM has a full-featured expression parser. That supports every C operator
+PossumASM has a full-featured expression parser that supports every C operator
 except for comma (`,`). There are some important things to keep in mind:
 
 * Operator precedence matches that of C.
 * All operands are evaluated as 32-bit **signed** values.
-* All operations wrap-around. That is, adding `1` to the number `$FFFFFF` results in `0`.
+* All operations wrap-around. That is, adding `1` to the number `$ffffffff` results in `0`.
 * Logical operators work like C. `0` is treated as `false`, anything else is `true`.
 * The shift operators (`<<` and `>>`) are signed shifts. To perform an unsigned shift
   use the unsigned shift left (`<:`) and unsigned shift right (`:>`) operators.
