@@ -445,3 +445,28 @@ the_struct:
 ld ix, the_struct
 ld (ix+MyStruct.name_len), 8
 ```
+
+### `@enum` and `@ende`
+
+The `@enum` directive allows one to create simple enumerated labels:
+
+```
+@enum MyEnum
+    zero
+    one
+    two
+    tree
+@ende
+```
+
+This defines the following labels:
+
+* `MyEnum.zero` equal to `0`
+* `MyEnum.one` equal to `1`
+* `MyEnum.two` equal to `2`
+* `MyEnum.three` equal to `3`
+* `MyEnum` equal to `4`
+
+Each direct label represents the index zero-based index of itself variant
+in the enumeration. The label of the enumeration itself is a simple count
+of all variants.
