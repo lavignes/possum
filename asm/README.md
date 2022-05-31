@@ -8,7 +8,6 @@ PossumASM is a nice z80 macro assembler.
 * Supports most undocumented opcodes.
 * Syntax for declaring `@struct`s and `@enum`s.
 * Pretty nice error messages.
-* Can output directly to `stdout`.
 * Global and local labels.
 
 ## Syntax
@@ -110,7 +109,7 @@ And as mentioned, can be used to describe a **little-endian** multi-byte sequenc
 
 ### Labels
 
-PossumASM supports 2 kinds of labels:
+PossumASM supports 3 kinds of labels:
 
 #### Global
 
@@ -155,6 +154,11 @@ global labels. You write them with the format `<global_label>.<local_label>`:
 jp subroutine.loop
 jp do_thing.loop
 ```
+
+#### Optional Colon
+
+Also note that the use of a colon (`:`) when defining a label
+is **optional**.
 
 ### Expressions
 
@@ -305,11 +309,12 @@ A common use for `@ds` is to pad the output with zeros to ensure data
 or subroutines are properly placed at specific locations:
 
 ```
+@assert sub2 == $0100, "sub2 must start at $0100"
+
 sub1:
     call sub2
     ret
 
-@assert ($0100 - @here) >= 0
 @ds $0100 - @here 
 sub2:
     ret
@@ -317,6 +322,12 @@ sub2:
 
 In this example, we add padding between `sub1` and `sub2` to ensure that
 `sub2` starts at `$0100`.
+
+You'll also notice the use of an assertion here. Not only that, but
+the assertion is written before `sub2` is defined. This is fine in PossumASM
+as assertions can be deferred until linking the final binary. If the assertion
+were to be placed on or after the line defining `sub2` then it could fail
+before link-time.
 
 ### `@here`
 

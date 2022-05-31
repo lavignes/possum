@@ -1048,6 +1048,36 @@ where
                         }
                     }
 
+                    DirectiveName::Assert => {
+                        self.next()?;
+
+                        let (loc, expr) = self.expr()?;
+                        
+                        let msg = if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                            self.next()?;
+                            match self.next()? {
+                                None => return self.end_of_input_err(),
+                                Some(Token::String { value, .. }) => Some(value),
+                                Some(tok) => return Err((loc, AssemblerError(format!("Unexpected {}, expected a string", tok.as_display(&self.str_interner))))),
+                            }
+                        } else {
+                            None
+                        };
+                        if let Some(value) = expr.evaluate(&self.symtab) {
+                            if value == 0 {
+                                if let Some(msg) = msg {
+                                    let interner = self.str_interner.as_ref().borrow();
+                                    let msg = interner.get(msg).unwrap();
+                                    return Err((loc, AssemblerError(format!("Assertion failed: {msg}"))));
+                                } else {
+                                    return Err((loc, AssemblerError(format!("Assertion failed"))));
+                                }
+                            }
+                        } else {
+                            self.links.push(Link::assert(loc, msg, expr));
+                        }
+                    }
+
                     DirectiveName::Symbol => {
                         self.next()?;
 

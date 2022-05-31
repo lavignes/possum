@@ -3,7 +3,7 @@ use std::{cell::RefCell, io::Write, rc::Rc};
 use crate::{
     expr::Expr,
     fileman::{FileManager, FileSystem},
-    intern::StrInterner,
+    intern::{StrInterner, StrRef},
     lexer::SourceLoc,
     symtab::{Symbol, Symtab},
 };
@@ -34,6 +34,11 @@ pub enum Link {
         len: usize,
         expr: Expr,
     },
+    Assert {
+        loc: SourceLoc,
+        msg: Option<StrRef>,
+        expr: Expr,
+    },
 }
 
 impl Link {
@@ -60,6 +65,11 @@ impl Link {
             len,
             expr,
         }
+    }
+
+    #[inline]
+    pub fn assert(loc: SourceLoc, msg: Option<StrRef>, expr: Expr) -> Self {
+        Self::Assert { loc, msg, expr }
     }
 }
 
@@ -126,8 +136,13 @@ impl<S: FileSystem> Module<S> {
                 } => {
                     if let Some(value) = expr.evaluate(&self.symtab) {
                         if (value as u32) > (u8::MAX as u32) {
+                            let path = self.file_manager.path(loc.pathref).unwrap();
                             return Err(LinkerError(format!(
-                                "Expression ({value}) does not fit in a byte"
+                                "In \"{}\"\n\n{}:{}:{}: Expression result ({value}) does not fit in a byte",
+                                path.display(),
+                                path.file_name().unwrap().to_str().unwrap(),
+                                loc.line,
+                                loc.column
                             )));
                         }
                         self.data[*offset] = value as u8;
@@ -147,8 +162,13 @@ impl<S: FileSystem> Module<S> {
                 } => {
                     if let Some(value) = expr.evaluate(&self.symtab) {
                         if (value < (i8::MIN as i32)) || (value > (i8::MAX as i32)) {
+                            let path = self.file_manager.path(loc.pathref).unwrap();
                             return Err(LinkerError(format!(
-                                "Expression ({value}) does not fit in a byte"
+                                "In \"{}\"\n\n{}:{}:{}: Expression result ({value}) does not fit in a byte",
+                                path.display(),
+                                path.file_name().unwrap().to_str().unwrap(),
+                                loc.line,
+                                loc.column
                             )));
                         }
                         self.data[*offset] = value as u8;
@@ -168,8 +188,13 @@ impl<S: FileSystem> Module<S> {
                 } => {
                     if let Some(value) = expr.evaluate(&self.symtab) {
                         if (value as u32) > (u16::MAX as u32) {
+                            let path = self.file_manager.path(loc.pathref).unwrap();
                             return Err(LinkerError(format!(
-                                "Expression ({value}) does not fit in a word"
+                                "In \"{}\"\n\n{}:{}:{}: Expression result ({value}) does not fit in a word",
+                                path.display(),
+                                path.file_name().unwrap().to_str().unwrap(),
+                                loc.line,
+                                loc.column
                             )));
                         }
                         let bytes = (value as u16).to_le_bytes();
@@ -195,12 +220,51 @@ impl<S: FileSystem> Module<S> {
                 } => {
                     if let Some(value) = expr.evaluate(&self.symtab) {
                         if (value as u32) > (u8::MAX as u32) {
+                            let path = self.file_manager.path(loc.pathref).unwrap();
                             return Err(LinkerError(format!(
-                                "Expression ({value}) does not fit in a byte"
+                                "In \"{}\"\n\n{}:{}:{}: Expression result ({value}) does not fit in a byte",
+                                path.display(),
+                                path.file_name().unwrap().to_str().unwrap(),
+                                loc.line,
+                                loc.column
                             )));
                         }
                         for i in *offset..*offset + *len {
                             self.data[i] = value as u8;
+                        }
+                    } else {
+                        let path = self.file_manager.path(loc.pathref).unwrap();
+                        return Err(LinkerError(format!(
+                            "In \"{}\"\n\n{}:{}:{}: Expression could not be solved",
+                            path.display(),
+                            path.file_name().unwrap().to_str().unwrap(),
+                            loc.line,
+                            loc.column
+                        )));
+                    }
+                }
+                Link::Assert { loc, msg, expr, .. } => {
+                    if let Some(value) = expr.evaluate(&self.symtab) {
+                        if value == 0 {
+                            let path = self.file_manager.path(loc.pathref).unwrap();
+                            if let Some(msg) = msg {
+                                let interner = self.str_interner.as_ref().borrow();
+                                let msg = interner.get(*msg).unwrap();
+                                return Err(LinkerError(format!(
+                                    "In \"{}\"\n\n{}:{}:{}: Assertion failed: {msg}",
+                                    path.display(),
+                                    path.file_name().unwrap().to_str().unwrap(),
+                                    loc.line,
+                                    loc.column
+                                )));
+                            }
+                            return Err(LinkerError(format!(
+                                "In \"{}\"\n\n{}:{}:{}: Assertion failed",
+                                path.display(),
+                                path.file_name().unwrap().to_str().unwrap(),
+                                loc.line,
+                                loc.column
+                            )));
                         }
                     } else {
                         let path = self.file_manager.path(loc.pathref).unwrap();
