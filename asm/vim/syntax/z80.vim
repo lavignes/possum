@@ -1,6 +1,6 @@
 syn case ignore
 
-"set isk=a-z,A-Z,48-57,',.,_,@
+set isk=a-z,A-Z,48-57,',.,_,@
 
 syn sync fromstart
 
