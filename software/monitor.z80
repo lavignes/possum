@@ -1,6 +1,6 @@
 ; vim: ft=z80 ts=8 sw=8 noet
 
-	org $0000
+	@org $0000
 start:
 	ld sp, $ffff
 
@@ -18,17 +18,17 @@ start:
 .loop:
 	in a, (PIPE_PORT)
 	set 5, a	; lowercase ASCII
-	cp 'q'
+	cp $71
 	jr nz, .loop
 
 	halt
 
 HELLO_MSG:
-	db "Hello World!"
+	@db "Hello World!"
 HELLO_MSG_END:
 
 ; PIPE IO ROUTINES
-PIPE_PORT:	equ $f0 
+@def PIPE_PORT, $f0 
 
 pip_wrln:
 	call pip_wr

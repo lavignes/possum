@@ -790,7 +790,7 @@ impl<R: Read> Lexer<R> {
         let loc = SourceLoc {
             pathref,
             line: 1,
-            column: 1,
+            column: 0,
         };
         Self {
             str_interner,
@@ -896,7 +896,7 @@ impl<R: Read> Iterator for Lexer<R> {
                         self.loc.column += 1;
                         if c == '\n' {
                             self.loc.line += 1;
-                            self.loc.column = 1;
+                            self.loc.column = 0;
                         }
                         c
                     }

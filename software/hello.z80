@@ -4,7 +4,7 @@
 
 start:
 	ld hl, HELLO
-	ld b, HELLO_END - HELLO
+	ld b, HELLO.len
 	call .print
 	halt
 
@@ -12,10 +12,10 @@ start:
 	ld a, (hl)
 	out (PIPE_PORT), a
 	inc hl
-	dec b
 	djnz .print
 	ret
 
 HELLO:
 	@db "Howdy Cowboy\n"
-HELLO_END:
+    @def .len, @here - HELLO
+

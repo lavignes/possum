@@ -1,37 +1,53 @@
-HD_PORT_DATA:		equ $80
-HD_PORT_ERR:		equ $81
-HD_PORT_FEAT:		equ $81
-HD_PORT_SEC_CNT:	equ $82
-HD_PORT_SEC_NUM:	equ $83
-HD_PORT_CYL_LO:		equ $84
-HD_PORT_CYL_HI:		equ $85
-HD_PORT_HEAD:		equ $86
-HD_PORT_STAT:		equ $87
-HD_PORT_CMD:		equ $87
+; vim: ft=z80 ts=8 sw=8 noet
 
-HD_FEAT_8BIT_ON:	equ $01
-HD_STAT_ERR:		equ $01
-HD_STAT_BSY:		equ $80
-HD_DRIVE0:		equ $e0
-HD_DRIVE1:		equ $f0
+HD_PORT:
+	@def .DATA,	$80
+	@def .ERR,	$81
+	@def .FEAT,	$81
+	@def .SEC_CNT,	$82
+	@def .SEC_NUM,	$83
+	@def .CYL_LO,	$84
+	@def .CYL_HI,	$85
+	@def .HEAD,	$86
+	@def .STAT,	$87
+	@def .CMD,	$87
 
-HD_CMD_DIAG:		equ $90
-HD_CMD_ERASE:		equ $c0
-HD_CMD_IDENT:		equ $ec
-HD_CMD_NOP:		equ $00
-HD_CMD_RD:		equ $20
-HD_CMD_FEAT:		equ $ef
-HD_CMD_WR:		equ $30
+HD_FEAT:
+	@def .BITS8,	$01
 
-HD_IDENT_SERIAL:	equ $14
-HD_IDENT_SERIAL_LEN:	equ 20
-HD_IDENT_MODEL:		equ $36
-HD_IDENT_MODEL_LEN:	equ 40
-HD_IDENT_SIZE:		equ $0e
+HD_STAT:
+	@def .ERR,	$01
+	@def .BSY,	$80
 
-PIPE_PORT: equ $f0
+@def HD_DRIVE0,		$e0
+@def HD_DRIVE1,		$f0
 
-	org $0000
+HD_CMD:
+	@def .DIAG,	$90
+	@def .ERASE,	$c0
+	@def .IDENT,	$ec
+	@def .NOP,	$00
+	@def .RD,	$20
+	@def .FEAT,	$ef
+	@def .WR,	$30
+
+; TODO: we need the ability to add padding/alignment to structs
+@def HDIdent.size_len, 4
+@def HDIdent.serial_len, 20
+@def HDIdent.model_len, 40
+@struct HDIdent
+	pad0 $0e
+	size HDIdent.size_len
+
+	pad1 $14 - .size - .size_len
+	serial HDIdent.serial_len
+
+	pad2 $36 - .serial - .serial_len
+	model HDIdent.model_len
+@ends
+
+@def PIPE_PORT, $f0
+
 start:
 	ld sp, $ffff
 
@@ -41,28 +57,28 @@ start:
 	call c, err
 
 	ld hl, HD_MSG_MODEL
-	ld b, HD_MSG_MODEL_END - HD_MSG_MODEL
+	ld b, HD_MSG_MODEL.len
 	call pip_wr
 
-	ld hl, SECTOR_BUF + HD_IDENT_MODEL
-	ld b, HD_IDENT_MODEL_LEN
+	ld hl, SECTOR_BUF + HDIdent.model
+	ld b, HDIdent.model_len
 	call pip_wrln
 
 	ld hl, HD_MSG_SERIAL
-	ld b, HD_MSG_SERIAL_END - HD_MSG_SERIAL
+	ld b, HD_MSG_SERIAL.len
 	call pip_wr
 
-	ld hl, SECTOR_BUF + HD_IDENT_SERIAL
-	ld b, HD_IDENT_SERIAL_LEN
+	ld hl, SECTOR_BUF + HDIdent.serial
+	ld b, HDIdent.serial_len
 	call pip_wrln
 
 	ld hl, HD_MSG_SIZE
-	ld b, HD_MSG_SIZE_END - HD_MSG_SIZE
+	ld b, HD_MSG_SIZE.len
 	call pip_wr
 
 	ld a, '$'
 	call pip_wrc
-	ld de, SECTOR_BUF + HD_IDENT_SIZE + 3
+	ld de, SECTOR_BUF + HDIdent.size + HDIdent.size_len + -1
 	ld a, (de)
 	call pip_wrx
 	dec de
@@ -87,7 +103,7 @@ start:
 
 	ld hl, HELLO_MSG
 	ld de, SECTOR_BUF
-	ld b, HELLO_MSG_END - HELLO_MSG
+	ld b, HELLO_MSG.len
 .cpy:
 	ld a, (hl)
 	ex de, hl
@@ -104,15 +120,15 @@ start:
 	jr c, err
 
 	ld hl, HELLO_MSG
-	ld b, HELLO_MSG_END - HELLO_MSG
+	ld b, HELLO_MSG.len
 	call pip_wrln
 
 	jr exit
 
 err:
 	push af
-	ld hl, HD_ERR_MSG
-	ld b, HD_ERR_MSG_END - HD_ERR_MSG
+	ld hl, HD_MSG_ERR
+	ld b, HD_MSG_ERR.len
 	call pip_wr
 	ld a, '$'
 	pop af
@@ -128,92 +144,92 @@ exit:
 
 hd_8bit:
 	call hd_wait
-	ld a, HD_FEAT_8BIT_ON
-	out (HD_PORT_FEAT), a
-	ld a, HD_CMD_FEAT
-	out (HD_PORT_CMD), a
+	ld a, HD_FEAT.BITS8
+	out (HD_PORT.FEAT), a
+	ld a, HD_CMD.FEAT
+	out (HD_PORT.CMD), a
 	jp hd_err
 
 hd_ident:
 	call hd_wait
-	ld a, HD_CMD_IDENT
-	out (HD_PORT_CMD), a
+	ld a, HD_CMD.IDENT
+	out (HD_PORT.CMD), a
 	call hd_err
 	ret c
 	jp hd_bufin
 
 hd_rd:
 	call hd_wait
-	ld a, HD_CMD_RD
-	out (HD_PORT_CMD), a
+	ld a, HD_CMD.RD
+	out (HD_PORT.CMD), a
 	call hd_err
 	ret c
 	jp hd_bufin
 
 hd_wr:
 	call hd_wait
-	ld a, HD_CMD_WR
-	out (HD_PORT_CMD), a
+	ld a, HD_CMD.WR
+	out (HD_PORT.CMD), a
 	call hd_err
 	ret c
 	jp hd_bufout
 
 hd_lba:
 	ld a, e
-	out (HD_PORT_SEC_NUM), a
+	out (HD_PORT.SEC_NUM), a
         ld a, d
-	out (HD_PORT_CYL_LO), a
+	out (HD_PORT.CYL_LO), a
 	ld a, l
-	out (HD_PORT_CYL_HI), a
+	out (HD_PORT.CYL_HI), a
 	ld a, h
 	and $0f
 	or HD_DRIVE0
-	out (HD_PORT_HEAD), a
+	out (HD_PORT.HEAD), a
 	ret
 
 hd_bufin:
 	ld de, 512
 	ld hl, SECTOR_BUF
-.in_byt:
+.inb:
 	call hd_wait
-	in a, (HD_PORT_DATA)
+	in a, (HD_PORT.DATA)
 	ld (hl), a
 	inc hl
 	dec de
 	ld a, d
 	or e
-	jp nz, .in_byt
+	jp nz, .inb
 	jp hd_err
 
 hd_bufout:
 	ld de, 512
 	ld hl, SECTOR_BUF
-.ot_byt:
+.outb:
 	call hd_wait
 	ld a, (hl)
-	out (HD_PORT_DATA), a
+	out (HD_PORT.DATA), a
 	inc hl
 	dec de
 	ld a, d
 	or e
-	jp nz, .ot_byt
+	jp nz, .outb
 	jp hd_err
 
 hd_err:
 	call hd_wait
-	in a, (HD_PORT_STAT)
-	and HD_STAT_ERR
+	in a, (HD_PORT.STAT)
+	and HD_STAT.ERR
 	ret z
 	scf
-	in a, (HD_PORT_ERR)
+	in a, (HD_PORT.ERR)
 	ret
 
 hd_wait:
-	ld b, HD_STAT_BSY
-.bsy_wt:
-	in a, (HD_PORT_STAT)
+	ld b, HD_STAT.BSY
+.loop:
+	in a, (HD_PORT.STAT)
 	and b
-	jr nz, .bsy_wt
+	jr nz, .loop
 	ret
 
 pip_wrx:
@@ -222,9 +238,9 @@ pip_wrx:
 	rra
 	rra
 	rra
-	call .hex_conv
+	call .wr_low_nibble
 	ld a, c
-.hex_conv:
+.wr_low_nibble:
 	and $0f
 	add a, $90
 	daa
@@ -253,26 +269,25 @@ pip_wrln:
 	ret
 
 HELLO_MSG:
-	db "Hello! Successfully wrote to the disk!"
-HELLO_MSG_END:
+	@db "Hello! Successfully wrote to the disk!"
+	@def .len, @here - HELLO_MSG
 
 HD_MSG_MODEL:
-	db "Model Name:\t"
-HD_MSG_MODEL_END:
+	@db "Model Name:\t"
+	@def .len, @here - HD_MSG_MODEL
 
 HD_MSG_SERIAL:
-	db "Serial #:\t"
-HD_MSG_SERIAL_END:
+	@db "Serial #:\t"
+	@def .len, @here - HD_MSG_SERIAL
 
 HD_MSG_SIZE:
-	db "Disk Size:\t"
-HD_MSG_SIZE_END:
+	@db "Disk Size:\t"
+	@def .len, @here - HD_MSG_SIZE
 
-HD_ERR_MSG:
-	db "Disk error:\t"
-HD_ERR_MSG_END:
+HD_MSG_ERR:
+	@db "Disk error:\t"
+	@def .len, @here - HD_MSG_ERR
 
-	org $A000
 SECTOR_BUF:
-	org $A100
-SECTOR_BUF_END:
+	@ds $100
+	@def .len, @here - SECTOR_BUF 

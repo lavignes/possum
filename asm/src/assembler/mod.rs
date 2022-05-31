@@ -440,7 +440,7 @@ where
                 ..
             }) => {
                 while let Some(Token::Symbol {
-                    name: SymbolName::Caret,
+                    name: SymbolName::Ampersand,
                     ..
                 }) = self.peek()?
                 {
@@ -464,34 +464,6 @@ where
 
         match self.peek()? {
             Some(Token::Symbol {
-                name: SymbolName::Ampersand,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
-                    name: SymbolName::Ampersand,
-                    ..
-                }) = self.peek()?
-                {
-                    self.next()?;
-                    self.expr_prec_7(nodes)?;
-                    nodes.push(ExprNode::And);
-                }
-                Ok(loc)
-            }
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
-        }
-    }
-
-    #[must_use]
-    fn expr_prec_7(
-        &mut self,
-        nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
-        let loc = self.expr_prec_8(nodes)?;
-
-        match self.peek()? {
-            Some(Token::Symbol {
                 name: SymbolName::Equal,
                 ..
             }) => {
@@ -501,7 +473,7 @@ where
                 }) = self.peek()?
                 {
                     self.next()?;
-                    self.expr_prec_8(nodes)?;
+                    self.expr_prec_7(nodes)?;
                     nodes.push(ExprNode::Equal);
                 }
                 Ok(loc)
@@ -517,8 +489,85 @@ where
                 }) = self.peek()?
                 {
                     self.next()?;
-                    self.expr_prec_8(nodes)?;
+                    self.expr_prec_7(nodes)?;
                     nodes.push(ExprNode::NotEqual);
+                }
+                Ok(loc)
+            }
+
+            Some(_) => Ok(loc),
+            None => self.end_of_input_err(),
+        }
+    }
+
+    #[must_use]
+    fn expr_prec_7(
+        &mut self,
+        nodes: &mut Vec<ExprNode>,
+    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
+        let loc = self.expr_prec_8(nodes)?;
+
+        match self.peek()? {
+            Some(Token::Symbol {
+                name: SymbolName::LessThan,
+                ..
+            }) => {
+                while let Some(Token::Symbol {
+                    name: SymbolName::LessThan,
+                    ..
+                }) = self.peek()?
+                {
+                    self.next()?;
+                    self.expr_prec_8(nodes)?;
+                    nodes.push(ExprNode::LessThan);
+                }
+                Ok(loc)
+            }
+
+            Some(Token::Symbol {
+                name: SymbolName::LessEqual,
+                ..
+            }) => {
+                while let Some(Token::Symbol {
+                    name: SymbolName::LessEqual,
+                    ..
+                }) = self.peek()?
+                {
+                    self.next()?;
+                    self.expr_prec_8(nodes)?;
+                    nodes.push(ExprNode::LessThanEqual);
+                }
+                Ok(loc)
+            }
+
+            Some(Token::Symbol {
+                name: SymbolName::GreaterThan,
+                ..
+            }) => {
+                while let Some(Token::Symbol {
+                    name: SymbolName::GreaterThan,
+                    ..
+                }) = self.peek()?
+                {
+                    self.next()?;
+                    self.expr_prec_8(nodes)?;
+                    nodes.push(ExprNode::GreaterThan);
+                }
+                Ok(loc)
+            }
+
+            Some(Token::Symbol {
+                name: SymbolName::GreaterEqual,
+                ..
+            }) => {
+                while let Some(Token::Symbol {
+                    name: SymbolName::GreaterEqual,
+                    ..
+                }) = self.peek()?
+                {
+                    self.next()?;
+                    self.expr_prec_8(nodes)?;
+                    nodes.push(ExprNode::GreaterThanEqual);
                 }
                 Ok(loc)
             }
@@ -537,65 +586,65 @@ where
 
         match self.peek()? {
             Some(Token::Symbol {
-                name: SymbolName::LessThan,
+                name: SymbolName::ShiftLeft,
                 ..
             }) => {
                 while let Some(Token::Symbol {
-                    name: SymbolName::LessThan,
+                    name: SymbolName::ShiftLeft,
                     ..
                 }) = self.peek()?
                 {
                     self.next()?;
                     self.expr_prec_9(nodes)?;
-                    nodes.push(ExprNode::LessThan);
+                    nodes.push(ExprNode::ShiftLeft);
                 }
                 Ok(loc)
             }
 
             Some(Token::Symbol {
-                name: SymbolName::LessEqual,
+                name: SymbolName::ShiftRight,
                 ..
             }) => {
                 while let Some(Token::Symbol {
-                    name: SymbolName::LessEqual,
+                    name: SymbolName::ShiftRight,
                     ..
                 }) = self.peek()?
                 {
                     self.next()?;
                     self.expr_prec_9(nodes)?;
-                    nodes.push(ExprNode::LessThanEqual);
+                    nodes.push(ExprNode::ShiftRight);
                 }
                 Ok(loc)
             }
 
             Some(Token::Symbol {
-                name: SymbolName::GreaterThan,
+                name: SymbolName::ShiftLeftLogical,
                 ..
             }) => {
                 while let Some(Token::Symbol {
-                    name: SymbolName::GreaterThan,
+                    name: SymbolName::ShiftLeftLogical,
                     ..
                 }) = self.peek()?
                 {
                     self.next()?;
                     self.expr_prec_9(nodes)?;
-                    nodes.push(ExprNode::GreaterThan);
+                    nodes.push(ExprNode::ShiftLeftLogical);
                 }
                 Ok(loc)
             }
 
             Some(Token::Symbol {
-                name: SymbolName::GreaterEqual,
+                name: SymbolName::ShiftRightLogical,
                 ..
             }) => {
                 while let Some(Token::Symbol {
-                    name: SymbolName::GreaterEqual,
+                    name: SymbolName::ShiftRightLogical,
                     ..
                 }) = self.peek()?
                 {
                     self.next()?;
                     self.expr_prec_9(nodes)?;
-                    nodes.push(ExprNode::GreaterThanEqual);
+                    nodes.push(ExprNode::ShiftRightLogical);
                 }
                 Ok(loc)
             }
@@ -614,65 +663,33 @@ where
 
         match self.peek()? {
             Some(Token::Symbol {
-                name: SymbolName::ShiftLeft,
+                name: SymbolName::Plus,
                 ..
             }) => {
                 while let Some(Token::Symbol {
-                    name: SymbolName::ShiftLeft,
+                    name: SymbolName::Plus,
                     ..
                 }) = self.peek()?
                 {
                     self.next()?;
                     self.expr_prec_10(nodes)?;
-                    nodes.push(ExprNode::ShiftLeft);
+                    nodes.push(ExprNode::Add);
                 }
                 Ok(loc)
             }
 
             Some(Token::Symbol {
-                name: SymbolName::ShiftRight,
+                name: SymbolName::Minus,
                 ..
             }) => {
                 while let Some(Token::Symbol {
-                    name: SymbolName::ShiftRight,
+                    name: SymbolName::Minus,
                     ..
                 }) = self.peek()?
                 {
                     self.next()?;
                     self.expr_prec_10(nodes)?;
-                    nodes.push(ExprNode::ShiftRight);
-                }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::ShiftLeftLogical,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
-                    name: SymbolName::ShiftLeftLogical,
-                    ..
-                }) = self.peek()?
-                {
-                    self.next()?;
-                    self.expr_prec_10(nodes)?;
-                    nodes.push(ExprNode::ShiftLeftLogical);
-                }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::ShiftRightLogical,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
-                    name: SymbolName::ShiftRightLogical,
-                    ..
-                }) = self.peek()?
-                {
-                    self.next()?;
-                    self.expr_prec_10(nodes)?;
-                    nodes.push(ExprNode::ShiftRightLogical);
+                    nodes.push(ExprNode::Sub);
                 }
                 Ok(loc)
             }
@@ -691,51 +708,6 @@ where
 
         match self.peek()? {
             Some(Token::Symbol {
-                name: SymbolName::Plus,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
-                    name: SymbolName::Plus,
-                    ..
-                }) = self.peek()?
-                {
-                    self.next()?;
-                    self.expr_prec_11(nodes)?;
-                    nodes.push(ExprNode::Add);
-                }
-                Ok(loc)
-            }
-
-            Some(Token::Symbol {
-                name: SymbolName::Minus,
-                ..
-            }) => {
-                while let Some(Token::Symbol {
-                    name: SymbolName::Minus,
-                    ..
-                }) = self.peek()?
-                {
-                    self.next()?;
-                    self.expr_prec_11(nodes)?;
-                    nodes.push(ExprNode::Sub);
-                }
-                Ok(loc)
-            }
-
-            Some(_) => Ok(loc),
-            None => self.end_of_input_err(),
-        }
-    }
-
-    #[must_use]
-    fn expr_prec_11(
-        &mut self,
-        nodes: &mut Vec<ExprNode>,
-    ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
-        let loc = self.expr_prec_12(nodes)?;
-
-        match self.peek()? {
-            Some(Token::Symbol {
                 name: SymbolName::Star,
                 ..
             }) => {
@@ -745,7 +717,7 @@ where
                 }) = self.peek()?
                 {
                     self.next()?;
-                    self.expr_prec_12(nodes)?;
+                    self.expr_prec_11(nodes)?;
                     nodes.push(ExprNode::Mul);
                 }
                 Ok(loc)
@@ -761,7 +733,7 @@ where
                 }) = self.peek()?
                 {
                     self.next()?;
-                    self.expr_prec_12(nodes)?;
+                    self.expr_prec_11(nodes)?;
                     nodes.push(ExprNode::Div);
                 }
                 Ok(loc)
@@ -777,7 +749,7 @@ where
                 }) = self.peek()?
                 {
                     self.next()?;
-                    self.expr_prec_12(nodes)?;
+                    self.expr_prec_11(nodes)?;
                     nodes.push(ExprNode::Mod);
                 }
                 Ok(loc)
@@ -789,7 +761,7 @@ where
     }
 
     #[must_use]
-    fn expr_prec_12(
+    fn expr_prec_11(
         &mut self,
         nodes: &mut Vec<ExprNode>,
     ) -> Result<SourceLoc, (SourceLoc, AssemblerError)> {
@@ -799,7 +771,7 @@ where
                 name: SymbolName::Minus,
             }) => {
                 self.next()?;
-                self.expr_prec_12(nodes)?;
+                self.expr_prec_11(nodes)?;
                 nodes.push(ExprNode::Neg);
                 Ok(loc)
             }
@@ -809,7 +781,7 @@ where
                 name: SymbolName::Bang,
             }) => {
                 self.next()?;
-                self.expr_prec_12(nodes)?;
+                self.expr_prec_11(nodes)?;
                 nodes.push(ExprNode::Not);
                 Ok(loc)
             }
@@ -819,7 +791,7 @@ where
                 name: SymbolName::Tilde,
             }) => {
                 self.next()?;
-                self.expr_prec_12(nodes)?;
+                self.expr_prec_11(nodes)?;
                 nodes.push(ExprNode::Invert);
                 Ok(loc)
             }
@@ -1290,6 +1262,7 @@ where
                         match self.next()? {
                             None => return self.end_of_input_err(),
                             Some(Token::Label { loc, kind: LabelKind::Global, value }) => {
+                                let old_namespace = self.active_namespace;
                                 if self.symtab.get(value).is_some() {
                                     let interner = self.str_interner.as_ref().borrow();
                                     let label = interner.get(value).unwrap();
@@ -1298,6 +1271,7 @@ where
                                         AssemblerError(format!("The label \"{label}\" was already defined")),
                                     ));
                                 }
+                                self.active_namespace = Some(value);
                                 let mut size = 0i32;
                                 loop {
                                     match self.next()? {
@@ -1339,6 +1313,7 @@ where
                                         Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected field name or \"@ends\"", tok.as_display(&self.str_interner))))),
                                     }
                                 }
+                                self.active_namespace = old_namespace;
                                 self.symtab.insert(value, Symbol::Value(size));
                             }
                             Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected struct name", tok.as_display(&self.str_interner))))),

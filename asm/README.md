@@ -364,7 +364,7 @@ length of string constants:
 HELLO:
     @db "Hello World"
 
-    @def .len, HELLO - @here
+    @def .len, @here - HELLO
 
 @echo HELLO.len
 ```
@@ -378,10 +378,10 @@ number of bytes, in this case `11`.
 Then we define the local label: `.len`. Since it is after the `HELLO`
 label, the fully-qualified *direct* label will be `HELLO.len`.
 
-The value of `HELLO.len` is set to `HELLO - @here`. Let's say for the
+The value of `HELLO.len` is set to `@here - HELLO`. Let's say for the
 sake of example that `HELLO` was defined at `$0100`. That means that
 `@here` will be equal to `$010B` (`$0100 + 11`). Therefore, the
-expression will evalate to `$0100 - $010B` or `11`-- the length of
+expression will evalate to `$010b - $0100` or `11`-- the length of
 the string.
 
 While assembling, `stderr` will display `11`.
