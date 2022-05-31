@@ -217,7 +217,7 @@ except for comma (`,`). There are some important things to keep in mind:
 #### Lazy Evaluation
 
 Internally, PossumASM is a two-pass assembler. Though unlike many simple
-assemblers, PossumASM supports deferring most expression evalutions until
+assemblers, PossumASM supports deferring most expression evaluations until
 they are absolutely needed. This allows chains of forward references
 of arbitrary depth to be evaluated.
 
@@ -423,7 +423,7 @@ label, the fully-qualified *direct* label will be `HELLO.len`.
 The value of `HELLO.len` is set to `@here - HELLO`. Let's say for the
 sake of example that `HELLO` was defined at `$0100`. That means that
 `@here` will be equal to `$010B` (`$0100 + 11`). Therefore, the
-expression will evalate to `$010b - $0100` or `11`-- the length of
+expression will evaluate to `$010b - $0100` or `11`-- the length of
 the string.
 
 While assembling, `stderr` will display `11`.
