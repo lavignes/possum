@@ -2759,7 +2759,7 @@ fn r#struct() {
                 byte_size 1
                 word_size 2
             @ends
-
+            
             @db Zero
             @db Small
             @db Small.byte_size

@@ -37,20 +37,25 @@ machine.
 
 ### Hardware Emulation
  
-- [ ] z80 CPU: *nearly complete, very usable*
-- [ ] z8410 DMA: *usable (though not used yet since the timing emulation is a little sketchy)*
-- [ ] z80 SIO: *not started*
-- [ ] z80 CTC: *not started*
+- [X] z80 CPU
+- [X] z8410 DMA (though not used yet since the timing emulation is a little sketchy)
+- [ ] 16550A UART
+- [ ] z80 CTC
 - [X] 8-bit ATA drive(s)*
-- [ ] MOS 8563 VDC**: *nearly complete, very usable*
+- [X] MOS 8563 VDC**
 
 \**2 disk images can be mounted on the ATA bus.
-The interface is Compact Flash actually, but it is 80s tech.*
+The interface is Compact Flash actually, but it is 80s tech at its core.*
 
 \*\**The 80-column display chip from the venerable Commodore 128!
 16KB video RAM installed ;-)*
 
-### Software
+### Software (On Host)
+
+- [X] The emulator: [PossumEMU](./emu)
+- [X] A custom macro assembler: [PossumASM](./asm)
+
+### Software (On Possum)
 
 - [ ] Monitor ROM with disk driver that can load the kernel: *WIP*
 - [ ] Filesystem (let's make a custom one!): *WIP*
@@ -60,7 +65,7 @@ The interface is Compact Flash actually, but it is 80s tech.*
 - [ ] IPC
 - [ ] CP/M-compatability mode (a dream)
 - [ ] Text editor (vim-like)
-- [ ] Assembler
+- [ ] z80 Port of PossumASM
 - [ ] SLIP ethernet driver
 - [ ] TCP/IP stack
 - [ ] ???
@@ -68,9 +73,9 @@ The interface is Compact Flash actually, but it is 80s tech.*
 ## What's working
 
 ```
-z80asm ../rom/hello_hd.z80 -o ../rom/hello_hd.bin
+possum-asm hello_hd.z80 > hello_hd.bin
 
-cargo run --release --bin possum-emu -- ../rom/hello_hd.bin --hd0 ../img/blank.img
+possum-emu hello_hd.bin --hd0 blank.img
 ```
 
 ```

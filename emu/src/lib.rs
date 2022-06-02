@@ -5,6 +5,7 @@ mod ata;
 mod bus;
 mod cpu;
 mod dma;
+mod ser;
 mod sys;
 mod vdc;
 

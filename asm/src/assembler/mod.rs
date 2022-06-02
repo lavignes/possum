@@ -5,7 +5,7 @@ use fxhash::FxHashMap;
 use crate::{
     expr::{Expr, ExprNode},
     fileman::{FileManager, FileSystem},
-    intern::{StrRef, PathRef},
+    intern::{PathRef, StrRef},
     lexer::{
         DirectiveName, FlagName, LabelKind, Lexer, LexerError, OperationName, RegisterName,
         SourceLoc, SymbolName, Token,
@@ -217,7 +217,10 @@ where
     }
 
     fn end_of_input_err<T>(&mut self) -> Result<T, (SourceLoc, AssemblerError)> {
-        Err((self.loc(), AssemblerError(format!("Unexpected end of input"))))
+        Err((
+            self.loc(),
+            AssemblerError(format!("Unexpected end of input")),
+        ))
     }
 
     #[inline]
@@ -228,7 +231,9 @@ where
                 if name != sym {
                     Err((
                         loc,
-                        AssemblerError(format!("Unexpected symbol: \"{name}\", expected \"{sym}\"")),
+                        AssemblerError(format!(
+                            "Unexpected symbol: \"{name}\", expected \"{sym}\""
+                        )),
                     ))
                 } else {
                     Ok(())
@@ -699,9 +704,7 @@ where
                                 let global = interner.get(namespace).unwrap();
                                 format!("{global}{label}")
                             };
-                            self.str_interner
-                                .borrow_mut()
-                                .intern(direct_label)
+                            self.str_interner.borrow_mut().intern(direct_label)
                         } else {
                             let interner = self.str_interner.as_ref().borrow();
                             let label = interner.get(value).unwrap();
@@ -781,9 +784,7 @@ where
                                     let global = interner.get(namespace).unwrap();
                                     format!("{global}{label}")
                                 };
-                                self.str_interner
-                                    .borrow_mut()
-                                    .intern(direct_label)
+                                self.str_interner.borrow_mut().intern(direct_label)
                             } else {
                                 let interner = self.str_interner.as_ref().borrow();
                                 let label = interner.get(value).unwrap();
@@ -808,11 +809,12 @@ where
                     }
                 }
 
-                Some(&Token::Directive { loc, name }) => match name {
-                    DirectiveName::Org => {
-                        self.next()?;
+                Some(&Token::Directive { loc, name }) => {
+                    match name {
+                        DirectiveName::Org => {
+                            self.next()?;
 
-                        self.here = match self.const_expr()? {
+                            self.here = match self.const_expr()? {
                             (loc, Some(value)) => {
                                 if (value as u32) > (u16::MAX as u32) {
                                     return Err((
@@ -826,12 +828,12 @@ where
                             },
                             (loc, None) => return Err((loc, AssemblerError(format!("The expression following an \"@org\" directive must be immediately solvable")))),
                         };
-                    }
+                        }
 
-                    DirectiveName::Echo => {
-                        self.next()?;
+                        DirectiveName::Echo => {
+                            self.next()?;
 
-                        match self.peek()? {
+                            match self.peek()? {
                             Some(&Token::String { value, ..  }) => {
                                 self.next()?;
                                 let interner = self.str_interner.as_ref().borrow();
@@ -850,12 +852,12 @@ where
 
                             None => return self.end_of_input_err()
                         }
-                    }
+                        }
 
-                    DirectiveName::Die => {
-                        self.next()?;
+                        DirectiveName::Die => {
+                            self.next()?;
 
-                        match self.peek()? {
+                            match self.peek()? {
                             Some(&Token::String { value, ..  }) => {
                                 self.next()?;
                                 let interner = self.str_interner.as_ref().borrow();
@@ -872,121 +874,112 @@ where
 
                             None => return self.end_of_input_err()
                         }
-                    }
+                        }
 
-                    DirectiveName::Assert => {
-                        self.next()?;
-
-                        let (loc, expr) = self.expr()?;
-                        
-                        let msg = if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                        DirectiveName::Assert => {
                             self.next()?;
-                            match self.next()? {
-                                None => return self.end_of_input_err(),
-                                Some(Token::String { value, .. }) => Some(value),
-                                Some(tok) => return Err((loc, AssemblerError(format!("Unexpected {}, expected a string", tok.as_display(&self.str_interner))))),
-                            }
-                        } else {
-                            None
-                        };
-                        if let Some(value) = expr.evaluate(&self.symtab) {
-                            if value == 0 {
-                                if let Some(msg) = msg {
-                                    let interner = self.str_interner.as_ref().borrow();
-                                    let msg = interner.get(msg).unwrap();
-                                    return Err((loc, AssemblerError(format!("Assertion failed: {msg}"))));
-                                } else {
-                                    return Err((loc, AssemblerError(format!("Assertion failed"))));
-                                }
-                            }
-                        } else {
-                            self.links.push(Link::assert(loc, msg, expr));
-                        }
-                    }
 
-                    DirectiveName::Symbol => {
-                        self.next()?;
+                            let (loc, expr) = self.expr()?;
 
-                        let direct = match self.peek()? {
-                            Some(&Token::Label { loc, value, kind }) => match kind {
-                                LabelKind::Global | LabelKind::Direct => value,
-
-                                LabelKind::Local => {
-                                    if let Some(namespace) = self.active_namespace {
-                                        let global_label = {
-                                            let interner = self.str_interner.as_ref().borrow();
-                                            let global = interner.get(namespace).unwrap();
-                                            let label = interner.get(value).unwrap();
-                                            format!("{global}{label}")
-                                        };
-                                        self.str_interner
-                                            .borrow_mut()
-                                            .intern(global_label)
-                                    } else {
-                                        let interner = self.str_interner.as_ref().borrow();
-                                        let label = interner.get(value).unwrap();
-                                        return Err((loc, AssemblerError(format!("The local symbol \"{label}\" is being defined but there was no global label defined before it"))));
-                                    }
-                                }
-                            },
-                            _ => {
-                                return Err((
-                                    loc,
-                                    AssemblerError(format!("A symbol name is required")),
-                                ))
-                            }
-                        };
-                        self.next()?;
-
-                        if self.symtab.get(direct).is_some() {
-                            let interner = self.str_interner.as_ref().borrow();
-                            let label = interner.get(direct).unwrap();
-                            return Err((
-                                loc,
-                                AssemblerError(format!("The symbol \"{label}\" was already defined")),
-                            ));
-                        }
-                        self.expect_symbol(SymbolName::Comma)?;
-
-                        let (_, expr) = self.expr()?;
-                        self.symtab.insert(direct, Symbol::Expr(expr));
-                    }
-
-                    DirectiveName::Db => {
-                        self.next()?;
-
-                        loop {
-                            match self.peek()? {
-                                Some(&Token::String { value, .. }) => {
-                                    self.next()?;
-                                    let interner = self.str_interner.as_ref().borrow();
-                                    let bytes = interner.get(value).unwrap().as_bytes();
-
-                                    if (self.here as usize) + bytes.len() > (u16::MAX as usize) {
+                            let msg = if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                                self.next()?;
+                                match self.next()? {
+                                    None => return self.end_of_input_err(),
+                                    Some(Token::String { value, .. }) => Some(value),
+                                    Some(tok) => {
                                         return Err((
                                             loc,
                                             AssemblerError(format!(
-                                                "\"@db\" bytes extend past address $FFFF"
+                                                "Unexpected {}, expected a string",
+                                                tok.as_display(&self.str_interner)
                                             )),
+                                        ))
+                                    }
+                                }
+                            } else {
+                                None
+                            };
+                            if let Some(value) = expr.evaluate(&self.symtab) {
+                                if value == 0 {
+                                    if let Some(msg) = msg {
+                                        let interner = self.str_interner.as_ref().borrow();
+                                        let msg = interner.get(msg).unwrap();
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!("Assertion failed: {msg}")),
+                                        ));
+                                    } else {
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!("Assertion failed")),
                                         ));
                                     }
-                                    self.here += bytes.len() as u16;
-                                    self.data.extend_from_slice(bytes);
                                 }
+                            } else {
+                                self.links.push(Link::assert(loc, msg, expr));
+                            }
+                        }
 
-                                _ => {
-                                    let (loc, expr) = self.expr()?;
-                                    self.here += 1;
-                                    if let Some(value) = expr.evaluate(&self.symtab) {
-                                        if (value as u32) > (u8::MAX as u32) {
-                                            return Err((
-                                                    loc,
-                                                    AssemblerError(format!(
-                                                        "\"@db\" expression result ({value}) will not fit in a byte"
-                                                    )),
-                                                ));
+                        DirectiveName::Symbol => {
+                            self.next()?;
+
+                            let direct = match self.peek()? {
+                                Some(&Token::Label { loc, value, kind }) => match kind {
+                                    LabelKind::Global | LabelKind::Direct => value,
+
+                                    LabelKind::Local => {
+                                        if let Some(namespace) = self.active_namespace {
+                                            let global_label = {
+                                                let interner = self.str_interner.as_ref().borrow();
+                                                let global = interner.get(namespace).unwrap();
+                                                let label = interner.get(value).unwrap();
+                                                format!("{global}{label}")
+                                            };
+                                            self.str_interner.borrow_mut().intern(global_label)
+                                        } else {
+                                            let interner = self.str_interner.as_ref().borrow();
+                                            let label = interner.get(value).unwrap();
+                                            return Err((loc, AssemblerError(format!("The local symbol \"{label}\" is being defined but there was no global label defined before it"))));
                                         }
-                                        if (self.here as usize) + 1 > (u16::MAX as usize) {
+                                    }
+                                },
+                                _ => {
+                                    return Err((
+                                        loc,
+                                        AssemblerError(format!("A symbol name is required")),
+                                    ))
+                                }
+                            };
+                            self.next()?;
+
+                            if self.symtab.get(direct).is_some() {
+                                let interner = self.str_interner.as_ref().borrow();
+                                let label = interner.get(direct).unwrap();
+                                return Err((
+                                    loc,
+                                    AssemblerError(format!(
+                                        "The symbol \"{label}\" was already defined"
+                                    )),
+                                ));
+                            }
+                            self.expect_symbol(SymbolName::Comma)?;
+
+                            let (_, expr) = self.expr()?;
+                            self.symtab.insert(direct, Symbol::Expr(expr));
+                        }
+
+                        DirectiveName::Db => {
+                            self.next()?;
+
+                            loop {
+                                match self.peek()? {
+                                    Some(&Token::String { value, .. }) => {
+                                        self.next()?;
+                                        let interner = self.str_interner.as_ref().borrow();
+                                        let bytes = interner.get(value).unwrap().as_bytes();
+
+                                        if (self.here as usize) + bytes.len() > (u16::MAX as usize)
+                                        {
                                             return Err((
                                                 loc,
                                                 AssemblerError(format!(
@@ -994,141 +987,173 @@ where
                                                 )),
                                             ));
                                         }
-                                        self.data.push(value as u8);
-                                    } else {
-                                        self.links.push(Link::byte(loc, self.data.len(), expr));
-                                        self.data.push(0);
+                                        self.here += bytes.len() as u16;
+                                        self.data.extend_from_slice(bytes);
+                                    }
+
+                                    _ => {
+                                        let (loc, expr) = self.expr()?;
+                                        self.here += 1;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u8::MAX as u32) {
+                                                return Err((
+                                                    loc,
+                                                    AssemblerError(format!(
+                                                        "\"@db\" expression result ({value}) will not fit in a byte"
+                                                    )),
+                                                ));
+                                            }
+                                            if (self.here as usize) + 1 > (u16::MAX as usize) {
+                                                return Err((
+                                                    loc,
+                                                    AssemblerError(format!(
+                                                        "\"@db\" bytes extend past address $FFFF"
+                                                    )),
+                                                ));
+                                            }
+                                            self.data.push(value as u8);
+                                        } else {
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                        }
                                     }
                                 }
-                            }
 
-                            if self.peeked_symbol(SymbolName::Comma)?.is_some() {
-                                self.next()?;
-                                continue;
+                                if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                                    self.next()?;
+                                    continue;
+                                }
+                                break;
                             }
-                            break;
                         }
-                    }
 
-                    DirectiveName::Dw => {
-                        self.next()?;
+                        DirectiveName::Dw => {
+                            self.next()?;
 
-                        loop {
-                            match self.peek()? {
-                                _ => {
-                                    let (loc, expr) = self.expr()?;
-                                    self.here += 2;
-                                    if let Some(value) = expr.evaluate(&self.symtab) {
-                                        if (value as u32) > (u16::MAX as u32) {
-                                            return Err((
+                            loop {
+                                match self.peek()? {
+                                    _ => {
+                                        let (loc, expr) = self.expr()?;
+                                        self.here += 2;
+                                        if let Some(value) = expr.evaluate(&self.symtab) {
+                                            if (value as u32) > (u16::MAX as u32) {
+                                                return Err((
                                                     loc,
                                                     AssemblerError(format!(
                                                         "\"@dw\" expression result ({value}) will not fit in a word"
                                                     )),
                                                 ));
+                                            }
+                                            if (self.here as usize) + 1 > (u16::MAX as usize) {
+                                                return Err((
+                                                    loc,
+                                                    AssemblerError(format!(
+                                                        "\"@dw\" bytes extend past address $FFFF"
+                                                    )),
+                                                ));
+                                            }
+                                            self.data
+                                                .extend_from_slice(&(value as u16).to_le_bytes());
+                                        } else {
+                                            self.links.push(Link::word(loc, self.data.len(), expr));
+                                            self.data.push(0);
+                                            self.data.push(0);
                                         }
-                                        if (self.here as usize) + 1 > (u16::MAX as usize) {
-                                            return Err((
-                                                loc,
-                                                AssemblerError(format!(
-                                                    "\"@dw\" bytes extend past address $FFFF"
-                                                )),
-                                            ));
-                                        }
-                                        self.data.extend_from_slice(&(value as u16).to_le_bytes());
-                                    } else {
-                                        self.links.push(Link::word(loc, self.data.len(), expr));
-                                        self.data.push(0);
-                                        self.data.push(0);
                                     }
                                 }
-                            }
 
-                            if self.peeked_symbol(SymbolName::Comma)?.is_some() {
-                                self.next()?;
-                                continue;
+                                if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                                    self.next()?;
+                                    continue;
+                                }
+                                break;
                             }
-                            break;
                         }
-                    }
 
-                    DirectiveName::Ds => {
-                        self.next()?;
+                        DirectiveName::Ds => {
+                            self.next()?;
 
-                        let size = match self.const_expr()? {
-                            (loc, None) => {
-                                return Err((
-                                    loc,
-                                    AssemblerError(format!(
+                            let size = match self.const_expr()? {
+                                (loc, None) => {
+                                    return Err((
+                                        loc,
+                                        AssemblerError(format!(
                                     "The size of a \"@ds\" directive must be immediately solvable"
                                 )),
-                                ))
-                            }
-                            (loc, Some(size)) => {
-                                if (size as u32) > (u16::MAX as u32) {
-                                    return Err((
+                                    ))
+                                }
+                                (loc, Some(size)) => {
+                                    if (size as u32) > (u16::MAX as u32) {
+                                        return Err((
                                             loc,
                                             AssemblerError(format!(
                                                 "\"@ds\" size expression result ({size}) will not fit in a word"
                                             )),
                                         ));
+                                    }
+                                    if (self.here as usize) + (size as usize) > (u16::MAX as usize)
+                                    {
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!(
+                                                "\"@ds\" size extends past address $FFFF"
+                                            )),
+                                        ));
+                                    }
+                                    self.here += size as u16;
+                                    size as usize
                                 }
-                                if (self.here as usize) + (size as usize) > (u16::MAX as usize) {
-                                    return Err((
-                                        loc,
-                                        AssemblerError(format!(
-                                            "\"@ds\" size extends past address $FFFF"
-                                        )),
-                                    ));
-                                }
-                                self.here += size as u16;
-                                size as usize
-                            }
-                        };
+                            };
 
-                        let value = if self.peeked_symbol(SymbolName::Comma)?.is_some() {
-                            self.next()?;
-                            let (loc, expr) = self.expr()?;
-                            if let Some(value) = expr.evaluate(&self.symtab) {
-                                if (value as u32) > (u8::MAX as u32) {
-                                    return Err((
+                            let value = if self.peeked_symbol(SymbolName::Comma)?.is_some() {
+                                self.next()?;
+                                let (loc, expr) = self.expr()?;
+                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                    if (value as u32) > (u8::MAX as u32) {
+                                        return Err((
                                             loc,
                                             AssemblerError(format!(
                                                 "\"@ds\" value expression result ({value}) will not fit in a byte"
                                             )),
                                         ));
+                                    }
+                                    value as u8
+                                } else {
+                                    self.links
+                                        .push(Link::space(loc, self.data.len(), size, expr));
+                                    0
                                 }
-                                value as u8
                             } else {
-                                self.links
-                                    .push(Link::space(loc, self.data.len(), size, expr));
                                 0
-                            }
-                        } else {
-                            0
-                        };
-                        self.data.extend(iter::repeat(value).take(size));
-                    }
+                            };
+                            self.data.extend(iter::repeat(value).take(size));
+                        }
 
-                    DirectiveName::Struct => {
-                        self.next()?;
+                        DirectiveName::Struct => {
+                            self.next()?;
 
-                        match self.next()? {
-                            None => return self.end_of_input_err(),
-                            Some(Token::Label { loc, kind: LabelKind::Global, value }) => {
-                                let old_namespace = self.active_namespace;
-                                if self.symtab.get(value).is_some() {
-                                    let interner = self.str_interner.as_ref().borrow();
-                                    let label = interner.get(value).unwrap();
-                                    return Err((
-                                        loc,
-                                        AssemblerError(format!("The label \"{label}\" was already defined")),
-                                    ));
-                                }
-                                self.active_namespace = Some(value);
-                                let mut size = 0i32;
-                                loop {
-                                    match self.next()? {
+                            match self.next()? {
+                                None => return self.end_of_input_err(),
+                                Some(Token::Label {
+                                    loc,
+                                    kind: LabelKind::Global,
+                                    value,
+                                }) => {
+                                    let old_namespace = self.active_namespace;
+                                    if self.symtab.get(value).is_some() {
+                                        let interner = self.str_interner.as_ref().borrow();
+                                        let label = interner.get(value).unwrap();
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!(
+                                                "The label \"{label}\" was already defined"
+                                            )),
+                                        ));
+                                    }
+                                    self.active_namespace = Some(value);
+                                    let mut struct_size = 0i32;
+                                    loop {
+                                        match self.next()? {
                                         None => return self.end_of_input_err(),
                                         Some(Token::NewLine { .. }) => {},
                                         Some(Token::Directive { name: DirectiveName::EndStruct, .. }) => break,
@@ -1156,9 +1181,9 @@ where
                                                                 AssemblerError(format!("Field \"{direct_label}\"'s size must be immediately solvable")),
                                                             ))
                                                         }
-                                                        (_, Some(value)) => {
-                                                            self.symtab.insert(direct, Symbol::Value(size));
-                                                            size = size.wrapping_add(value);
+                                                        (_, Some(field_size)) => {
+                                                            self.symtab.insert(direct, Symbol::Value(struct_size));
+                                                            struct_size = struct_size.wrapping_add(field_size);
                                                         }
                                                     }
                                                 }
@@ -1166,31 +1191,45 @@ where
                                         }
                                         Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected field name or \"@ends\"", tok.as_display(&self.str_interner))))),
                                     }
+                                    }
+                                    self.active_namespace = old_namespace;
+                                    self.symtab.insert(value, Symbol::Value(struct_size));
                                 }
-                                self.active_namespace = old_namespace;
-                                self.symtab.insert(value, Symbol::Value(size));
-                            }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected struct name", tok.as_display(&self.str_interner))))),
-                        }
-                    }
-                    
-                    DirectiveName::Enum => {
-                        self.next()?;
-
-                        match self.next()? {
-                            None => return self.end_of_input_err(),
-                            Some(Token::Label { loc, kind: LabelKind::Global, value }) => {
-                                if self.symtab.get(value).is_some() {
-                                    let interner = self.str_interner.as_ref().borrow();
-                                    let label = interner.get(value).unwrap();
+                                Some(tok) => {
                                     return Err((
-                                        loc,
-                                        AssemblerError(format!("The label \"{label}\" was already defined")),
-                                    ));
+                                        tok.loc(),
+                                        AssemblerError(format!(
+                                            "Unexpected {}, expected struct name",
+                                            tok.as_display(&self.str_interner)
+                                        )),
+                                    ))
                                 }
-                                let mut count = 0i32;
-                                loop {
-                                    match self.next()? {
+                            }
+                        }
+
+                        DirectiveName::Enum => {
+                            self.next()?;
+
+                            match self.next()? {
+                                None => return self.end_of_input_err(),
+                                Some(Token::Label {
+                                    loc,
+                                    kind: LabelKind::Global,
+                                    value,
+                                }) => {
+                                    if self.symtab.get(value).is_some() {
+                                        let interner = self.str_interner.as_ref().borrow();
+                                        let label = interner.get(value).unwrap();
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!(
+                                                "The label \"{label}\" was already defined"
+                                            )),
+                                        ));
+                                    }
+                                    let mut variant_count = 0i32;
+                                    loop {
+                                        match self.next()? {
                                         None => return self.end_of_input_err(),
                                         Some(Token::NewLine { .. }) => {},
                                         Some(Token::Directive { name: DirectiveName::EndEnum, .. }) => break,
@@ -1208,48 +1247,95 @@ where
                                                     AssemblerError(format!("The enum variant \"{direct_label}\" was already defined")),
                                                 ));
                                             }
-                                            self.symtab.insert(direct, Symbol::Value(count));
-                                            count = count.wrapping_add(1);
+                                            self.symtab.insert(direct, Symbol::Value(variant_count));
+                                            variant_count = variant_count.wrapping_add(1);
                                         }
                                         Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected enum variant name or \"@ende\"", tok.as_display(&self.str_interner))))),
                                     }
+                                    }
+                                    self.symtab.insert(value, Symbol::Value(variant_count));
                                 }
-                                self.symtab.insert(value, Symbol::Value(count));
+                                Some(tok) => {
+                                    return Err((
+                                        tok.loc(),
+                                        AssemblerError(format!(
+                                            "Unexpected {}, expected enum name",
+                                            tok.as_display(&self.str_interner)
+                                        )),
+                                    ))
+                                }
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected enum name", tok.as_display(&self.str_interner))))),
                         }
-                    }
 
-                    DirectiveName::Include => {
-                        self.next()?;
-                        match self.next()? {
-                            None => return self.end_of_input_err(),
-                            Some(Token::String { loc: err_loc, value }) => {
-                                let cwd = self.file_manager.path(self.cwd.unwrap()).unwrap().to_path_buf();
-                                let interner = self.str_interner.as_ref().borrow();
-                                let path = interner.get(value).unwrap();
-                                let (pathref, reader) = match self.file_manager.reader(&cwd, path) {
-                                    Ok(Some(tup)) => tup,
-                                    Ok(None) => return Err((err_loc, AssemblerError(format!("File not found: \"{path}\"")))),
-                                    Err(e) => return Err((err_loc, AssemblerError(format!("Failed to open \"{path}\" for reading: {e}")))),
-                                };
+                        DirectiveName::Include => {
+                            self.next()?;
+                            match self.next()? {
+                                None => return self.end_of_input_err(),
+                                Some(Token::String {
+                                    loc: err_loc,
+                                    value,
+                                }) => {
+                                    let cwd = self
+                                        .file_manager
+                                        .path(self.cwd.unwrap())
+                                        .unwrap()
+                                        .to_path_buf();
+                                    let interner = self.str_interner.as_ref().borrow();
+                                    let path = interner.get(value).unwrap();
+                                    let (pathref, reader) =
+                                        match self.file_manager.reader(&cwd, path) {
+                                            Ok(Some(tup)) => tup,
+                                            Ok(None) => {
+                                                return Err((
+                                                    err_loc,
+                                                    AssemblerError(format!(
+                                                        "File not found: \"{path}\""
+                                                    )),
+                                                ))
+                                            }
+                                            Err(e) => return Err((
+                                                err_loc,
+                                                AssemblerError(format!(
+                                                    "Failed to open \"{path}\" for reading: {e}"
+                                                )),
+                                            )),
+                                        };
 
-                                // Push old path
-                                self.lexers.push(self.lexer.take().unwrap());
-                                self.cwds.push(self.cwd.take().unwrap());
+                                    // Push old path
+                                    self.lexers.push(self.lexer.take().unwrap());
+                                    self.cwds.push(self.cwd.take().unwrap());
 
-                                // Create new lexer and set cwd to file
-                                self.lexer = Some(Lexer::new(self.str_interner.clone(), Some(loc), pathref, reader));
-                                let cwd = self.file_manager.path(pathref).unwrap().parent().unwrap().to_path_buf();
-                                self.cwd = Some(self.file_manager.intern(cwd, "."));
-
+                                    // Create new lexer and set cwd to file
+                                    self.lexer = Some(Lexer::new(
+                                        self.str_interner.clone(),
+                                        Some(loc),
+                                        pathref,
+                                        reader,
+                                    ));
+                                    let cwd = self
+                                        .file_manager
+                                        .path(pathref)
+                                        .unwrap()
+                                        .parent()
+                                        .unwrap()
+                                        .to_path_buf();
+                                    self.cwd = Some(self.file_manager.intern(cwd, "."));
+                                }
+                                Some(tok) => {
+                                    return Err((
+                                        tok.loc(),
+                                        AssemblerError(format!(
+                                            "Unexpected {}, expected file name string",
+                                            tok.as_display(&self.str_interner)
+                                        )),
+                                    ))
+                                }
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected file name string", tok.as_display(&self.str_interner))))),
                         }
-                    }
 
-                    name => todo!("{name}"),
-                },
+                        name => todo!("{name}"),
+                    }
+                }
 
                 Some(Token::Operation { name, .. }) => match name {
                     OperationName::Adc => {
@@ -1556,7 +1642,6 @@ where
                                     )),
                                 ))
                             }
-
                         }
                     }
 
@@ -1970,7 +2055,6 @@ where
                                     )),
                                 ))
                             }
-
                         }
                     }
 
@@ -2189,7 +2273,9 @@ where
                             (loc, None) => {
                                 return Err((
                                     loc,
-                                    AssemblerError(format!("Bit index must be immediately solvable")),
+                                    AssemblerError(format!(
+                                        "Bit index must be immediately solvable"
+                                    )),
                                 ))
                             }
                             (loc, Some(value)) => {
@@ -2678,11 +2764,7 @@ where
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.links.push(Link::byte(
-                                                loc,
-                                                self.data.len(),
-                                                expr,
-                                            ));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
@@ -2708,11 +2790,7 @@ where
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.links.push(Link::byte(
-                                                loc,
-                                                self.data.len(),
-                                                expr,
-                                            ));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
@@ -2733,11 +2811,7 @@ where
                                             }
                                             self.data.push(value as u8);
                                         } else {
-                                            self.links.push(Link::byte(
-                                                loc,
-                                                self.data.len(),
-                                                expr,
-                                            ));
+                                            self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
                                         self.expect_symbol(SymbolName::ParenClose)?;
@@ -3589,96 +3663,150 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x7F);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x78);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x79);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x7A);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x7B);
                                     }
-                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x7C);
                                     }
-                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x7D);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x7C);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x7D);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x7C);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x7D);
                                     }
-                                    Some(Token::Register { name: RegisterName::I, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::I,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xED);
                                         self.data.push(0x57);
                                     }
-                                    Some(Token::Register { name: RegisterName::R, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::R,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xED);
                                         self.data.push(0x5F);
                                     }
-                                    Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         match self.peek()? {
                                             None => return self.end_of_input_err(),
-                                            Some(Token::Register { name: RegisterName::BC, .. }) => {
+                                            Some(Token::Register {
+                                                name: RegisterName::BC,
+                                                ..
+                                            }) => {
                                                 self.next()?;
                                                 self.here += 1;
                                                 self.data.push(0x0A);
                                             }
-                                            Some(Token::Register { name: RegisterName::DE, .. }) => {
+                                            Some(Token::Register {
+                                                name: RegisterName::DE,
+                                                ..
+                                            }) => {
                                                 self.next()?;
                                                 self.here += 1;
                                                 self.data.push(0x1A);
                                             }
-                                            Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                            Some(Token::Register {
+                                                name: RegisterName::HL,
+                                                ..
+                                            }) => {
                                                 self.next()?;
                                                 self.here += 1;
                                                 self.data.push(0x7E);
@@ -3705,7 +3833,11 @@ where
                                                     }
                                                     self.data.push(value as u8);
                                                 } else {
-                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
+                                                    self.links.push(Link::byte(
+                                                        loc,
+                                                        self.data.len(),
+                                                        expr,
+                                                    ));
                                                     self.data.push(0);
                                                 }
                                             }
@@ -3717,9 +3849,15 @@ where
                                                     if (value as u32) > (u16::MAX as u32) {
                                                         return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                                     }
-                                                    self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                                    self.data.extend_from_slice(
+                                                        &(value as u16).to_le_bytes(),
+                                                    );
                                                 } else {
-                                                    self.links.push(Link::word(loc, self.data.len(), expr));
+                                                    self.links.push(Link::word(
+                                                        loc,
+                                                        self.data.len(),
+                                                        expr,
+                                                    ));
                                                     self.data.push(0);
                                                     self.data.push(0);
                                                 }
@@ -3744,70 +3882,109 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x47);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x40);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x41);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x42);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x43);
                                     }
-                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x44);
                                     }
-                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x45);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x44);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x45);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x44);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x45);
                                     }
-                                    Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         match self.peek()? {
                                             None => return self.end_of_input_err(),
@@ -3863,70 +4040,109 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x4F);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x48);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x49);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x4A);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x4B);
                                     }
-                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x4C);
                                     }
-                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x4D);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x4C);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x4D);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x4C);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x4D);
                                     }
-                                    Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         match self.peek()? {
                                             None => return self.end_of_input_err(),
@@ -3982,70 +4198,109 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x57);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x50);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x51);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x52);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x53);
                                     }
-                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x54);
                                     }
-                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x55);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x54);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x55);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x54);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x55);
                                     }
-                                    Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         match self.peek()? {
                                             None => return self.end_of_input_err(),
@@ -4101,70 +4356,109 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x5F);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x58);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x59);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x5A);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x5B);
                                     }
-                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x5C);
                                     }
-                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x5D);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x5C);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x5D);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x5C);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x5D);
                                     }
-                                    Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         match self.peek()? {
                                             None => return self.end_of_input_err(),
@@ -4220,46 +4514,73 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x67);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x60);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x61);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x62);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x63);
                                     }
-                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x64);
                                     }
-                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x65);
                                     }
-                                    Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         match self.peek()? {
                                             None => return self.end_of_input_err(),
@@ -4315,46 +4636,73 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x6F);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x68);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x69);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x6A);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x6B);
                                     }
-                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x6C);
                                     }
-                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0x6D);
                                     }
-                                    Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         match self.peek()? {
                                             None => return self.end_of_input_err(),
@@ -4410,47 +4758,71 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::IXH,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x67);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x60);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x61);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x62);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x63);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x64);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
@@ -4474,47 +4846,71 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::IXL,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x6F);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x68);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x69);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x6A);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x6B);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0x6C);
                                     }
-                                    Some(Token::Register { name: RegisterName::IXL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IXL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
@@ -4538,47 +4934,71 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::IYH,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x67);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x60);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x61);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x62);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x63);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x64);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
@@ -4602,47 +5022,71 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::IYL,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x6F);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x68);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x69);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x6A);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x6B);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYH, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYH,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0x6C);
                                     }
-                                    Some(Token::Register { name: RegisterName::IYL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IYL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
@@ -4666,7 +5110,10 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::R, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::R,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xED);
                                 self.data.push(0x4F);
@@ -4674,7 +5121,10 @@ where
                                 self.expect_register(RegisterName::A)?;
                             }
 
-                            Some(Token::Register { name: RegisterName::I, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::I,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xED);
                                 self.data.push(0x47);
@@ -4682,29 +5132,47 @@ where
                                 self.expect_register(RegisterName::A)?;
                             }
 
-                            Some(Token::Register { name: RegisterName::SP, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::SP,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 match self.peek()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::HL,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 1;
                                         self.data.push(0xF9);
                                     }
-                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IX,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xDD);
                                         self.data.push(0xF9);
                                     }
-                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::IY,
+                                        ..
+                                    }) => {
                                         self.next()?;
                                         self.here += 2;
                                         self.data.push(0xFD);
                                         self.data.push(0xF9);
                                     }
                                     Some(_) => {
-                                        let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                        let indirect = matches!(
+                                            self.peek()?,
+                                            Some(Token::Symbol {
+                                                name: SymbolName::ParenOpen,
+                                                ..
+                                            })
+                                        );
                                         if indirect {
                                             self.here += 4;
                                             self.next()?;
@@ -4719,7 +5187,8 @@ where
                                             if (value as u32) > (u16::MAX as u32) {
                                                 return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                             }
-                                            self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                            self.data
+                                                .extend_from_slice(&(value as u16).to_le_bytes());
                                         } else {
                                             self.links.push(Link::word(loc, self.data.len(), expr));
                                             self.data.push(0);
@@ -4732,9 +5201,18 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::BC, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::BC,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
-                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                let indirect = matches!(
+                                    self.peek()?,
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    })
+                                );
                                 if indirect {
                                     self.here += 4;
                                     self.next()?;
@@ -4760,9 +5238,18 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::DE, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::DE,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
-                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                let indirect = matches!(
+                                    self.peek()?,
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    })
+                                );
                                 if indirect {
                                     self.here += 4;
                                     self.next()?;
@@ -4788,10 +5275,19 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::HL, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::HL,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 self.here += 3;
-                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                let indirect = matches!(
+                                    self.peek()?,
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    })
+                                );
                                 if indirect {
                                     self.next()?;
                                     self.data.push(0x2A);
@@ -4814,11 +5310,20 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::IX, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::IX,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 self.here += 4;
                                 self.data.push(0xDD);
-                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                let indirect = matches!(
+                                    self.peek()?,
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    })
+                                );
                                 if indirect {
                                     self.next()?;
                                     self.data.push(0x2A);
@@ -4841,11 +5346,20 @@ where
                                 }
                             }
 
-                            Some(Token::Register { name: RegisterName::IY, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::IY,
+                                ..
+                            }) => {
                                 self.expect_symbol(SymbolName::Comma)?;
                                 self.here += 4;
                                 self.data.push(0xFD);
-                                let indirect = matches!(self.peek()?, Some(Token::Symbol { name: SymbolName::ParenOpen, .. }));
+                                let indirect = matches!(
+                                    self.peek()?,
+                                    Some(Token::Symbol {
+                                        name: SymbolName::ParenOpen,
+                                        ..
+                                    })
+                                );
                                 if indirect {
                                     self.next()?;
                                     self.data.push(0x2A);
@@ -4868,241 +5382,333 @@ where
                                 }
                             }
 
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
-                                match self.peek()? {
-                                    None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::BC, ..}) => {
-                                        self.next()?;
-                                        self.expect_symbol(SymbolName::ParenClose)?;
-                                        self.expect_symbol(SymbolName::Comma)?;
-                                        self.expect_register(RegisterName::A)?;
-                                        self.here += 1;
-                                        self.data.push(0x02);
-                                    }
-                                    Some(Token::Register { name: RegisterName::DE, ..}) => {
-                                        self.next()?;
-                                        self.expect_symbol(SymbolName::ParenClose)?;
-                                        self.expect_symbol(SymbolName::Comma)?;
-                                        self.expect_register(RegisterName::A)?;
-                                        self.here += 1;
-                                        self.data.push(0x12);
-                                    }
-                                    Some(Token::Register { name: RegisterName::HL, .. }) => {
-                                        self.next()?;
-                                        self.expect_symbol(SymbolName::ParenClose)?;
-                                        self.expect_symbol(SymbolName::Comma)?;
-                                        match self.peek()? {
-                                            None => return self.end_of_input_err(),
-                                            Some(Token::Register { name: RegisterName::A, ..}) => {
-                                                self.next()?;
-                                                self.here += 1;
-                                                self.data.push(0x77);
-                                            }
-                                            Some(Token::Register { name: RegisterName::B, ..}) => {
-                                                self.next()?;
-                                                self.here += 1;
-                                                self.data.push(0x70);
-                                            }
-                                            Some(Token::Register { name: RegisterName::C, ..}) => {
-                                                self.next()?;
-                                                self.here += 1;
-                                                self.data.push(0x71);
-                                            }
-                                            Some(Token::Register { name: RegisterName::D, ..}) => {
-                                                self.next()?;
-                                                self.here += 1;
-                                                self.data.push(0x72);
-                                            }
-                                            Some(Token::Register { name: RegisterName::E, ..}) => {
-                                                self.next()?;
-                                                self.here += 1;
-                                                self.data.push(0x73);
-                                            }
-                                            Some(Token::Register { name: RegisterName::H, ..}) => {
-                                                self.next()?;
-                                                self.here += 1;
-                                                self.data.push(0x74);
-                                            }
-                                            Some(Token::Register { name: RegisterName::L, ..}) => {
-                                                self.next()?;
-                                                self.here += 1;
-                                                self.data.push(0x75);
-                                            }
-                                            Some(_) => {
-                                                self.here += 2;
-                                                self.data.push(0x36);
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                                    }
-                                                    self.data.push(value as u8);
-                                                } else {
-                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
-                                                    self.data.push(0);
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => match self.peek()? {
+                                None => return self.end_of_input_err(),
+                                Some(Token::Register {
+                                    name: RegisterName::BC,
+                                    ..
+                                }) => {
+                                    self.next()?;
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                    self.expect_symbol(SymbolName::Comma)?;
+                                    self.expect_register(RegisterName::A)?;
+                                    self.here += 1;
+                                    self.data.push(0x02);
+                                }
+                                Some(Token::Register {
+                                    name: RegisterName::DE,
+                                    ..
+                                }) => {
+                                    self.next()?;
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                    self.expect_symbol(SymbolName::Comma)?;
+                                    self.expect_register(RegisterName::A)?;
+                                    self.here += 1;
+                                    self.data.push(0x12);
+                                }
+                                Some(Token::Register {
+                                    name: RegisterName::HL,
+                                    ..
+                                }) => {
+                                    self.next()?;
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                    self.expect_symbol(SymbolName::Comma)?;
+                                    match self.peek()? {
+                                        None => return self.end_of_input_err(),
+                                        Some(Token::Register {
+                                            name: RegisterName::A,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 1;
+                                            self.data.push(0x77);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::B,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 1;
+                                            self.data.push(0x70);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::C,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 1;
+                                            self.data.push(0x71);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::D,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 1;
+                                            self.data.push(0x72);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::E,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 1;
+                                            self.data.push(0x73);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::H,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 1;
+                                            self.data.push(0x74);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::L,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 1;
+                                            self.data.push(0x75);
+                                        }
+                                        Some(_) => {
+                                            self.here += 2;
+                                            self.data.push(0x36);
+                                            let (loc, expr) = self.expr()?;
+                                            if let Some(value) = expr.evaluate(&self.symtab) {
+                                                if (value as u32) > (u8::MAX as u32) {
+                                                    return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                 }
+                                                self.data.push(value as u8);
+                                            } else {
+                                                self.links.push(Link::byte(
+                                                    loc,
+                                                    self.data.len(),
+                                                    expr,
+                                                ));
+                                                self.data.push(0);
                                             }
                                         }
                                     }
-                                    Some(Token::Register { name: RegisterName::IX, .. }) => {
-                                        self.next()?;
-                                        self.expect_symbol(SymbolName::Plus)?;
-                                        self.data.push(0xDD);
-                                        let (loc, expr) = self.expr()?;
-                                        let offset = if let Some(value) = expr.evaluate(&self.symtab) {
-                                            if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                            }
-                                            value as u8
-                                        } else {
-                                            self.links.push(Link::byte(loc, self.data.len() + 1, expr));
-                                            0
-                                        };
-                                        self.expect_symbol(SymbolName::ParenClose)?;
-                                        self.expect_symbol(SymbolName::Comma)?;
-                                        match self.peek()? {
-                                            None => return self.end_of_input_err(),
-                                            Some(Token::Register { name: RegisterName::A, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x77);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::B, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x70);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::C, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x71);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::D, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x72);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::E, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x73);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::H, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x74);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::L, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x75);
-                                                self.data.push(offset);
-                                            }
-                                            Some(_) => {
-                                                self.here += 4;
-                                                self.data.push(0x36);
-                                                self.data.push(offset);
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                                    }
-                                                    self.data.push(value as u8);
-                                                } else {
-                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
-                                                    self.data.push(0);
+                                }
+                                Some(Token::Register {
+                                    name: RegisterName::IX,
+                                    ..
+                                }) => {
+                                    self.next()?;
+                                    self.expect_symbol(SymbolName::Plus)?;
+                                    self.data.push(0xDD);
+                                    let (loc, expr) = self.expr()?;
+                                    let offset = if let Some(value) = expr.evaluate(&self.symtab) {
+                                        if (value as u32) > (u8::MAX as u32) {
+                                            return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                        }
+                                        value as u8
+                                    } else {
+                                        self.links.push(Link::byte(loc, self.data.len() + 1, expr));
+                                        0
+                                    };
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                    self.expect_symbol(SymbolName::Comma)?;
+                                    match self.peek()? {
+                                        None => return self.end_of_input_err(),
+                                        Some(Token::Register {
+                                            name: RegisterName::A,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x77);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::B,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x70);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::C,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x71);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::D,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x72);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::E,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x73);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::H,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x74);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::L,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x75);
+                                            self.data.push(offset);
+                                        }
+                                        Some(_) => {
+                                            self.here += 4;
+                                            self.data.push(0x36);
+                                            self.data.push(offset);
+                                            let (loc, expr) = self.expr()?;
+                                            if let Some(value) = expr.evaluate(&self.symtab) {
+                                                if (value as u32) > (u8::MAX as u32) {
+                                                    return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                 }
+                                                self.data.push(value as u8);
+                                            } else {
+                                                self.links.push(Link::byte(
+                                                    loc,
+                                                    self.data.len(),
+                                                    expr,
+                                                ));
+                                                self.data.push(0);
                                             }
                                         }
                                     }
-                                    Some(Token::Register { name: RegisterName::IY, .. }) => {
-                                        self.next()?;
-                                        self.expect_symbol(SymbolName::Plus)?;
-                                        self.data.push(0xFD);
-                                        let (loc, expr) = self.expr()?;
-                                        let offset = if let Some(value) = expr.evaluate(&self.symtab) {
-                                            if (value as u32) > (u8::MAX as u32) {
-                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                            }
-                                            value as u8
-                                        } else {
-                                            self.links.push(Link::byte(loc, self.data.len() + 1, expr));
-                                            0
-                                        };
-                                        self.expect_symbol(SymbolName::ParenClose)?;
-                                        self.expect_symbol(SymbolName::Comma)?;
-                                        match self.peek()? {
-                                            None => return self.end_of_input_err(),
-                                            Some(Token::Register { name: RegisterName::A, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x77);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::B, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x70);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::C, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x71);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::D, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x72);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::E, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x73);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::H, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x74);
-                                                self.data.push(offset);
-                                            }
-                                            Some(Token::Register { name: RegisterName::L, .. }) => {
-                                                self.next()?;
-                                                self.here += 3;
-                                                self.data.push(0x75);
-                                                self.data.push(offset);
-                                            }
-                                            Some(_) => {
-                                                self.here += 4;
-                                                self.data.push(0x36);
-                                                self.data.push(offset);
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                                    }
-                                                    self.data.push(value as u8);
-                                                } else {
-                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
-                                                    self.data.push(0);
+                                }
+                                Some(Token::Register {
+                                    name: RegisterName::IY,
+                                    ..
+                                }) => {
+                                    self.next()?;
+                                    self.expect_symbol(SymbolName::Plus)?;
+                                    self.data.push(0xFD);
+                                    let (loc, expr) = self.expr()?;
+                                    let offset = if let Some(value) = expr.evaluate(&self.symtab) {
+                                        if (value as u32) > (u8::MAX as u32) {
+                                            return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                        }
+                                        value as u8
+                                    } else {
+                                        self.links.push(Link::byte(loc, self.data.len() + 1, expr));
+                                        0
+                                    };
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                    self.expect_symbol(SymbolName::Comma)?;
+                                    match self.peek()? {
+                                        None => return self.end_of_input_err(),
+                                        Some(Token::Register {
+                                            name: RegisterName::A,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x77);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::B,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x70);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::C,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x71);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::D,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x72);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::E,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x73);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::H,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x74);
+                                            self.data.push(offset);
+                                        }
+                                        Some(Token::Register {
+                                            name: RegisterName::L,
+                                            ..
+                                        }) => {
+                                            self.next()?;
+                                            self.here += 3;
+                                            self.data.push(0x75);
+                                            self.data.push(offset);
+                                        }
+                                        Some(_) => {
+                                            self.here += 4;
+                                            self.data.push(0x36);
+                                            self.data.push(offset);
+                                            let (loc, expr) = self.expr()?;
+                                            if let Some(value) = expr.evaluate(&self.symtab) {
+                                                if (value as u32) > (u8::MAX as u32) {
+                                                    return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
                                                 }
+                                                self.data.push(value as u8);
+                                            } else {
+                                                self.links.push(Link::byte(
+                                                    loc,
+                                                    self.data.len(),
+                                                    expr,
+                                                ));
+                                                self.data.push(0);
                                             }
                                         }
                                     }
-                                    Some(_) => {
-                                        let (loc, expr) = self.expr()?;
-                                        self.expect_symbol(SymbolName::ParenClose)?;
-                                        self.expect_symbol(SymbolName::Comma)?;
-                                        match self.next()? {
+                                }
+                                Some(_) => {
+                                    let (loc, expr) = self.expr()?;
+                                    self.expect_symbol(SymbolName::ParenClose)?;
+                                    self.expect_symbol(SymbolName::Comma)?;
+                                    match self.next()? {
                                             None => return self.end_of_input_err(),
                                             Some(Token::Register { name: RegisterName::A, .. }) => {
                                                 self.here += 3;
@@ -5139,21 +5745,28 @@ where
                                             }
                                             Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected registers \"a\", \"bc\", \"de\", \"hl\", \"sp\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                         }
-                                        if let Some(value) = expr.evaluate(&self.symtab) {
-                                            if (value as u32) > (u16::MAX as u32) {
-                                                return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
-                                            }
-                                            self.data.extend_from_slice(&(value as u16).to_le_bytes());
-                                        } else {
-                                            self.links.push(Link::word(loc, self.data.len(), expr));
-                                            self.data.push(0);
-                                            self.data.push(0);
+                                    if let Some(value) = expr.evaluate(&self.symtab) {
+                                        if (value as u32) > (u16::MAX as u32) {
+                                            return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a word"))));
                                         }
+                                        self.data.extend_from_slice(&(value as u16).to_le_bytes());
+                                    } else {
+                                        self.links.push(Link::word(loc, self.data.len(), expr));
+                                        self.data.push(0);
+                                        self.data.push(0);
                                     }
                                 }
-                            }
+                            },
 
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected a valid \"ld\" destination", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected a valid \"ld\" destination",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
 
@@ -5427,35 +6040,67 @@ where
                         match self.peek()? {
                             None => return self.end_of_input_err(),
 
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.expect_symbol(SymbolName::ParenClose)?;
                                 self.expect_symbol(SymbolName::Comma)?;
                                 self.data.push(0xED);
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
-                                    Some(Token::Register { name: RegisterName::A, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::A,
+                                        ..
+                                    }) => {
                                         self.data.push(0x79);
                                     }
-                                    Some(Token::Register { name: RegisterName::B, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::B,
+                                        ..
+                                    }) => {
                                         self.data.push(0x41);
                                     }
-                                    Some(Token::Register { name: RegisterName::C, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::C,
+                                        ..
+                                    }) => {
                                         self.data.push(0x49);
                                     }
-                                    Some(Token::Register { name: RegisterName::D, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::D,
+                                        ..
+                                    }) => {
                                         self.data.push(0x51);
                                     }
-                                    Some(Token::Register { name: RegisterName::E, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::E,
+                                        ..
+                                    }) => {
                                         self.data.push(0x59);
                                     }
-                                    Some(Token::Register { name: RegisterName::H, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::H,
+                                        ..
+                                    }) => {
                                         self.data.push(0x61);
                                     }
-                                    Some(Token::Register { name: RegisterName::L, .. }) => {
+                                    Some(Token::Register {
+                                        name: RegisterName::L,
+                                        ..
+                                    }) => {
                                         self.data.push(0x69);
                                     }
-                                    Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected a register", tok.as_display(&self.str_interner))))),
+                                    Some(tok) => {
+                                        return Err((
+                                            tok.loc(),
+                                            AssemblerError(format!(
+                                                "Unexpected {}, expected a register",
+                                                tok.as_display(&self.str_interner)
+                                            )),
+                                        ))
+                                    }
                                 }
                             }
 
@@ -5571,7 +6216,9 @@ where
                             (loc, None) => {
                                 return Err((
                                     loc,
-                                    AssemblerError(format!("Bit index must be immediately solvable")),
+                                    AssemblerError(format!(
+                                        "Bit index must be immediately solvable"
+                                    )),
                                 ))
                             }
                             (loc, Some(value)) => {
@@ -5623,13 +6270,13 @@ where
                                             6 => 0xB0,
                                             7 => 0xB8,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::C,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -5642,13 +6289,13 @@ where
                                             6 => 0xB1,
                                             7 => 0xB9,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::D,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -5661,13 +6308,13 @@ where
                                             6 => 0xB2,
                                             7 => 0xBA,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::E,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -5680,13 +6327,13 @@ where
                                             6 => 0xB3,
                                             7 => 0xBB,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::H,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -5699,13 +6346,13 @@ where
                                             6 => 0xB4,
                                             7 => 0xBC,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::L,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -5823,35 +6470,59 @@ where
                         self.here += 1;
                         match self.peek()? {
                             None => return self.end_of_input_err()?,
-                            Some(Token::Flag { name: FlagName::NotZero, .. }) => {
+                            Some(Token::Flag {
+                                name: FlagName::NotZero,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.data.push(0xC0);
                             }
-                            Some(Token::Flag { name: FlagName::Zero, .. }) => {
+                            Some(Token::Flag {
+                                name: FlagName::Zero,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.data.push(0xC8);
                             }
-                            Some(Token::Flag { name: FlagName::NotCarry, .. }) => {
+                            Some(Token::Flag {
+                                name: FlagName::NotCarry,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.data.push(0xD0);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.data.push(0xD8);
                             }
-                            Some(Token::Flag { name: FlagName::ParityOdd, .. }) => {
+                            Some(Token::Flag {
+                                name: FlagName::ParityOdd,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.data.push(0xE0);
                             }
-                            Some(Token::Flag { name: FlagName::ParityEven, .. }) => {
+                            Some(Token::Flag {
+                                name: FlagName::ParityEven,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.data.push(0xE8);
                             }
-                            Some(Token::Flag { name: FlagName::Positive, .. }) => {
+                            Some(Token::Flag {
+                                name: FlagName::Positive,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.data.push(0xF0);
                             }
-                            Some(Token::Flag { name: FlagName::Negative, .. }) => {
+                            Some(Token::Flag {
+                                name: FlagName::Negative,
+                                ..
+                            }) => {
                                 self.next()?;
                                 self.data.push(0xF8);
                             }
@@ -5879,42 +6550,66 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x17);
                             }
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x10);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x11);
                             }
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x12);
                             }
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x13);
                             }
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x14);
                             }
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x15);
                             }
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
                                     Some(Token::Register { name: RegisterName::HL, .. }) => {
@@ -5960,7 +6655,15 @@ where
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
 
@@ -5974,42 +6677,66 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x07);
                             }
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x00);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x01);
                             }
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x02);
                             }
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x03);
                             }
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x04);
                             }
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x05);
                             }
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
                                     Some(Token::Register { name: RegisterName::HL, .. }) => {
@@ -6055,10 +6782,18 @@ where
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
-                    
+
                     OperationName::Rlca => {
                         self.next()?;
                         self.here += 1;
@@ -6076,42 +6811,66 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x1F);
                             }
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x18);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x19);
                             }
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x1A);
                             }
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x1B);
                             }
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x1C);
                             }
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x1D);
                             }
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
                                     Some(Token::Register { name: RegisterName::HL, .. }) => {
@@ -6157,7 +6916,15 @@ where
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
 
@@ -6171,42 +6938,66 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x0F);
                             }
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x08);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x09);
                             }
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x0A);
                             }
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x0B);
                             }
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x0C);
                             }
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x0D);
                             }
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
                                     Some(Token::Register { name: RegisterName::HL, .. }) => {
@@ -6252,7 +7043,15 @@ where
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
 
@@ -6595,7 +7394,6 @@ where
                                     )),
                                 ))
                             }
-
                         }
                     }
 
@@ -6611,7 +7409,9 @@ where
                             (loc, None) => {
                                 return Err((
                                     loc,
-                                    AssemblerError(format!("Bit index must be immediately solvable")),
+                                    AssemblerError(format!(
+                                        "Bit index must be immediately solvable"
+                                    )),
                                 ))
                             }
                             (loc, Some(value)) => {
@@ -6663,13 +7463,13 @@ where
                                             6 => 0xF0,
                                             7 => 0xF8,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::C,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -6682,13 +7482,13 @@ where
                                             6 => 0xF1,
                                             7 => 0xF9,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::D,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -6701,13 +7501,13 @@ where
                                             6 => 0xF2,
                                             7 => 0xFA,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::E,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -6720,13 +7520,13 @@ where
                                             6 => 0xF3,
                                             7 => 0xFB,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::H,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -6739,13 +7539,13 @@ where
                                             6 => 0xF4,
                                             7 => 0xFC,
                                             _ => unreachable!(),
-                                        });  
-                                    }  
-  
+                                        });
+                                    }
+
                                     Some(Token::Register {
                                         name: RegisterName::L,
-                                        ..  
-                                    }) => {  
+                                        ..
+                                    }) => {
                                         self.here += 2;
                                         self.data.push(0xCB);
                                         self.data.push(match value {
@@ -6862,42 +7662,66 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x27);
                             }
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x20);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x21);
                             }
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x22);
                             }
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x23);
                             }
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x24);
                             }
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x25);
                             }
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
                                     Some(Token::Register { name: RegisterName::HL, .. }) => {
@@ -6943,7 +7767,15 @@ where
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
 
@@ -6951,42 +7783,66 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x37);
                             }
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x30);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x31);
                             }
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x32);
                             }
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x33);
                             }
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x34);
                             }
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x35);
                             }
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
                                     Some(Token::Register { name: RegisterName::HL, .. }) => {
@@ -7032,7 +7888,15 @@ where
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
 
@@ -7040,42 +7904,66 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x2F);
                             }
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x28);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x29);
                             }
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x2A);
                             }
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x2B);
                             }
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x2C);
                             }
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x2D);
                             }
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
                                     Some(Token::Register { name: RegisterName::HL, .. }) => {
@@ -7121,7 +8009,15 @@ where
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
 
@@ -7129,42 +8025,66 @@ where
                         self.next()?;
                         match self.next()? {
                             None => return self.end_of_input_err(),
-                            Some(Token::Register { name: RegisterName::A, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::A,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x3F);
                             }
-                            Some(Token::Register { name: RegisterName::B, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::B,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x38);
                             }
-                            Some(Token::Register { name: RegisterName::C, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::C,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x39);
                             }
-                            Some(Token::Register { name: RegisterName::D, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::D,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x3A);
                             }
-                            Some(Token::Register { name: RegisterName::E, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::E,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x3B);
                             }
-                            Some(Token::Register { name: RegisterName::H, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::H,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x3C);
                             }
-                            Some(Token::Register { name: RegisterName::L, .. }) => {
+                            Some(Token::Register {
+                                name: RegisterName::L,
+                                ..
+                            }) => {
                                 self.here += 2;
                                 self.data.push(0xCB);
                                 self.data.push(0x3D);
                             }
-                            Some(Token::Symbol { name: SymbolName::ParenOpen, .. }) => {
+                            Some(Token::Symbol {
+                                name: SymbolName::ParenOpen,
+                                ..
+                            }) => {
                                 match self.next()? {
                                     None => return self.end_of_input_err(),
                                     Some(Token::Register { name: RegisterName::HL, .. }) => {
@@ -7210,7 +8130,15 @@ where
                                 }
                                 self.expect_symbol(SymbolName::ParenClose)?;
                             }
-                            Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register", tok.as_display(&self.str_interner))))),
+                            Some(tok) => {
+                                return Err((
+                                    tok.loc(),
+                                    AssemblerError(format!(
+                                        "Unexpected {}, expected register",
+                                        tok.as_display(&self.str_interner)
+                                    )),
+                                ))
+                            }
                         }
                     }
 
@@ -7406,19 +8334,15 @@ where
                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                     if (value as u32) > (u8::MAX as u32) {
                                         return Err((
-                                        loc,
-                                        AssemblerError(format!(
+                                            loc,
+                                            AssemblerError(format!(
                                             "Expression result ({value}) will not fit in a byte"
                                         )),
-                                    ));
+                                        ));
                                     }
                                     self.data.push(value as u8);
                                 } else {
-                                    self.links.push(Link::byte(
-                                        loc,
-                                        self.data.len(),
-                                        expr,
-                                    ));
+                                    self.links.push(Link::byte(loc, self.data.len(), expr));
                                     self.data.push(0);
                                 }
                             }

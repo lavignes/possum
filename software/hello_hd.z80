@@ -30,19 +30,23 @@ HD_CMD:
 	@def .WR,	$30
 
 ; TODO: we need the ability to add padding/alignment to structs
-@def HDIdent.size_len, 4
-@def HDIdent.serial_len, 20
-@def HDIdent.model_len, 40
+@def HDIdent.size_len,		4
+@def HDIdent.serial_len,	20
+@def HDIdent.model_len,		40
 @struct HDIdent
 	pad0 $0e
-	size HDIdent.size_len
+	size .size_len
 
 	pad1 $14 - .size - .size_len
-	serial HDIdent.serial_len
+	serial .serial_len
 
 	pad2 $36 - .serial - .serial_len
-	model HDIdent.model_len
+	model .model_len
 @ends
+
+@assert HDIdent.size	== $0e
+@assert HDIdent.serial	== $14
+@assert HDIdent.model	== $36
 
 @def PIPE_PORT, $f0
 
