@@ -2,7 +2,20 @@
 
 use crate::{Device, DeviceBus};
 
-pub struct Uart {}
+pub struct Uart {
+    tx_fifo: Vec<u8>,
+    rx_fifo: Vec<u8>,
+}
+
+impl Uart {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            tx_fifo: Vec::new(),
+            rx_fifo: Vec::new(),
+        }
+    }
+}
 
 impl Device for Uart {
     fn tick(&mut self, bus: &mut dyn DeviceBus) {

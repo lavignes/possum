@@ -368,14 +368,17 @@ pub struct CardBus<M> {
 }
 
 impl<M: MemoryMap> CardBus<M> {
+    #[inline]
     pub fn single(mmap: M) -> Self {
         Self::new(mmap, None)
     }
 
+    #[inline]
     pub fn dual(mmap0: M, mmap1: M) -> Self {
         Self::new(mmap0, Some(mmap1))
     }
 
+    #[inline]
     fn new(mmap0: M, mmap1: Option<M>) -> Self {
         Self {
             card0: Card::new(mmap0),

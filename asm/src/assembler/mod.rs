@@ -26,9 +26,8 @@ enum MacroToken {
 
 struct Macro {
     loc: SourceLoc,
-    args: Vec<(SourceLoc, StrRef)>,
+    args: usize,
     tokens: Vec<MacroToken>,
-    arg_indices: FxHashMap<StrRef, usize>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -56,8 +55,8 @@ pub struct Assembler<S, R> {
     stash: Option<Token>,
     loc: Option<SourceLoc>,
     here: u16,
-    active_macro: Option<StrRef>,
     active_namespace: Option<StrRef>,
+    active_macro: Option<Vec<Vec<Token>>>,
 }
 
 impl<S, R> Assembler<S, R>
@@ -81,8 +80,8 @@ where
             stash: None,
             loc: None,
             here: 0,
-            active_macro: None,
             active_namespace: None,
+            active_macro: None,
         }
     }
 
