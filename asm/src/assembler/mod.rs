@@ -2442,7 +2442,6 @@ where
                                                     7 => 0x7E,
                                                     _ => unreachable!(),
                                                 });
-                                                self.expect_symbol(SymbolName::ParenClose)?;
                                             }
 
                                             Some(Token::Register { name: RegisterName::IX, .. }) => {
@@ -2450,6 +2449,16 @@ where
                                                 self.here += 4;
                                                 self.data.push(0xDD);
                                                 self.data.push(0xCB);
+                                                let (loc, expr) = self.expr()?;
+                                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                                    if (value as u32) > (u8::MAX as u32) {
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                    }
+                                                    self.data.push(value as u8);
+                                                } else {
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
+                                                    self.data.push(0);
+                                                }
                                                 self.data.push(match value {
                                                     0 => 0x46,
                                                     1 => 0x4E,
@@ -2461,17 +2470,6 @@ where
                                                     7 => 0x7E,
                                                     _ => unreachable!(),
                                                 });
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                                    }
-                                                    self.data.push(value as u8);
-                                                } else {
-                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
-                                                    self.data.push(0);
-                                                }
-                                                self.expect_symbol(SymbolName::ParenClose)?;
                                             }
 
                                             Some(Token::Register { name: RegisterName::IY, .. }) => {
@@ -2479,6 +2477,16 @@ where
                                                 self.here += 4;
                                                 self.data.push(0xFD);
                                                 self.data.push(0xCB);
+                                                let (loc, expr) = self.expr()?;
+                                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                                    if (value as u32) > (u8::MAX as u32) {
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                    }
+                                                    self.data.push(value as u8);
+                                                } else {
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
+                                                    self.data.push(0);
+                                                }
                                                 self.data.push(match value {
                                                     0 => 0x46,
                                                     1 => 0x4E,
@@ -2490,22 +2498,12 @@ where
                                                     7 => 0x7E,
                                                     _ => unreachable!(),
                                                 });
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                                    }
-                                                    self.data.push(value as u8);
-                                                } else {
-                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
-                                                    self.data.push(0);
-                                                }
-                                                self.expect_symbol(SymbolName::ParenClose)?;
                                             }
 
                                             Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                             None => return self.end_of_input_err(),
                                         }
+                                        self.expect_symbol(SymbolName::ParenClose)?;
                                     }
 
                                     Some(tok) => {
@@ -6394,6 +6392,16 @@ where
                                                 self.here += 4;
                                                 self.data.push(0xDD);
                                                 self.data.push(0xCB);
+                                                let (loc, expr) = self.expr()?;
+                                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                                    if (value as u32) > (u8::MAX as u32) {
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                    }  
+                                                    self.data.push(value as u8);
+                                                } else {  
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
+                                                    self.data.push(0);
+                                                }  
                                                 self.data.push(match value {
                                                     0 => 0x86,
                                                     1 => 0x8E, 
@@ -6405,6 +6413,13 @@ where
                                                     7 => 0xBE,
                                                     _ => unreachable!(),
                                                 });  
+                                            } 
+  
+                                            Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                                self.expect_symbol(SymbolName::Plus)?;
+                                                self.here += 4;
+                                                self.data.push(0xFD);
+                                                self.data.push(0xCB);
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
@@ -6415,13 +6430,6 @@ where
                                                     self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }  
-                                            } 
-  
-                                            Some(Token::Register { name: RegisterName::IY, .. }) => {
-                                                self.expect_symbol(SymbolName::Plus)?;
-                                                self.here += 4;
-                                                self.data.push(0xFD);
-                                                self.data.push(0xCB);
                                                 self.data.push(match value {
                                                     0 => 0x86,
                                                     1 => 0x8E,
@@ -6433,16 +6441,6 @@ where
                                                     7 => 0xBE,
                                                     _ => unreachable!(),
                                                 });  
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                                    }  
-                                                    self.data.push(value as u8);
-                                                } else {  
-                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
-                                                    self.data.push(0);
-                                                }  
                                             } 
   
                                             Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
@@ -6621,7 +6619,6 @@ where
                                         self.here += 4;
                                         self.data.push(0xDD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x16);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -6632,13 +6629,13 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }  
+                                        self.data.push(0x16);
                                     }
                                     Some(Token::Register { name: RegisterName::IY, .. }) => {
                                         self.expect_symbol(SymbolName::Plus)?;
                                         self.here += 4;
                                         self.data.push(0xFD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x16);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -6649,6 +6646,7 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         } 
+                                        self.data.push(0x16);
                                     }
                                     Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
@@ -6748,7 +6746,6 @@ where
                                         self.here += 4;
                                         self.data.push(0xDD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x06);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -6759,13 +6756,13 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }  
+                                        self.data.push(0x06);
                                     }
                                     Some(Token::Register { name: RegisterName::IY, .. }) => {
                                         self.expect_symbol(SymbolName::Plus)?;
                                         self.here += 4;
                                         self.data.push(0xFD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x06);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -6776,6 +6773,7 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         } 
+                                        self.data.push(0x06);
                                     }
                                     Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
@@ -6882,7 +6880,6 @@ where
                                         self.here += 4;
                                         self.data.push(0xDD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x1E);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -6893,13 +6890,13 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }  
+                                        self.data.push(0x1E);
                                     }
                                     Some(Token::Register { name: RegisterName::IY, .. }) => {
                                         self.expect_symbol(SymbolName::Plus)?;
                                         self.here += 4;
                                         self.data.push(0xFD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x1E);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -6910,6 +6907,7 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         } 
+                                        self.data.push(0x1E);
                                     }
                                     Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
@@ -7009,7 +7007,6 @@ where
                                         self.here += 4;
                                         self.data.push(0xDD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x0E);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -7020,13 +7017,13 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }  
+                                        self.data.push(0x0E);
                                     }
                                     Some(Token::Register { name: RegisterName::IY, .. }) => {
                                         self.expect_symbol(SymbolName::Plus)?;
                                         self.here += 4;
                                         self.data.push(0xFD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x0E);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -7037,6 +7034,7 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         } 
+                                        self.data.push(0x0E);
                                     }
                                     Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
@@ -7587,6 +7585,16 @@ where
                                                 self.here += 4;
                                                 self.data.push(0xDD);
                                                 self.data.push(0xCB);
+                                                let (loc, expr) = self.expr()?;
+                                                if let Some(value) = expr.evaluate(&self.symtab) {
+                                                    if (value as u32) > (u8::MAX as u32) {
+                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
+                                                    }  
+                                                    self.data.push(value as u8);
+                                                } else {  
+                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
+                                                    self.data.push(0);
+                                                }  
                                                 self.data.push(match value {
                                                     0 => 0xC6,
                                                     1 => 0xCE, 
@@ -7598,6 +7606,13 @@ where
                                                     7 => 0xFE,
                                                     _ => unreachable!(),
                                                 });  
+                                            }  
+  
+                                            Some(Token::Register { name: RegisterName::IY, .. }) => {
+                                                self.expect_symbol(SymbolName::Plus)?;
+                                                self.here += 4;
+                                                self.data.push(0xFD);
+                                                self.data.push(0xCB);
                                                 let (loc, expr) = self.expr()?;
                                                 if let Some(value) = expr.evaluate(&self.symtab) {
                                                     if (value as u32) > (u8::MAX as u32) {
@@ -7608,13 +7623,6 @@ where
                                                     self.links.push(Link::byte(loc, self.data.len(), expr));
                                                     self.data.push(0);
                                                 }  
-                                            }  
-  
-                                            Some(Token::Register { name: RegisterName::IY, .. }) => {
-                                                self.expect_symbol(SymbolName::Plus)?;
-                                                self.here += 4;
-                                                self.data.push(0xFD);
-                                                self.data.push(0xCB);
                                                 self.data.push(match value {
                                                     0 => 0xC6,
                                                     1 => 0xCE,
@@ -7626,16 +7634,6 @@ where
                                                     7 => 0xFE,
                                                     _ => unreachable!(),
                                                 });  
-                                                let (loc, expr) = self.expr()?;
-                                                if let Some(value) = expr.evaluate(&self.symtab) {
-                                                    if (value as u32) > (u8::MAX as u32) {
-                                                        return Err((loc, AssemblerError(format!("Expression result ({value}) will not fit in a byte"))));
-                                                    }  
-                                                    self.data.push(value as u8);
-                                                } else {  
-                                                    self.links.push(Link::byte(loc, self.data.len(), expr));
-                                                    self.data.push(0);
-                                                }  
                                             } 
   
                                             Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
@@ -7733,7 +7731,6 @@ where
                                         self.here += 4;
                                         self.data.push(0xDD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x26);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -7744,13 +7741,13 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }  
+                                        self.data.push(0x26);
                                     }
                                     Some(Token::Register { name: RegisterName::IY, .. }) => {
                                         self.expect_symbol(SymbolName::Plus)?;
                                         self.here += 4;
                                         self.data.push(0xFD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x26);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -7761,6 +7758,7 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         } 
+                                        self.data.push(0x26);
                                     }
                                     Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
@@ -7854,7 +7852,6 @@ where
                                         self.here += 4;
                                         self.data.push(0xDD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x36);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -7865,13 +7862,13 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }  
+                                        self.data.push(0x36);
                                     }
                                     Some(Token::Register { name: RegisterName::IY, .. }) => {
                                         self.expect_symbol(SymbolName::Plus)?;
                                         self.here += 4;
                                         self.data.push(0xFD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x36);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -7882,6 +7879,7 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         } 
+                                        self.data.push(0x36);
                                     }
                                     Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
@@ -7975,7 +7973,6 @@ where
                                         self.here += 4;
                                         self.data.push(0xDD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x2E);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -7986,13 +7983,13 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }  
+                                        self.data.push(0x2E);
                                     }
                                     Some(Token::Register { name: RegisterName::IY, .. }) => {
                                         self.expect_symbol(SymbolName::Plus)?;
                                         self.here += 4;
                                         self.data.push(0xFD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x2E);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -8003,6 +8000,7 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         } 
+                                        self.data.push(0x2E);
                                     }
                                     Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }
@@ -8096,7 +8094,6 @@ where
                                         self.here += 4;
                                         self.data.push(0xDD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x3E);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -8107,13 +8104,13 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }  
+                                        self.data.push(0x3E);
                                     }
                                     Some(Token::Register { name: RegisterName::IY, .. }) => {
                                         self.expect_symbol(SymbolName::Plus)?;
                                         self.here += 4;
                                         self.data.push(0xFD);
                                         self.data.push(0xCB);
-                                        self.data.push(0x3E);
                                         let (loc, expr) = self.expr()?;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
@@ -8124,6 +8121,7 @@ where
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         } 
+                                        self.data.push(0x3E);
                                     }
                                     Some(tok) => return Err((tok.loc(), AssemblerError(format!("Unexpected {}, expected register \"hl\", \"ix\", or \"iy\"", tok.as_display(&self.str_interner))))),
                                 }

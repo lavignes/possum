@@ -45,7 +45,7 @@ fn main() -> ExitCode {
         match result {
             Err(e) => {
                 eprintln!(
-                    "Cannot open output file \"{}\" for writing: {e}",
+                    "[ERROR]: Cannot open output file \"{}\" for writing: {e}",
                     path.display()
                 );
                 return ExitCode::FAILURE;

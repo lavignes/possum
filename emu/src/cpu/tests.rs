@@ -57,7 +57,7 @@ fn zextests() {
             }
         }
         let duration = Instant::now().duration_since(start).as_secs_f64() as usize;
-        let hz = ((cycles as f64) * 1_000_000_000.0) / (duration as f64);
+        let hz = (cycles as f64) / (duration as f64);
         let mhz = hz / 1_000_000.0;
         println!("Duration: {duration:.03}s");
         println!("Cycles: {cycles} ({mhz:.03} MHz)");

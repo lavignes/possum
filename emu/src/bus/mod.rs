@@ -113,10 +113,4 @@ impl InterruptBus for TestBus {
     fn interrupted(&mut self) -> bool {
         false
     }
-
-    fn ack_interrupt(&mut self) -> u8 {
-        0
-    }
-
-    fn ret_interrupt(&mut self) {}
 }
