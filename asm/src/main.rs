@@ -24,12 +24,12 @@ struct Args {
     #[clap(parse(from_os_str), value_name = "FILE")]
     file: PathBuf,
 
-    /// Path to output binary file (Default: stdout)
-    #[clap(parse(from_os_str), short, long)]
+    /// Path to output binary file [default: stdout]
+    #[clap(parse(from_os_str), short, long, value_name = "FILE")]
     output: Option<PathBuf>,
 
-    /// Paths to search for included files (Repeatable)
-    #[clap(parse(from_os_str), short = 'I', long)]
+    /// Paths to search for included files [repeatable]
+    #[clap(parse(from_os_str), short = 'I', long, value_name = "DIRECTORY")]
     include: Vec<PathBuf>,
 }
 

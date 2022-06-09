@@ -182,7 +182,6 @@ pub struct Dma {
     read_order: Vec<ReadRegister>,
 
     enabled: bool,
-    interrupt_pending: bool,
     interrupts_enabled: bool,
     access_mode: AccessMode,
     stop_on_match: bool,
@@ -713,32 +712,6 @@ impl Device for Dma {
     }
 
     fn interrupting(&self) -> bool {
-        self.interrupt_pending == false && ((self.status & RR0Mask::INTERRUPT_PENDING.bits()) != 0)
-    }
-
-    fn interrupt_pending(&self) -> bool {
-        self.interrupt_pending
-    }
-
-    fn ack_interrupt(&mut self) -> u8 {
-        self.interrupt_pending = true;
-        let mut result = self.interrupt_vector;
-
-        // Tweaks some bits in the vector depending on the cause of the interrupt
-        if self.status_affects_vector {
-            if (self.status & RR0Mask::MATCH_NOT_FOUND.bits()) == 0 {
-                result |= 0x02;
-            }
-            if (self.status & RR0Mask::NOT_END_OF_BLOCK.bits()) == 0 {
-                result |= 0x04;
-            }
-        }
-        result
-    }
-
-    fn ret_interrupt(&mut self) {
-        // TODO: Does ACKing clear the pending bit, or does RETI?
-        self.status &= !RR0Mask::INTERRUPT_PENDING.bits();
-        self.interrupt_pending = false;
+        (self.status & RR0Mask::INTERRUPT_PENDING.bits()) != 0
     }
 }

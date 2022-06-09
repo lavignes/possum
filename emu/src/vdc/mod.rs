@@ -730,14 +730,4 @@ impl Device for Vdc {
     fn interrupting(&self) -> bool {
         false
     }
-
-    fn interrupt_pending(&self) -> bool {
-        false
-    }
-
-    fn ack_interrupt(&mut self) -> u8 {
-        0
-    }
-
-    fn ret_interrupt(&mut self) {}
 }

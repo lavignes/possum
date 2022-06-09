@@ -12,10 +12,6 @@ pub trait Bus {
 
 pub trait InterruptBus: Bus {
     fn interrupted(&mut self) -> bool;
-
-    fn ack_interrupt(&mut self) -> u8;
-
-    fn ret_interrupt(&mut self);
 }
 
 pub trait DeviceBus: Bus {}
@@ -28,12 +24,6 @@ pub trait Device {
     fn write(&mut self, port: u16, data: u8);
 
     fn interrupting(&self) -> bool;
-
-    fn interrupt_pending(&self) -> bool;
-
-    fn ack_interrupt(&mut self) -> u8;
-
-    fn ret_interrupt(&mut self);
 }
 
 pub struct NullBus;

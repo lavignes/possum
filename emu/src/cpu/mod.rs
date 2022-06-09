@@ -1518,8 +1518,8 @@ impl Cpu {
     #[inline]
     fn reti_wz(&mut self, bus: &mut impl InterruptBus) -> usize {
         let cycles = 1 + self.return_wz(bus);
-        // signal to the bus that we're open for business
-        bus.ret_interrupt();
+        // Here is usually where you'd raise the reti pin to other devices
+        // for mode 0/2 interrupts. But mode1 is king.
         cycles
     }
 
@@ -2027,7 +2027,7 @@ impl Cpu {
             self.iff2 = false;
 
             match self.interrupt_mode {
-                InterruptMode::Zero => todo!("Interrupt mode zero is not yet supported"),
+                InterruptMode::Zero => unimplemented!("Interrupt mode zero is not implemented"),
 
                 InterruptMode::One => {
                     self.push_base(self.pc, bus);
@@ -2035,19 +2035,7 @@ impl Cpu {
                     return 13;
                 }
 
-                InterruptMode::Two => {
-                    self.push_base(self.pc, bus);
-
-                    let addr = bus.ack_interrupt() as u16;
-                    let addr = (((self.register(Register::I) as u16) << 8) | addr) & 0xFFFE;
-                    let low = bus.read(addr);
-                    let addr = addr.wrapping_add(1);
-                    let high = bus.read(addr);
-                    self.pc = (low as u16) | ((high as u16) << 8);
-
-                    self.wz = self.pc;
-                    return 21;
-                }
+                InterruptMode::Two => unimplemented!("Interrupt mode two is not implemented"),
             }
         }
 

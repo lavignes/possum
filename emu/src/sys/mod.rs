@@ -148,39 +148,6 @@ impl<'a> InterruptBus for CpuView<'a> {
         }
         false
     }
-
-    fn ack_interrupt(&mut self) -> u8 {
-        if self.dma.interrupting() {
-            return self.dma.ack_interrupt();
-        }
-        match self.hd {
-            Some(hd) if hd.interrupting() => return hd.ack_interrupt(),
-            _ => {}
-        }
-        if self.vdc.interrupting() {
-            return self.vdc.ack_interrupt();
-        }
-        if self.pipe.interrupting() {
-            return self.pipe.ack_interrupt();
-        }
-        0
-    }
-
-    fn ret_interrupt(&mut self) {
-        if self.dma.interrupt_pending() {
-            return self.dma.ret_interrupt();
-        }
-        match self.hd {
-            Some(hd) if hd.interrupt_pending() => return hd.ret_interrupt(),
-            _ => {}
-        }
-        if self.vdc.interrupt_pending() {
-            return self.vdc.ret_interrupt();
-        }
-        if self.pipe.interrupt_pending() {
-            return self.pipe.ret_interrupt();
-        }
-    }
 }
 
 struct DmaView<'a> {

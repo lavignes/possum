@@ -75,7 +75,9 @@ impl<S: FileSystem> FileManager<S> {
         path: P,
     ) -> io::Result<PathRef> {
         self.file_system.is_dir(path.as_ref())?;
-        Ok(self.path_interner.intern(cwd, path))
+        let pathref = self.path_interner.intern(cwd, path);
+        self.search_paths.push(pathref);
+        Ok(pathref)
     }
 
     pub fn reader<C: AsRef<Path>, P: AsRef<Path>>(
@@ -99,6 +101,7 @@ impl<S: FileSystem> FileManager<S> {
         for dir in iter::once(&cwd).chain(&self.search_paths) {
             let dir = self.path_interner.get(*dir).unwrap().to_path_buf();
             let path = dir.join(path.as_ref());
+            dbg!(path.display());
             if self.file_system.is_file(path.as_ref())? {
                 return Ok(Some(self.path_interner.intern(dir, path)));
             }

@@ -204,8 +204,8 @@ impl AbsPathInterner {
     #[inline]
     pub fn intern<C: AsRef<Path>, P: AsRef<Path>>(&mut self, cwd: C, path: P) -> PathRef {
         let cwd = cwd.as_ref();
-        let path = path.as_ref();
-        self.inner.intern(path.absolutize_from(cwd).unwrap())
+        let path = path.as_ref().absolutize_from(cwd).unwrap();
+        self.inner.intern(path)
     }
 
     #[inline]
