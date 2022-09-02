@@ -445,8 +445,8 @@ impl SymbolName {
             ">=" => Some(Self::GreaterEqual),
             "<<" => Some(Self::ShiftLeft),
             ">>" => Some(Self::ShiftRight),
-            "<:" => Some(Self::ShiftLeftLogical),
-            ":>" => Some(Self::ShiftRightLogical),
+            "<<<" => Some(Self::ShiftLeftLogical),
+            ">>>" => Some(Self::ShiftRightLogical),
             "/" => Some(Self::Div),
             "?" => Some(Self::Question),
             _ => None,
@@ -483,8 +483,8 @@ impl Display for SymbolName {
                 Self::GreaterEqual => ">=",
                 Self::ShiftLeft => "<<",
                 Self::ShiftRight => ">>",
-                Self::ShiftLeftLogical => "<:",
-                Self::ShiftRightLogical => ":>",
+                Self::ShiftLeftLogical => "<<<",
+                Self::ShiftRightLogical => ">>>",
                 Self::Div => "/",
                 Self::Question => "?",
             }
@@ -640,6 +640,7 @@ enum State {
     InNumberBase10,
     InNumberBase16,
     InSymbol,
+    InShiftSymbol,
     InIdentifier,
     InDirective,
     InMacro,
@@ -1317,13 +1318,44 @@ impl<R: Read> Iterator for Lexer<R> {
 
                     // first try and parse a 2 char symbol
                     if let Some(name) = SymbolName::parse(&self.buffer) {
+                        // The shift symbols may possibly be 3 chars. So drop into those states next
+                        match name {
+                            SymbolName::ShiftLeft | SymbolName::ShiftRight => {
+                                self.state = State::InShiftSymbol;
+                                continue;
+                            }
+
+                            _ => {
+                                return Some(Ok(Token::Symbol {
+                                    loc: self.tok_loc,
+                                    name,
+                                }));
+                            }
+                        }
+                    }
+
+                    // It must be 1 char (stash the other char)
+                    self.stash = self.buffer.pop();
+                    let name = SymbolName::parse(&self.buffer).unwrap();
+                    return Some(Ok(Token::Symbol {
+                        loc: self.tok_loc,
+                        name,
+                    }));
+                }
+
+                State::InShiftSymbol => {
+                    self.state = State::Initial;
+                    self.buffer.push(c);
+
+                    // It must be a logical shift
+                    if let Some(name) = SymbolName::parse(&self.buffer) {
                         return Some(Ok(Token::Symbol {
                             loc: self.tok_loc,
                             name,
                         }));
                     }
 
-                    // It must be 1 char (stash the other char)
+                    // It must be a arithmetic shift (stash the other char)
                     self.stash = self.buffer.pop();
                     let name = SymbolName::parse(&self.buffer).unwrap();
                     return Some(Ok(Token::Symbol {
@@ -1623,7 +1655,7 @@ mod tests {
     #[test]
     fn symbols() {
         let text = r#"
-            ~ ! % ^ & && * ( ) - == + | || : , < > <= >= << >> <: :> / ?
+            ~ ! % ^ & && * ( ) - == + | || : , < > <= >= << >> <<< >>> / ?
         "#;
         let mut lexer = lexer(text);
         assert!(matches!(lexer.next(), Some(Ok(Token::NewLine { .. }))));

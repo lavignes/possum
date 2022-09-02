@@ -212,7 +212,7 @@ except for comma (`,`). There are some important things to keep in mind:
 * All operations wrap-around. That is, adding `1` to the number `$ffffffff` results in `0`.
 * Logical operators work like C. `0` is treated as `false`, anything else is `true`.
 * The shift operators (`<<` and `>>`) are signed shifts. To perform an unsigned shift
-  use the unsigned shift left (`<:`) and unsigned shift right (`:>`) operators.
+  use the unsigned shift left (`<<<`) and unsigned shift right (`>>>`) operators.
 
 #### Lazy Evaluation
 
