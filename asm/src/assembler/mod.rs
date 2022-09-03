@@ -54,7 +54,7 @@ pub struct Assembler<S, R> {
 
     stash: Option<Token>,
     loc: Option<SourceLoc>,
-    here: u16,
+    here: u32,
     active_namespace: Option<StrRef>,
     active_macro: Option<Vec<Vec<Token>>>,
 }
@@ -814,19 +814,19 @@ where
                             self.next()?;
 
                             self.here = match self.const_expr()? {
-                            (loc, Some(value)) => {
-                                if (value as u32) > (u16::MAX as u32) {
-                                    return Err((
-                                        loc,
-                                        AssemblerError(format!(
-                                            "\"@org\" expression result ({}) is not a valid address", value
-                                        )),
-                                    ));
-                                }
-                                value as u16
-                            },
-                            (loc, None) => return Err((loc, AssemblerError(format!("The expression following an \"@org\" directive must be immediately solvable")))),
-                        };
+                                (loc, Some(value)) => {
+                                    if (value as u32) > (u16::MAX as u32) {
+                                        return Err((
+                                            loc,
+                                            AssemblerError(format!(
+                                                "\"@org\" expression result ({}) is not a valid address", value
+                                            )),
+                                        ));
+                                    }
+                                    value as u32
+                                },
+                                (loc, None) => return Err((loc, AssemblerError(format!("The expression following an \"@org\" directive must be immediately solvable")))),
+                            };
                         }
 
                         DirectiveName::Echo => {
@@ -986,7 +986,7 @@ where
                                                 )),
                                             ));
                                         }
-                                        self.here += bytes.len() as u16;
+                                        self.here += bytes.len() as u32;
                                         self.data.extend_from_slice(bytes);
                                     }
 
@@ -1101,7 +1101,7 @@ where
                                             )),
                                         ));
                                     }
-                                    self.here += size as u16;
+                                    self.here += size as u32;
                                     size as usize
                                 }
                             };
