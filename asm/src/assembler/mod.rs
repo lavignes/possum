@@ -1043,7 +1043,7 @@ where
                                                     )),
                                                 ));
                                             }
-                                            if (self.here as usize) + 2 > (u16::MAX as usize) {
+                                            if (self.here as usize) + 1 > (u16::MAX as usize) {
                                                 return Err((
                                                     loc,
                                                     AssemblerError(format!(
