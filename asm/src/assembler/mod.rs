@@ -992,7 +992,6 @@ where
 
                                     _ => {
                                         let (loc, expr) = self.expr()?;
-                                        self.here += 1;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u8::MAX as u32) {
                                                 return Err((
@@ -1010,8 +1009,10 @@ where
                                                     )),
                                                 ));
                                             }
+                                            self.here += 1;
                                             self.data.push(value as u8);
                                         } else {
+                                            self.here += 1;
                                             self.links.push(Link::byte(loc, self.data.len(), expr));
                                             self.data.push(0);
                                         }
@@ -1033,7 +1034,6 @@ where
                                 match self.peek()? {
                                     _ => {
                                         let (loc, expr) = self.expr()?;
-                                        self.here += 2;
                                         if let Some(value) = expr.evaluate(&self.symtab) {
                                             if (value as u32) > (u16::MAX as u32) {
                                                 return Err((
@@ -1043,7 +1043,7 @@ where
                                                     )),
                                                 ));
                                             }
-                                            if (self.here as usize) + 1 > (u16::MAX as usize) {
+                                            if (self.here as usize) + 2 > (u16::MAX as usize) {
                                                 return Err((
                                                     loc,
                                                     AssemblerError(format!(
@@ -1051,9 +1051,11 @@ where
                                                     )),
                                                 ));
                                             }
+                                            self.here += 2;
                                             self.data
                                                 .extend_from_slice(&(value as u16).to_le_bytes());
                                         } else {
+                                            self.here += 2;
                                             self.links.push(Link::word(loc, self.data.len(), expr));
                                             self.data.push(0);
                                             self.data.push(0);
