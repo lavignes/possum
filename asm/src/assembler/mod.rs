@@ -189,19 +189,21 @@ where
         let path = self.file_manager.borrow().path(loc.pathref).unwrap();
         writeln!(fmt_msg, "In \"{}\"", path.display()).unwrap();
 
-        let mut included_from = self.lexer.as_ref().unwrap().included_from();
-        for lexer in self.lexers.iter().rev() {
-            let loc = included_from.unwrap();
-            let path = self.file_manager.borrow().path(loc.pathref).unwrap();
-            writeln!(
-                fmt_msg,
-                "\tIncluded from {}:{}:{}",
-                path.display(),
-                loc.line,
-                loc.column
-            )
-            .unwrap();
-            included_from = lexer.included_from();
+        if let Some(lexer) = self.lexer.as_ref() {
+            let mut included_from = lexer.included_from();
+            for lexer in self.lexers.iter().rev() {
+                let loc = included_from.unwrap();
+                let path = self.file_manager.borrow().path(loc.pathref).unwrap();
+                writeln!(
+                    fmt_msg,
+                    "\tIncluded from {}:{}:{}",
+                    path.display(),
+                    loc.line,
+                    loc.column
+                )
+                    .unwrap();
+                included_from = lexer.included_from();
+            }
         }
         writeln!(
             fmt_msg,
