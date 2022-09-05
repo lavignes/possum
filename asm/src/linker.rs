@@ -281,8 +281,7 @@ impl<S: FileSystem> Module<S> {
         }
 
         writer
-            .write(&self.data)
-            .map(|_| {})
+            .write_all(&self.data)
             .map_err(|e| LinkerError(format!("Failed to write output: {e}")))
     }
 }
