@@ -33,13 +33,13 @@ HD_CMD:
 @defn HDIdent.serial_len,	20
 @defn HDIdent.model_len,	40
 @struct HDIdent
-    @ds $0e
+	@ds $0e
 	size .size_len
 
-    @align $14
+	@align $14
 	serial .serial_len
 
-    @align $36
+	@align $36
 	model .model_len
 @endstruct
 
