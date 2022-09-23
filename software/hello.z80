@@ -1,4 +1,4 @@
-@def PIPE_PORT, $f0
+@defn PIPE_PORT, $f0
 
 @org $0000
 
@@ -16,6 +16,6 @@ start:
 	ret
 
 HELLO:
-	@db "Howdy Cowboy 🤠\n"
-	@def .len, @here - HELLO
+	@db "Howdy Cowboy\n"
+	@defn .len, @here - HELLO
 

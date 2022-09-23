@@ -1,54 +1,55 @@
 HD_PORT:
-	@def .DATA,	$80
-	@def .ERR,	$81
-	@def .FEAT,	$81
-	@def .SEC_CNT,	$82
-	@def .SEC_NUM,	$83
-	@def .CYL_LO,	$84
-	@def .CYL_HI,	$85
-	@def .HEAD,	$86
-	@def .STAT,	$87
-	@def .CMD,	$87
+	@defn .DATA,	$80
+	@defn .ERR,	$81
+	@defn .FEAT,	$81
+	@defn .SEC_CNT,	$82
+	@defn .SEC_NUM,	$83
+	@defn .CYL_LO,	$84
+	@defn .CYL_HI,	$85
+	@defn .HEAD,	$86
+	@defn .STAT,	$87
+	@defn .CMD,	$87
 
 HD_FEAT:
-	@def .BITS8,	$01
+	@defn .BITS8,	$01
 
 HD_STAT:
-	@def .ERR,	$01
-	@def .BSY,	$80
+	@defn .ERR,	$01
+	@defn .BSY,	$80
 
-@def HD_DRIVE0,		$e0
-@def HD_DRIVE1,		$f0
+@defn HD_DRIVE0,		$e0
+@defn HD_DRIVE1,		$f0
 
 HD_CMD:
-	@def .DIAG,	$90
-	@def .ERASE,	$c0
-	@def .IDENT,	$ec
-	@def .NOP,	$00
-	@def .RD,	$20
-	@def .FEAT,	$ef
-	@def .WR,	$30
+	@defn .DIAG,	$90
+	@defn .ERASE,	$c0
+	@defn .IDENT,	$ec
+	@defn .NOP,	$00
+	@defn .RD,	$20
+	@defn .FEAT,	$ef
+	@defn .WR,	$30
 
-; TODO: we need the ability to add padding/alignment to structs
-@def HDIdent.size_len,		4
-@def HDIdent.serial_len,	20
-@def HDIdent.model_len,		40
+@defn HDIdent.size_len,		4
+@defn HDIdent.serial_len,	20
+@defn HDIdent.model_len,	40
 @struct HDIdent
-	pad0 $0e
+    @ds $0e
 	size .size_len
 
-	pad1 $14 - .size - .size_len
+    @align $14
 	serial .serial_len
 
-	pad2 $36 - .serial - .serial_len
+    @align $36
 	model .model_len
-@ends
+@endstruct
+
+@echo HDIdent.size
 
 @assert HDIdent.size	== $0e
 @assert HDIdent.serial	== $14
 @assert HDIdent.model	== $36
 
-@def PIPE_PORT, $f0
+@defn PIPE_PORT, $f0
 
 start:
 	ld sp, $ffff
@@ -272,24 +273,24 @@ pip_wrln:
 
 HELLO_MSG:
 	@db "Hello! Successfully wrote to the disk!"
-	@def .len, @here - HELLO_MSG
+	@defn .len, @here - HELLO_MSG
 
 HD_MSG_MODEL:
 	@db "Model Name:\t"
-	@def .len, @here - HD_MSG_MODEL
+	@defn .len, @here - HD_MSG_MODEL
 
 HD_MSG_SERIAL:
 	@db "Serial #:\t"
-	@def .len, @here - HD_MSG_SERIAL
+	@defn .len, @here - HD_MSG_SERIAL
 
 HD_MSG_SIZE:
 	@db "Disk Size:\t"
-	@def .len, @here - HD_MSG_SIZE
+	@defn .len, @here - HD_MSG_SIZE
 
 HD_MSG_ERR:
 	@db "Disk error:\t"
-	@def .len, @here - HD_MSG_ERR
+	@defn .len, @here - HD_MSG_ERR
 
 SECTOR_BUF:
 	@ds $100
-	@def .len, @here - SECTOR_BUF 
+	@defn .len, @here - SECTOR_BUF 

@@ -53,7 +53,6 @@ The interface is Compact Flash actually, but it is 80s tech at its core.*
 ### Software (On Host)
 
 - [X] The emulator: [PossumEMU](./emu)
-- [X] A custom macro assembler: [PossumASM](./asm)
 
 ### Software (On Possum)
 
@@ -73,7 +72,7 @@ The interface is Compact Flash actually, but it is 80s tech at its core.*
 ## What's working
 
 ```
-possum-asm hello_hd.z80 > hello_hd.bin
+az65 z80 hello_hd.z80 > hello_hd.bin
 
 possum-emu hello_hd.bin --hd0 blank.img
 ```

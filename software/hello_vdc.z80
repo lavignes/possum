@@ -1,4 +1,4 @@
-@def KB_PORT, $f0
+@defn KB_PORT, $f0
 
 start:
 	ld sp, $ffff
@@ -13,13 +13,13 @@ exit:
 	halt
 
 VDC_PORT:
-	@def .STAT,	$90
-	@def .SEL,	$90
-	@def .DATA,	$91
+	@defn .STAT,	$90
+	@defn .SEL,	$90
+	@defn .DATA,	$91
 
 VDC_STAT:
-	@def .VBLANK,	$20
-	@def .STATUS,	$80
+	@defn .VBLANK,	$20
+	@defn .STATUS,	$80
 
 vdc_init:
 	ld hl, VDC_INIT_VALUES
@@ -113,7 +113,7 @@ hello:
 
 HELLO_MSG:
 	@db 1, 2, 3, 3, 4, 0, 5, 4, 6, 3, 7
-	@def .len, @here - HELLO_MSG
+	@defn .len, @here - HELLO_MSG
 
 VDC_INIT_VALUES:
 	@db 0, 126	; 126+1 columns
@@ -139,7 +139,7 @@ VDC_INIT_VALUES:
 	@db 29, 7	; underline at row 7
 	@db 34, 125	; hblank end @ col 125
 	@db 35, 100	; hblank start @ 100
-	@def .len, @here - VDC_INIT_VALUES
+	@defn .len, @here - VDC_INIT_VALUES
 
 CHARSET:
 	@db %00000000
@@ -213,4 +213,4 @@ CHARSET:
 	@db %10000010
 	@db %01111100
 	@db %00000000
-	@def .len, @here - CHARSET
+	@defn .len, @here - CHARSET
