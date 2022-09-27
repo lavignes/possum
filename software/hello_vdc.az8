@@ -1,7 +1,7 @@
 @defn KB_PORT, $02
 
 start:
-	ld sp, $ffff
+	ld sp, $FFFF
 
 	call vdc_init
 	call hello

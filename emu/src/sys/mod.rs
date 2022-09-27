@@ -148,7 +148,7 @@ impl<'a> Bus for CpuView<'a> {
 
             IOAddr::HD => {
                 if let Some(hd) = self.hd {
-                    hd.write(port, data)
+                    hd.write(port, data);
                 }
             }
 

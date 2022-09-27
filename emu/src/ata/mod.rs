@@ -88,22 +88,24 @@ struct SharedRegisters {
 }
 
 impl<M: MemoryMap> Card<M> {
+    const SECTOR_SIZE: usize = 512;
+
     fn device_info(disk_size: usize) -> Vec<u8> {
-        let mut info = vec![0; 512];
+        let mut info = vec![0; Self::SECTOR_SIZE];
 
         let cf_card_sig = 0x848A_u16;
         for (i, b) in cf_card_sig.to_le_bytes().iter().enumerate() {
             info[0 + i] = *b;
         }
 
-        let sector_count = (disk_size / 512) as u32;
+        let sector_count = (disk_size / Self::SECTOR_SIZE) as u32;
         for (i, b) in sector_count.to_le_bytes().iter().enumerate() {
             info[14 + i] = *b;
         }
 
         let serial_number = b"0-12345-67890-123456";
         for (i, b) in serial_number.iter().enumerate() {
-            info[40 - serial_number.len() + i] = *b; // note: it is right-justified ending at 39
+            info[20 + i] = *b; // note: it is right-justified ending at 39
         }
 
         info[44] = 0x04; // defined by spec
@@ -113,7 +115,7 @@ impl<M: MemoryMap> Card<M> {
             info[46 + i] = *b;
         }
 
-        let model_number = b"POSSUM-CF-CARD-EMULATOR-01";
+        let model_number = b"POSSUM-CF-CARD-EMULATOR-01              ";
         for (i, b) in model_number.iter().enumerate() {
             info[54 + i] = *b;
         }
@@ -166,7 +168,7 @@ impl<M: MemoryMap> Card<M> {
             CommandState::IdentifyDevice => {
                 let data = self.device_info[self.sector_offset];
                 self.sector_offset += 1;
-                if self.sector_offset == 512 {
+                if self.sector_offset == Self::SECTOR_SIZE {
                     self.error = 0;
                     self.status &= !Status::DRQ;
                     self.state = CommandState::None;
@@ -175,10 +177,10 @@ impl<M: MemoryMap> Card<M> {
             }
 
             CommandState::ReadSectors => {
-                let offset = ((self.lba as usize) * 512) + self.sector_offset;
+                let offset = ((self.lba as usize) * Self::SECTOR_SIZE) + self.sector_offset;
                 let data = self.mmap[offset];
                 self.sector_offset += 1;
-                if self.sector_offset == 512 {
+                if self.sector_offset == Self::SECTOR_SIZE {
                     self.status &= !Status::DRQ;
                     self.state = CommandState::None;
                 }
@@ -202,11 +204,11 @@ impl<M: MemoryMap> Card<M> {
             CommandState::ReadSectors => {}
 
             CommandState::WriteSectors => {
-                let offset = ((self.lba as usize) * 512) + self.sector_offset;
+                let offset = ((self.lba as usize) * Self::SECTOR_SIZE) + self.sector_offset;
                 self.mmap[offset] = data;
 
                 self.sector_offset += 1;
-                if self.sector_offset == 512 {
+                if self.sector_offset == Self::SECTOR_SIZE {
                     if self.mmap.flush().is_err() {
                         self.error |= Error::AMNF | Error::BBK;
                         self.status &= !(Status::BUSY | Status::DRQ);
@@ -251,8 +253,8 @@ impl<M: MemoryMap> Card<M> {
                     return;
                 }
 
-                let offset = (self.lba as usize) * 512;
-                for i in 0..512 {
+                let offset = (self.lba as usize) * Self::SECTOR_SIZE;
+                for i in 0..Self::SECTOR_SIZE {
                     self.mmap[offset + i] = 0xFF;
                 }
                 if self.mmap.flush().is_err() {
@@ -288,7 +290,7 @@ impl<M: MemoryMap> Card<M> {
                 self.interrupt = true;
                 self.sector_offset = 0;
 
-                let offset = ((self.lba as usize) * 512) + self.sector_offset;
+                let offset = ((self.lba as usize) * Self::SECTOR_SIZE) + self.sector_offset;
                 if self.mmap.len() < offset {
                     self.error |= Error::AMNF | Error::IDNF;
                     self.status |= Status::ERR;

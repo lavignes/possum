@@ -1,3 +1,5 @@
+@defn SECTOR_SIZE, 512
+
 HD_PORT:
 	@defn .DATA,	$20
 	@defn .ERR,	$21
@@ -17,23 +19,23 @@ HD_STAT:
 	@defn .ERR,	$01
 	@defn .BSY,	$80
 
-@defn HD_DRIVE0,		$e0
-@defn HD_DRIVE1,		$f0
+@defn HD_DRIVE0,		$E0
+@defn HD_DRIVE1,		$F0
 
 HD_CMD:
 	@defn .DIAG,	$90
-	@defn .ERASE,	$c0
-	@defn .IDENT,	$ec
+	@defn .ERASE,	$C0
+	@defn .IDENT,	$EC
 	@defn .NOP,	$00
 	@defn .RD,	$20
-	@defn .FEAT,	$ef
+	@defn .FEAT,	$EF
 	@defn .WR,	$30
 
 @defn HDIdent.size_len,		4
 @defn HDIdent.serial_len,	20
 @defn HDIdent.model_len,	40
 @struct HDIdent
-	@ds $0e
+	@ds $0E
 	size .size_len
 
 	@align $14
@@ -43,14 +45,14 @@ HD_CMD:
 	model .model_len
 @endstruct
 
-@assert HDIdent.size	== $0e
+@assert HDIdent.size	== $0E
 @assert HDIdent.serial	== $14
 @assert HDIdent.model	== $36
 
 @defn KB_PORT, $02
 
 start:
-	ld sp, $ffff
+	ld sp, $FFFF
 
 	call hd_8bit
 	call c, err
@@ -183,13 +185,13 @@ hd_lba:
 	ld a, l
 	out (HD_PORT.CYL_HI), a
 	ld a, h
-	and $0f
+	and $0F
 	or HD_DRIVE0
 	out (HD_PORT.HEAD), a
 	ret
 
 hd_bufin:
-	ld de, 512
+	ld de, SECTOR_SIZE
 	ld hl, SECTOR_BUF
 .inb:
 	call hd_wait
@@ -203,7 +205,7 @@ hd_bufin:
 	jp hd_err
 
 hd_bufout:
-	ld de, 512
+	ld de, SECTOR_SIZE
 	ld hl, SECTOR_BUF
 .outb:
 	call hd_wait
@@ -290,5 +292,4 @@ HD_MSG_ERR:
 	@defn .len, @here - HD_MSG_ERR
 
 SECTOR_BUF:
-	@ds $200
-	@defn .len, @here - SECTOR_BUF 
+	@ds SECTOR_SIZE
