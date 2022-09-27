@@ -1,4 +1,4 @@
-@defn PIPE_PORT, $f0
+@defn KB_PORT, $02
 
 @org $0000
 
@@ -10,7 +10,7 @@ start:
 
 .print:
 	ld a, (hl)
-	out (PIPE_PORT), a
+	out (KB_PORT), a
 	inc hl
 	djnz .print
 	ret

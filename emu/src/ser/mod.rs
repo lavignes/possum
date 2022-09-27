@@ -4,34 +4,32 @@ use std::collections::VecDeque;
 
 use crate::{Device, DeviceBus};
 
-bitflags::bitflags! {
-    struct InterruptFlag: u8 {
-        // Enable rx ready interrupt
-        const RX = 0x01;
+struct InterruptFlag;
+impl InterruptFlag {
+    /// Enable rx ready interrupt
+    const RX: u8 = 0x01;
 
-        // Enable tx empty interrupt
-        const TX = 0x02;
+    /// Enable tx empty interrupt
+    const TX: u8 = 0x02;
 
-        // Enable rx line status interrupt
-        const RX_STATUS = 0x04;
+    /// Enable rx line status interrupt
+    const RX_STATUS: u8 = 0x04;
 
-        // Enable modem status register interrupt
-        const MODEM_STATUS = 0x08;
-    }
+    /// Enable modem status register interrupt
+    const MODEM_STATUS: u8 = 0x08;
 }
 
-bitflags::bitflags! {
-    struct FifoControl: u8 {
-        const FIFO_ENABLE = 0x01;
+struct FifoControl;
+impl FifoControl {
+    const FIFO_ENABLE: u8 = 0x01;
 
-        // Clears the rx fifo
-        const RX_FIFO_RESET = 0x02;
+    /// Clears the rx fifo
+    const RX_FIFO_RESET: u8 = 0x02;
 
-        // Clears the tx fifo
-        const TX_FIFO_RESET = 0x04;
+    /// Clears the tx fifo
+    const TX_FIFO_RESET: u8 = 0x04;
 
-        const DMA_MODE_SELECT = 0x08;
-    }
+    const DMA_MODE_SELECT: u8 = 0x08;
 }
 
 pub struct Uart {

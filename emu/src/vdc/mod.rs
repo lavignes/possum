@@ -7,50 +7,47 @@ use crate::{Device, DeviceBus};
 const VRAM_SIZE: usize = 0x4000;
 const VRAM_ADDR_MAX: usize = VRAM_SIZE - 1;
 
-bitflags::bitflags! {
-    struct Attribute: u8 {
-        const INTENSITY = 0x01;
-        const BLUE = 0x02;
-        const GREEN = 0x04;
-        const RED = 0x08;
+struct Attribute;
+impl Attribute {
+    const INTENSITY: u8 = 0x01;
+    const BLUE: u8 = 0x02;
+    const GREEN: u8 = 0x04;
+    const RED: u8 = 0x08;
 
-        const BLINK = 0x10;
-        const UNDERLINE = 0x20;
-        const REVERSE = 0x40;
-        const ALTERNATE_CHARACTER = 0x80;
-    }
+    const BLINK: u8 = 0x10;
+    const UNDERLINE: u8 = 0x20;
+    const REVERSE: u8 = 0x40;
+    const ALTERNATE_CHARACTER: u8 = 0x80;
 }
 
-bitflags::bitflags! {
-    // control bits in the horizontal scroll register
-    struct HScrollControl: u8 {
-        // double-wide all pixels
-        const DBL = 0x10;
+/// control bits in the horizontal scroll register
+struct HScrollControl;
+impl HScrollControl {
+    /// double-wide all pixels
+    const DBL: u8 = 0x10;
 
-        // semigraphic mode
-        const SEMI = 0x20;
+    /// semigraphic mode
+    const SEMI: u8 = 0x20;
 
-        // enable attributes
-        const ATR = 0x40;
+    /// enable attributes
+    const ATR: u8 = 0x40;
 
-        // text mode (1 sets to graphics mode)
-        const TEXT = 0x80;
-    }
+    /// text mode (1 sets to graphics mode)
+    const TEXT: u8 = 0x80;
 }
 
-bitflags::bitflags! {
-    // control bits in the vertical scroll register
-    struct VScrollControl: u8 {
-        // double blink rate
-        const CBRATE = 0x20;
+// control bits in the vertical scroll register
+struct VScrollControl;
+impl VScrollControl {
+    /// double blink rate
+    const CBRATE: u8 = 0x20;
 
-        // reverse graphics
-        const RVS = 0x40;
+    /// reverse graphics
+    const RVS: u8 = 0x40;
 
-        // sets whether the next block operation is a
-        // copy or fill
-        const COPY = 0x80;
-    }
+    /// sets whether the next block operation is a
+    /// copy or fill
+    const COPY: u8 = 0x80;
 }
 
 fn color_lookup(bits: u8) -> u32 {
@@ -90,21 +87,20 @@ fn color_lookup(bits: u8) -> u32 {
     }
 }
 
-bitflags::bitflags! {
-    struct Status: u8 {
-        // VDC hardware version bits
-        const VER2 = 0x01;
-        const VER1 = 0x02;
-        const VER0 = 0x04;
+struct Status;
+impl Status {
+    /// VDC hardware version bits
+    const VER2: u8 = 0x01;
+    const VER1: u8 = 0x02;
+    const VER0: u8 = 0x04;
 
-        const VBLANK = 0x20;
+    const VBLANK: u8 = 0x20;
 
-        // lol. light pen
-        const LP = 0x40;
+    /// lol. light pen
+    const LP: u8 = 0x40;
 
-        // Register a11y status
-        const STATUS = 0x80;
-    }
+    /// Register a11y status
+    const STATUS: u8 = 0x80;
 }
 
 #[derive(Debug, Default)]
@@ -230,7 +226,7 @@ impl Vdc {
             raster_x: 0,
             raster_y: 0,
 
-            status: Status::STATUS.bits(), // assume ready always
+            status: Status::STATUS, // assume ready always
             register_select: 0,
 
             // Commented names are the short-hand from the C=128 docs:
@@ -391,7 +387,7 @@ impl Vdc {
 
 impl Device for Vdc {
     fn tick(&mut self, _: &mut dyn DeviceBus) {
-        self.status &= !Status::VBLANK.bits();
+        self.status &= !Status::VBLANK;
 
         if self.parameters_dirty {
             self.recompute_parameters();
@@ -403,7 +399,7 @@ impl Device for Vdc {
             let mut bg_color = color_lookup(self.fg_bg_color);
 
             // reverse everything if the control bit is set
-            if (self.vert_scroll_ctrl & VScrollControl::RVS.bits()) != 0 {
+            if (self.vert_scroll_ctrl & VScrollControl::RVS) != 0 {
                 mem::swap(&mut fg_color, &mut bg_color);
             }
 
@@ -452,7 +448,7 @@ impl Device for Vdc {
 
                         // If attributes are enabled, locate and apply them
                         let (mut fg_color, mut bg_color, char_set_offset) =
-                            if (self.horiz_scroll_ctrl & HScrollControl::ATR.bits()) != 0 {
+                            if (self.horiz_scroll_ctrl & HScrollControl::ATR) != 0 {
                                 // get the attrs for this cell
                                 let attr_index = (self.attr_addr as usize) + (cell_index as usize);
                                 let attr = self.vram[attr_index & VRAM_ADDR_MAX];
@@ -460,20 +456,20 @@ impl Device for Vdc {
 
                                 // there are expected to be 2 sets of 256 characters when attributes
                                 // are enabled. The alternate set follows the first in memory.
-                                let char_set_offset =
-                                    if attr & Attribute::ALTERNATE_CHARACTER.bits() != 0 {
-                                        0
-                                    } else {
-                                        256
-                                    };
+                                let char_set_offset = if attr & Attribute::ALTERNATE_CHARACTER != 0
+                                {
+                                    0
+                                } else {
+                                    256
+                                };
 
                                 // reverse it
-                                if (attr & Attribute::REVERSE.bits()) != 0 {
+                                if (attr & Attribute::REVERSE) != 0 {
                                     mem::swap(&mut fg_color, &mut bg_color);
                                 }
 
                                 // underline it
-                                if (attr & Attribute::UNDERLINE.bits() != 0)
+                                if (attr & Attribute::UNDERLINE != 0)
                                     && cell_yoffset == (self.underline_ctrl & 0x0F) as usize
                                 {
                                     mem::swap(&mut fg_color, &mut bg_color);
@@ -536,11 +532,12 @@ impl Device for Vdc {
                 }
             } else {
                 // in vblank
-                self.status |= Status::VBLANK.bits();
+                self.status |= Status::VBLANK;
             }
         }
 
         self.raster_x += 1;
+        // TODO: Technically the framebuffer really should be ready on every hlank
         if self.raster_x == self.signal_width {
             self.raster_x = 0;
             self.raster_y += 1;

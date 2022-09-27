@@ -1,4 +1,4 @@
-@defn KB_PORT, $f0
+@defn KB_PORT, $02
 
 start:
 	ld sp, $ffff
@@ -13,9 +13,9 @@ exit:
 	halt
 
 VDC_PORT:
-	@defn .STAT,	$90
-	@defn .SEL,	$90
-	@defn .DATA,	$91
+	@defn .STAT,	$40
+	@defn .SEL,	$40
+	@defn .DATA,	$41
 
 VDC_STAT:
 	@defn .VBLANK,	$20

@@ -4,48 +4,46 @@ use std::{error, ops::IndexMut};
 
 use crate::bus::{Device, DeviceBus};
 
-bitflags::bitflags! {
-    struct Status: u8 {
-        // Last operation was an error
-        const ERR = 0x01;
+struct Status;
+impl Status {
+    /// Last operation was an error
+    const ERR: u8 = 0x01;
 
-        // A data error was corrected
-        const CORR = 0x04;
+    /// A data error was corrected
+    const CORR: u8 = 0x04;
 
-        // Requesting data from host
-        const DRQ = 0x08;
+    /// Requesting data from host
+    const DRQ: u8 = 0x08;
 
-        // Compact flash ready
-        const DSC = 0x10;
+    /// Compact flash ready
+    const DSC: u8 = 0x10;
 
-        // Write fault
-        const DWF = 0x20;
+    /// Write fault
+    const DWF: u8 = 0x20;
 
-        // Ready to accept first command
-        const RDY = 0x40;
+    /// Ready to accept first command
+    const RDY: u8 = 0x40;
 
-        // Busy executing command
-        const BUSY = 0x80;
-    }
+    /// Busy executing command
+    const BUSY: u8 = 0x80;
 }
 
-bitflags::bitflags! {
-    struct Error: u8 {
-        // Address mark not found (generic r/w bit)
-        const AMNF = 0x01;
+struct Error;
+impl Error {
+    /// Address mark not found (generic r/w bit)
+    const AMNF: u8 = 0x01;
 
-        // Aborted (unsupported operation)
-        const ABRT = 0x04;
+    /// Aborted (unsupported operation)
+    const ABRT: u8 = 0x04;
 
-        // ID not found (bad lba)
-        const IDNF = 0x10;
+    /// ID not found (bad lba)
+    const IDNF: u8 = 0x10;
 
-        // Uncorrectable (data error)
-        const UNC = 0x40;
+    /// Uncorrectable (data error)
+    const UNC: u8 = 0x40;
 
-        // Bad block (bad sector)
-        const BBK = 0x80;
-    }
+    /// Bad block (bad sector)
+    const BBK: u8 = 0x80;
 }
 
 #[derive(Debug)]
@@ -151,14 +149,14 @@ impl<M: MemoryMap> Card<M> {
 
             state: CommandState::None,
             error: 0,
-            status: Status::RDY.bits() | Status::DSC.bits(), // assume always ready
+            status: Status::RDY | Status::DSC, // assume always ready
             lba: 0,
             sector_offset: 0,
         }
     }
 
     fn read_data(&mut self) -> u8 {
-        if (self.status & Status::BUSY.bits()) != 0 {
+        if (self.status & Status::BUSY) != 0 {
             return 0;
         }
 
@@ -170,7 +168,7 @@ impl<M: MemoryMap> Card<M> {
                 self.sector_offset += 1;
                 if self.sector_offset == 512 {
                     self.error = 0;
-                    self.status &= !Status::DRQ.bits();
+                    self.status &= !Status::DRQ;
                     self.state = CommandState::None;
                 }
                 data
@@ -181,7 +179,7 @@ impl<M: MemoryMap> Card<M> {
                 let data = self.mmap[offset];
                 self.sector_offset += 1;
                 if self.sector_offset == 512 {
-                    self.status &= !Status::DRQ.bits();
+                    self.status &= !Status::DRQ;
                     self.state = CommandState::None;
                 }
                 data
@@ -192,7 +190,7 @@ impl<M: MemoryMap> Card<M> {
     }
 
     fn write_data(&mut self, data: u8) {
-        if (self.status & Status::BUSY.bits()) != 0 {
+        if (self.status & Status::BUSY) != 0 {
             return;
         }
 
@@ -210,9 +208,9 @@ impl<M: MemoryMap> Card<M> {
                 self.sector_offset += 1;
                 if self.sector_offset == 512 {
                     if self.mmap.flush().is_err() {
-                        self.error |= Error::AMNF.bits() | Error::BBK.bits();
-                        self.status &= !(Status::BUSY.bits() | Status::DRQ.bits());
-                        self.status |= Status::ERR.bits();
+                        self.error |= Error::AMNF | Error::BBK;
+                        self.status &= !(Status::BUSY | Status::DRQ);
+                        self.status |= Status::ERR;
                     }
                 }
             }
@@ -220,7 +218,7 @@ impl<M: MemoryMap> Card<M> {
     }
 
     fn write_command(&mut self, registers: &SharedRegisters, data: u8) {
-        if (self.status & Status::BUSY.bits()) != 0 {
+        if (self.status & Status::BUSY) != 0 {
             return;
         }
 
@@ -235,7 +233,7 @@ impl<M: MemoryMap> Card<M> {
 
         // Clear errors :-)
         self.error = 0;
-        self.status &= !Status::ERR.bits();
+        self.status &= !Status::ERR;
 
         match data {
             // Execute drive diagnostic
@@ -248,8 +246,8 @@ impl<M: MemoryMap> Card<M> {
             0xC0 => {
                 // check for LBA mode
                 if (registers.drive_head & 0x40) == 0 {
-                    self.status |= Status::ERR.bits();
-                    self.error |= Error::AMNF.bits() | Error::IDNF.bits() | Error::ABRT.bits();
+                    self.status |= Status::ERR;
+                    self.error |= Error::AMNF | Error::IDNF | Error::ABRT;
                     return;
                 }
 
@@ -258,8 +256,8 @@ impl<M: MemoryMap> Card<M> {
                     self.mmap[offset + i] = 0xFF;
                 }
                 if self.mmap.flush().is_err() {
-                    self.error |= Error::AMNF.bits() | Error::BBK.bits();
-                    self.status |= Status::ERR.bits();
+                    self.error |= Error::AMNF | Error::BBK;
+                    self.status |= Status::ERR;
                 }
             }
 
@@ -267,23 +265,23 @@ impl<M: MemoryMap> Card<M> {
             0xEC => {
                 self.interrupt = true;
                 self.sector_offset = 0;
-                self.status |= Status::DRQ.bits();
+                self.status |= Status::DRQ;
                 self.state = CommandState::IdentifyDevice;
             }
 
             // Nop
             0x00 => {
                 // Always aborts
-                self.status |= Status::ERR.bits();
-                self.error |= Error::AMNF.bits() | Error::ABRT.bits();
+                self.status |= Status::ERR;
+                self.error |= Error::AMNF | Error::ABRT;
             }
 
             // Read sectors
             0x20 | 0x21 => {
                 // check for LBA mode
                 if (registers.drive_head & 0x40) == 0 {
-                    self.status |= Status::ERR.bits();
-                    self.error |= Error::AMNF.bits() | Error::IDNF.bits() | Error::ABRT.bits();
+                    self.status |= Status::ERR;
+                    self.error |= Error::AMNF | Error::IDNF | Error::ABRT;
                     return;
                 }
 
@@ -292,12 +290,12 @@ impl<M: MemoryMap> Card<M> {
 
                 let offset = ((self.lba as usize) * 512) + self.sector_offset;
                 if self.mmap.len() < offset {
-                    self.error |= Error::AMNF.bits() | Error::IDNF.bits();
-                    self.status |= Status::ERR.bits();
+                    self.error |= Error::AMNF | Error::IDNF;
+                    self.status |= Status::ERR;
                     return;
                 }
 
-                self.status |= Status::DRQ.bits();
+                self.status |= Status::DRQ;
                 self.state = CommandState::ReadSectors;
             }
 
@@ -305,8 +303,8 @@ impl<M: MemoryMap> Card<M> {
             0x40 | 0x41 => {
                 // check for LBA mode
                 if (registers.drive_head & 0x40) == 0 {
-                    self.status |= Status::ERR.bits();
-                    self.error |= Error::AMNF.bits() | Error::IDNF.bits() | Error::ABRT.bits();
+                    self.status |= Status::ERR;
+                    self.error |= Error::AMNF | Error::IDNF | Error::ABRT;
                     return;
                 }
 
@@ -327,8 +325,8 @@ impl<M: MemoryMap> Card<M> {
                     0x02 => self.is_8_bit = false,
 
                     _ => {
-                        self.status |= Status::ERR.bits();
-                        self.error |= Error::AMNF.bits() | Error::ABRT.bits();
+                        self.status |= Status::ERR;
+                        self.error |= Error::AMNF | Error::ABRT;
                     }
                 }
             }
@@ -337,20 +335,20 @@ impl<M: MemoryMap> Card<M> {
             0x30 | 0x31 | 0x38 | 0x3C => {
                 // check for LBA mode
                 if (registers.drive_head & 0x40) == 0 {
-                    self.status |= Status::ERR.bits();
-                    self.error |= Error::AMNF.bits() | Error::IDNF.bits() | Error::ABRT.bits();
+                    self.status |= Status::ERR;
+                    self.error |= Error::AMNF | Error::IDNF | Error::ABRT;
                     return;
                 }
 
                 self.sector_offset = 0;
-                self.status |= Status::DRQ.bits();
+                self.status |= Status::DRQ;
                 self.state = CommandState::WriteSectors;
             }
 
             // Invalid command
             _ => {
-                self.status |= Status::ERR.bits();
-                self.error |= Error::AMNF.bits() | Error::ABRT.bits()
+                self.status |= Status::ERR;
+                self.error |= Error::AMNF | Error::ABRT
             }
         }
     }

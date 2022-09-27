@@ -5,100 +5,92 @@ mod tests;
 
 use crate::bus::{Device, DeviceBus};
 
-bitflags::bitflags! {
-    struct RR0Mask: u8 {
-        const TRANSFER_OCCURRED = 0x01;
-        const READY = 0x02;
-        const INTERRUPT_PENDING = 0x08;
-        const MATCH_NOT_FOUND = 0x10;
-        const NOT_END_OF_BLOCK = 0x20;
-    }
+struct RR0Mask;
+impl RR0Mask {
+    const TRANSFER_OCCURRED: u8 = 0x01;
+    const READY: u8 = 0x02;
+    const INTERRUPT_PENDING: u8 = 0x08;
+    const MATCH_NOT_FOUND: u8 = 0x10;
+    const NOT_END_OF_BLOCK: u8 = 0x20;
 }
 
-bitflags::bitflags! {
-    struct WR0Mask: u8 {
-        const SELECT_MASK = 0b1000_0000;
-        const SELECT_BITS = 0b0000_0000;
+struct WR0Mask;
+impl WR0Mask {
+    const SELECT_MASK: u8 = 0b1000_0000;
+    const SELECT_BITS: u8 = 0b0000_0000;
 
-        const SEARCH_OR_TRANSFER = 0x03;
-        const DIRECTION = 0x04;
-    }
+    const SEARCH_OR_TRANSFER: u8 = 0x03;
+    const DIRECTION: u8 = 0x04;
 }
 
-bitflags::bitflags! {
-    struct WR1Mask: u8 {
-        const SELECT_MASK = 0b1000_0111;
-        const SELECT_BITS = 0b0000_0100;
+struct WR1Mask;
+impl WR1Mask {
+    const SELECT_MASK: u8 = 0b1000_0111;
+    const SELECT_BITS: u8 = 0b0000_0100;
 
-        const MEMORY_OR_IO = 0x08;
-        const INCREMENT_DECREMENT_MODE = 0x30;
+    const MEMORY_OR_IO: u8 = 0x08;
+    const INCREMENT_DECREMENT_MODE: u8 = 0x30;
 
-        const CYCLE_LENGTH = 0x03;
-    }
+    const CYCLE_LENGTH: u8 = 0x03;
 }
 
-bitflags::bitflags! {
-    struct WR2Mask: u8 {
-        const SELECT_MASK = 0b1000_0111;
-        const SELECT_BITS = 0b0000_0000;
+struct WR2Mask;
+impl WR2Mask {
+    const SELECT_MASK: u8 = 0b1000_0111;
+    const SELECT_BITS: u8 = 0b0000_0000;
 
-        const MEMORY_OR_IO = 0x08;
-        const INCREMENT_DECREMENT_MODE = 0x30;
+    const MEMORY_OR_IO: u8 = 0x08;
+    const INCREMENT_DECREMENT_MODE: u8 = 0x30;
 
-        const CYCLE_LENGTH = 0x03;
-    }
+    const CYCLE_LENGTH: u8 = 0x03;
 }
 
-bitflags::bitflags! {
-    struct WR3Mask: u8 {
-        const SELECT_MASK = 0b1000_0011;
-        const SELECT_BITS = 0b1000_0000;
+struct WR3Mask;
+impl WR3Mask {
+    const SELECT_MASK: u8 = 0b1000_0011;
+    const SELECT_BITS: u8 = 0b1000_0000;
 
-        const STOP_ON_MATCH = 0x04;
-        const INTERRUPT_ENABLE = 0x20;
-        const DMA_ENABLE = 0x40;
-    }
+    const STOP_ON_MATCH: u8 = 0x04;
+    const INTERRUPT_ENABLE: u8 = 0x20;
+    const DMA_ENABLE: u8 = 0x40;
 }
 
-bitflags::bitflags! {
-    struct WR4Mask: u8 {
-        const SELECT_MASK = 0b1000_0011;
-        const SELECT_BITS = 0b1000_0001;
+struct WR4Mask;
+impl WR4Mask {
+    const SELECT_MASK: u8 = 0b1000_0011;
+    const SELECT_BITS: u8 = 0b1000_0001;
 
-        const ACCESS_MODE = 0x06;
+    const ACCESS_MODE: u8 = 0x06;
 
-        const INTERRUPT_ON_MATCH = 0x01;
-        const INTERRUPT_AT_END_OF_BLOCK = 0x02;
-        const PULSE_GENERATED = 0x04;
+    const INTERRUPT_ON_MATCH: u8 = 0x01;
+    const INTERRUPT_AT_END_OF_BLOCK: u8 = 0x02;
+    const PULSE_GENERATED: u8 = 0x04;
 
-        const INTERRUPT_ON_READY = 0x40;
-        const STATUS_AFFECTS_VECTOR = 0x20;
-    }
+    const INTERRUPT_ON_READY: u8 = 0x40;
+    const STATUS_AFFECTS_VECTOR: u8 = 0x20;
 }
 
-bitflags::bitflags! {
-    struct WR5Mask: u8 {
-        const SELECT_MASK = 0b1100_0111;
-        const SELECT_BITS = 0b1000_0010;
+struct WR5Mask;
+impl WR5Mask {
+    const SELECT_MASK: u8 = 0b1100_0111;
+    const SELECT_BITS: u8 = 0b1000_0010;
 
-        const CHIP_ENABLE_ONLY_WAIT = 0x10;
-        const STOP_RESTART_ON_END_OF_BLOCK = 0x20;
-    }
+    const CHIP_ENABLE_ONLY_WAIT: u8 = 0x10;
+    const STOP_RESTART_ON_END_OF_BLOCK: u8 = 0x20;
 }
 
-bitflags::bitflags! {
-    struct WR6Mask: u8 {
-        const SELECT_MASK = 0b1000_0011;
-        const SELECT_BITS = 0b1000_0011;
+struct WR6Mask;
+impl WR6Mask {
+    const SELECT_MASK: u8 = 0b1000_0011;
+    const SELECT_BITS: u8 = 0b1000_0011;
 
-        const STATUS = 0x01;
-        const BYTE_COUNTER_LOW = 0x02;
-        const BYTE_COUNTER_HIGH = 0x04;
-        const PORT_A_ADDRESS_LOW = 0x08;
-        const PORT_A_ADDRESS_HIGH = 0x10;
-        const PORT_B_ADDRESS_LOW = 0x20;
-        const PORT_B_ADDRESS_HIGH = 0x40;
-    }
+    const STATUS: u8 = 0x01;
+    const BYTE_COUNTER_LOW: u8 = 0x02;
+    const BYTE_COUNTER_HIGH: u8 = 0x04;
+    const PORT_A_ADDRESS_LOW: u8 = 0x08;
+    const PORT_A_ADDRESS_HIGH: u8 = 0x10;
+    const PORT_B_ADDRESS_LOW: u8 = 0x20;
+    const PORT_B_ADDRESS_HIGH: u8 = 0x40;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -276,7 +268,7 @@ impl Device for Dma {
         // but this can only happen if the increment mode is not fixed...
         // This is a weird documented quirk that makes fixed destination difficult to deal with.
         // Usually, this is resolved by swapping the direction an extra load command.
-        if (self.status & RR0Mask::TRANSFER_OCCURRED.bits()) == 0 {
+        if (self.status & RR0Mask::TRANSFER_OCCURRED) == 0 {
             match self.direction {
                 Direction::PortAToB => {
                     if self.port_b_increment_mode != IncrementMode::Fixed {
@@ -311,7 +303,7 @@ impl Device for Dma {
             }
         }
         // I believe we do this even if there is no transfer to indicate the DMA has started
-        self.status |= RR0Mask::TRANSFER_OCCURRED.bits();
+        self.status |= RR0Mask::TRANSFER_OCCURRED;
 
         // Step 5: Increment destination counter
         match self.direction {
@@ -338,11 +330,11 @@ impl Device for Dma {
         // Step 6: Check for match
         if self.search {
             if (!self.mask_byte & self.match_byte) == byte {
-                self.status &= !RR0Mask::MATCH_NOT_FOUND.bits();
+                self.status &= !RR0Mask::MATCH_NOT_FOUND;
 
                 self.enabled = false;
                 if self.interrupts_enabled && self.interrupt_on_match {
-                    self.status |= RR0Mask::INTERRUPT_PENDING.bits();
+                    self.status |= RR0Mask::INTERRUPT_PENDING;
                 }
 
                 if self.stop_on_match {
@@ -354,11 +346,11 @@ impl Device for Dma {
         // Step 7: Check for end of block
         self.byte_counter = self.byte_counter.wrapping_add(1);
         if self.byte_counter == self.block_length {
-            self.status &= !RR0Mask::NOT_END_OF_BLOCK.bits();
+            self.status &= !RR0Mask::NOT_END_OF_BLOCK;
 
             self.enabled = false;
             if self.interrupt_at_end_of_block {
-                self.status |= RR0Mask::INTERRUPT_PENDING.bits();
+                self.status |= RR0Mask::INTERRUPT_PENDING;
             }
 
             if self.restart_at_end_of_block {
@@ -368,7 +360,7 @@ impl Device for Dma {
         }
 
         if self.interrupt_on_ready {
-            self.status |= RR0Mask::INTERRUPT_PENDING.bits();
+            self.status |= RR0Mask::INTERRUPT_PENDING;
         }
     }
 
@@ -403,11 +395,11 @@ impl Device for Dma {
             // The logic for selecting the bits seems super janky but this is what it is.
             None => {
                 // Register 1 => 0XXX X100
-                if (data & WR1Mask::SELECT_MASK.bits()) == WR1Mask::SELECT_BITS.bits() {
-                    self.port_a_is_memory = (data & WR1Mask::MEMORY_OR_IO.bits()) == 0;
+                if (data & WR1Mask::SELECT_MASK) == WR1Mask::SELECT_BITS {
+                    self.port_a_is_memory = (data & WR1Mask::MEMORY_OR_IO) == 0;
 
                     self.port_a_increment_mode =
-                        match (data & WR1Mask::INCREMENT_DECREMENT_MODE.bits()) >> 4 {
+                        match (data & WR1Mask::INCREMENT_DECREMENT_MODE) >> 4 {
                             0 => IncrementMode::Decrement,
                             1 => IncrementMode::Increment,
                             2 | 3 => IncrementMode::Fixed,
@@ -420,11 +412,11 @@ impl Device for Dma {
                     }
                 }
                 // Register 2 => 0XXX X000
-                else if (data & WR2Mask::SELECT_MASK.bits()) == WR2Mask::SELECT_BITS.bits() {
-                    self.port_b_is_memory = (data & WR2Mask::MEMORY_OR_IO.bits()) == 0;
+                else if (data & WR2Mask::SELECT_MASK) == WR2Mask::SELECT_BITS {
+                    self.port_b_is_memory = (data & WR2Mask::MEMORY_OR_IO) == 0;
 
                     self.port_b_increment_mode =
-                        match (data & WR2Mask::INCREMENT_DECREMENT_MODE.bits()) >> 4 {
+                        match (data & WR2Mask::INCREMENT_DECREMENT_MODE) >> 4 {
                             0 => IncrementMode::Decrement,
                             1 => IncrementMode::Increment,
                             2 | 3 => IncrementMode::Fixed,
@@ -437,8 +429,8 @@ impl Device for Dma {
                     }
                 }
                 // Register 0 => 0XXX XXXX
-                else if (data & WR0Mask::SELECT_MASK.bits()) == WR0Mask::SELECT_BITS.bits() {
-                    match data & WR0Mask::SEARCH_OR_TRANSFER.bits() {
+                else if (data & WR0Mask::SELECT_MASK) == WR0Mask::SELECT_BITS {
+                    match data & WR0Mask::SEARCH_OR_TRANSFER {
                         1 => self.transfer = true,
                         2 => self.search = true,
                         3 => {
@@ -448,7 +440,7 @@ impl Device for Dma {
                         _ => unreachable!(),
                     }
 
-                    if (data & WR0Mask::DIRECTION.bits()) == 0 {
+                    if (data & WR0Mask::DIRECTION) == 0 {
                         self.direction = Direction::PortBToA;
                     } else {
                         self.direction = Direction::PortAToB;
@@ -469,16 +461,16 @@ impl Device for Dma {
                     }
                 }
                 // Register 3 => 1XXX XX00
-                else if (data & WR3Mask::SELECT_MASK.bits()) == WR3Mask::SELECT_BITS.bits() {
-                    self.stop_on_match = (data & WR3Mask::STOP_ON_MATCH.bits()) != 0;
+                else if (data & WR3Mask::SELECT_MASK) == WR3Mask::SELECT_BITS {
+                    self.stop_on_match = (data & WR3Mask::STOP_ON_MATCH) != 0;
 
                     // According to the docs, setting this to 0 does not disable interrupts
-                    if (data & WR3Mask::INTERRUPT_ENABLE.bits()) != 0 {
+                    if (data & WR3Mask::INTERRUPT_ENABLE) != 0 {
                         self.interrupts_enabled = true;
                     }
 
                     // According to the docs, setting this to 0 does not disable DMA
-                    if (data & WR3Mask::DMA_ENABLE.bits()) != 0 {
+                    if (data & WR3Mask::DMA_ENABLE) != 0 {
                         self.enabled = true;
                     }
 
@@ -491,8 +483,8 @@ impl Device for Dma {
                     }
                 }
                 // Register 4 => 1XXX XX01
-                else if (data & WR4Mask::SELECT_MASK.bits()) == WR4Mask::SELECT_BITS.bits() {
-                    self.access_mode = match (data & WR4Mask::ACCESS_MODE.bits()) >> 5 {
+                else if (data & WR4Mask::SELECT_MASK) == WR4Mask::SELECT_BITS {
+                    self.access_mode = match (data & WR4Mask::ACCESS_MODE) >> 5 {
                         0 => AccessMode::Byte,
                         1 => AccessMode::Continuous,
                         3 => AccessMode::Burst,
@@ -511,16 +503,16 @@ impl Device for Dma {
                     }
                 }
                 // Register 5 => 10XX X010
-                else if (data & WR5Mask::SELECT_MASK.bits()) == WR5Mask::SELECT_BITS.bits() {
-                    if (data & WR5Mask::CHIP_ENABLE_ONLY_WAIT.bits()) != 0 {
+                else if (data & WR5Mask::SELECT_MASK) == WR5Mask::SELECT_BITS {
+                    if (data & WR5Mask::CHIP_ENABLE_ONLY_WAIT) != 0 {
                         todo!()
                     }
 
                     self.restart_at_end_of_block =
-                        (data & WR5Mask::STOP_RESTART_ON_END_OF_BLOCK.bits()) != 0;
+                        (data & WR5Mask::STOP_RESTART_ON_END_OF_BLOCK) != 0;
                 }
                 // Register 6 => 1XXX XX11
-                else if (data & WR6Mask::SELECT_MASK.bits()) == WR6Mask::SELECT_BITS.bits() {
+                else if (data & WR6Mask::SELECT_MASK) == WR6Mask::SELECT_BITS {
                     // All control bytes disable the DMA... except the enable DMA byte ;-)
                     self.enabled = false;
 
@@ -531,7 +523,7 @@ impl Device for Dma {
                             //   like the found/end and transfer bits?
                             self.interrupts_enabled = false;
                             self.restart_at_end_of_block = false;
-                            self.status &= !RR0Mask::INTERRUPT_PENDING.bits();
+                            self.status &= !RR0Mask::INTERRUPT_PENDING;
                         }
 
                         // Reset Port A Timing
@@ -584,8 +576,8 @@ impl Device for Dma {
 
                         // Reinitialize status byte
                         0x8B => {
-                            self.status |= RR0Mask::MATCH_NOT_FOUND.bits();
-                            self.status |= RR0Mask::NOT_END_OF_BLOCK.bits();
+                            self.status |= RR0Mask::MATCH_NOT_FOUND;
+                            self.status |= RR0Mask::NOT_END_OF_BLOCK;
                         }
 
                         // Read mask follows
@@ -595,25 +587,25 @@ impl Device for Dma {
 
                         // Initiate read sequence
                         0xA7 => {
-                            if (self.read_mask & WR6Mask::PORT_B_ADDRESS_HIGH.bits()) != 0 {
+                            if (self.read_mask & WR6Mask::PORT_B_ADDRESS_HIGH) != 0 {
                                 self.read_order.push(ReadRegister::PortBAddressHigh);
                             }
-                            if (self.read_mask & WR6Mask::PORT_B_ADDRESS_LOW.bits()) != 0 {
+                            if (self.read_mask & WR6Mask::PORT_B_ADDRESS_LOW) != 0 {
                                 self.read_order.push(ReadRegister::PortBAddressLow);
                             }
-                            if (self.read_mask & WR6Mask::PORT_A_ADDRESS_HIGH.bits()) != 0 {
+                            if (self.read_mask & WR6Mask::PORT_A_ADDRESS_HIGH) != 0 {
                                 self.read_order.push(ReadRegister::PortAAddressHigh);
                             }
-                            if (self.read_mask & WR6Mask::PORT_A_ADDRESS_LOW.bits()) != 0 {
+                            if (self.read_mask & WR6Mask::PORT_A_ADDRESS_LOW) != 0 {
                                 self.read_order.push(ReadRegister::PortAAddressLow);
                             }
-                            if (self.read_mask & WR6Mask::BYTE_COUNTER_LOW.bits()) != 0 {
+                            if (self.read_mask & WR6Mask::BYTE_COUNTER_LOW) != 0 {
                                 self.read_order.push(ReadRegister::ByteCounterLow);
                             }
-                            if (self.read_mask & WR6Mask::BYTE_COUNTER_HIGH.bits()) != 0 {
+                            if (self.read_mask & WR6Mask::BYTE_COUNTER_HIGH) != 0 {
                                 self.read_order.push(ReadRegister::ByteCounterHigh);
                             }
-                            if (self.read_mask & WR6Mask::STATUS.bits()) != 0 {
+                            if (self.read_mask & WR6Mask::STATUS) != 0 {
                                 self.read_order.push(ReadRegister::Status);
                             }
                         }
@@ -669,18 +661,17 @@ impl Device for Dma {
             }
 
             Some(WriteRegister::InterruptControl) => {
-                self.interrupt_on_match = (data & WR4Mask::INTERRUPT_ON_MATCH.bits()) != 0;
+                self.interrupt_on_match = (data & WR4Mask::INTERRUPT_ON_MATCH) != 0;
 
-                self.interrupt_at_end_of_block =
-                    (data & WR4Mask::INTERRUPT_AT_END_OF_BLOCK.bits()) != 0;
+                self.interrupt_at_end_of_block = (data & WR4Mask::INTERRUPT_AT_END_OF_BLOCK) != 0;
 
-                if (data & WR4Mask::PULSE_GENERATED.bits()) != 0 {
+                if (data & WR4Mask::PULSE_GENERATED) != 0 {
                     todo!();
                 }
 
-                self.status_affects_vector = (data & WR4Mask::STATUS_AFFECTS_VECTOR.bits()) != 0;
+                self.status_affects_vector = (data & WR4Mask::STATUS_AFFECTS_VECTOR) != 0;
 
-                self.interrupt_on_ready = (data & WR4Mask::INTERRUPT_ON_READY.bits()) != 0;
+                self.interrupt_on_ready = (data & WR4Mask::INTERRUPT_ON_READY) != 0;
 
                 // Which ports will be written to?
                 if (data & 0x10) != 0 {
@@ -712,6 +703,6 @@ impl Device for Dma {
     }
 
     fn interrupting(&self) -> bool {
-        (self.status & RR0Mask::INTERRUPT_PENDING.bits()) != 0
+        (self.status & RR0Mask::INTERRUPT_PENDING) != 0
     }
 }

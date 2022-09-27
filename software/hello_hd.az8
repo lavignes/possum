@@ -1,14 +1,14 @@
 HD_PORT:
-	@defn .DATA,	$80
-	@defn .ERR,	$81
-	@defn .FEAT,	$81
-	@defn .SEC_CNT,	$82
-	@defn .SEC_NUM,	$83
-	@defn .CYL_LO,	$84
-	@defn .CYL_HI,	$85
-	@defn .HEAD,	$86
-	@defn .STAT,	$87
-	@defn .CMD,	$87
+	@defn .DATA,	$20
+	@defn .ERR,	$21
+	@defn .FEAT,	$21
+	@defn .SEC_CNT,	$22
+	@defn .SEC_NUM,	$23
+	@defn .CYL_LO,	$24
+	@defn .CYL_HI,	$25
+	@defn .HEAD,	$26
+	@defn .STAT,	$27
+	@defn .CMD,	$27
 
 HD_FEAT:
 	@defn .BITS8,	$01
@@ -43,13 +43,11 @@ HD_CMD:
 	model .model_len
 @endstruct
 
-@echo HDIdent.size
-
 @assert HDIdent.size	== $0e
 @assert HDIdent.serial	== $14
 @assert HDIdent.model	== $36
 
-@defn PIPE_PORT, $f0
+@defn KB_PORT, $02
 
 start:
 	ld sp, $ffff
@@ -138,7 +136,7 @@ err:
 	call pip_wrx
 
 exit:
-	in a, (PIPE_PORT)
+	in a, (KB_PORT)
 	set 5, a	; lowercase ASCII
 	cp 'q'
 	jr nz, exit
@@ -249,16 +247,16 @@ pip_wrx:
 	daa
 	adc a, $40
 	daa
-	out (PIPE_PORT), a
+	out (KB_PORT), a
 	ret
 
 pip_wrc:
-	out (PIPE_PORT), a
+	out (KB_PORT), a
 	ret
 
 pip_wr:
 	ld a, (hl)
-	out (PIPE_PORT), a
+	out (KB_PORT), a
 	inc hl
 	djnz pip_wr
 	ret
@@ -266,9 +264,9 @@ pip_wr:
 pip_wrln:
 	call pip_wr
 	ld a, '\r'
-	out (PIPE_PORT), a
+	out (KB_PORT), a
 	ld a, '\n'
-	out (PIPE_PORT), a
+	out (KB_PORT), a
 	ret
 
 HELLO_MSG:
@@ -292,5 +290,5 @@ HD_MSG_ERR:
 	@defn .len, @here - HD_MSG_ERR
 
 SECTOR_BUF:
-	@ds $100
+	@ds $200
 	@defn .len, @here - SECTOR_BUF 

@@ -48,7 +48,8 @@ fn main() -> io::Result<()> {
     let video = sdl.video().map_err(io::Error::other)?;
     video.text_input().start();
 
-    let mut system = System::new(Box::new(AsciiKeyboard::new(event_pump)), hd);
+    let kb = AsciiKeyboard::new(event_pump);
+    let mut system = System::new(Box::new(kb), hd);
     system.write_ram(&rom, 0);
 
     let window = video

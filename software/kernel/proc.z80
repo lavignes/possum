@@ -1,8 +1,0 @@
-; msg entry
-struct MSG
-tx	dw
-rx	dw
-ends
-
-foo: MSG
-

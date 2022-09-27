@@ -1,10 +1,5 @@
-use std::time::Instant;
-
 use super::*;
 use crate::bus::TestBus;
-
-const ZEXDOC: (&'static str, &'static [u8]) = ("zexdoc", include_bytes!("zexdoc.com"));
-const ZEXALL: (&'static str, &'static [u8]) = ("zexall", include_bytes!("zexall.com"));
 
 #[inline]
 fn flags(cpu: &Cpu, flags: &[Flag]) -> bool {
@@ -16,27 +11,32 @@ fn flags(cpu: &Cpu, flags: &[Flag]) -> bool {
     (((cpu.af as u8) & !((Flag::X as u8) | (Flag::Y as u8))) as u8) == flag
 }
 
-fn bios_call(cpu: &mut Cpu, bus: &mut impl Bus) {
-    match cpu.register(Register::C) {
-        2 => print!("{}", cpu.register(Register::E) as char),
-        9 => {
-            let mut addr = cpu.wide_register(WideRegister::DE);
-            loop {
-                let c = bus.read(addr) as char;
-                addr = addr.carrying_add(1, false).0;
-                if c == '$' {
-                    break;
-                }
-                print!("{}", c);
-            }
-        }
-        c => unimplemented!("Unexpected syscall: {}", c),
-    }
-    cpu.return_wz(bus);
-}
-
 #[test]
+#[cfg(not(debug_assertions))] // Only run test in release mode..
 fn zextests() {
+    use std::time::Instant;
+    const ZEXDOC: (&'static str, &'static [u8]) = ("zexdoc", include_bytes!("zexdoc.com"));
+    const ZEXALL: (&'static str, &'static [u8]) = ("zexall", include_bytes!("zexall.com"));
+
+    fn bios_call(cpu: &mut Cpu, bus: &mut impl Bus) {
+        match cpu.register(Register::C) {
+            2 => print!("{}", cpu.register(Register::E) as char),
+            9 => {
+                let mut addr = cpu.wide_register(WideRegister::DE);
+                loop {
+                    let c = bus.read(addr) as char;
+                    addr = addr.carrying_add(1, false).0;
+                    if c == '$' {
+                        break;
+                    }
+                    print!("{}", c);
+                }
+            }
+            c => unimplemented!("Unexpected syscall: {}", c),
+        }
+        cpu.return_wz(bus);
+    }
+
     for (name, test) in [ZEXDOC, ZEXALL] {
         println!("zextest \"{name}\":");
         let mut bus = TestBus::new();

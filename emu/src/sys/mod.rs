@@ -1,9 +1,8 @@
 //! The whole system tied together. Implements the shared bus.
 
 use crate::{
-    bus::{Bus, Device, DeviceBus, InterruptBus, NullBus},
+    bus::{Bus, Device, InterruptBus, NullBus},
     cpu::Cpu,
-    dma::Dma,
     vdc::{Framebuffer, Vdc},
 };
 
@@ -11,24 +10,31 @@ const BANK_SIZE: usize = 0x10000;
 const BANK_MAX: usize = 0x1F;
 const BANK_SHADOW_SIZE: u16 = 0x0400;
 
-struct IOAddr {}
-
+struct IOAddr;
 impl IOAddr {
-    const DMA: u16 = 0x00;
-    const BANK: u16 = 0x10;
-    const HD: u16 = 0x80;
-    const VDC: u16 = 0x90;
-    const PIPE: u16 = 0xF0;
+    const IC: u16 = 0x00;
+    const BANK: u16 = 0x01;
+    const KB: u16 = 0x02;
+
+    const SER: u16 = 0x10;
+    const HD: u16 = 0x20;
+    const VDC: u16 = 0x40;
+}
+
+struct InterruptPriority;
+impl InterruptPriority {
+    const SER: u8 = 0x00;
+    const HD: u8 = 0x01;
+    const VDC: u8 = 0x02;
 }
 
 pub struct System {
     cpu: Cpu,
     bank: BankSelect,
-    dma: Dma,
     ram: Vec<u8>,
     hd: Option<Box<dyn Device>>,
     vdc: Vdc,
-    pipe: Box<dyn Device>,
+    kb: Box<dyn Device>,
 }
 
 #[inline]
@@ -62,6 +68,7 @@ impl BankSelect {
         self.offset = self.bank * BANK_SIZE;
     }
 
+    #[inline]
     pub fn bank(&self) -> u8 {
         self.bank as u8
     }
@@ -74,11 +81,10 @@ impl BankSelect {
 
 struct CpuView<'a> {
     bank: &'a mut BankSelect,
-    dma: &'a mut Dma,
     ram: &'a mut Vec<u8>,
     hd: &'a mut Option<&'a mut Box<dyn Device>>,
     vdc: &'a mut Vdc,
-    pipe: &'a mut dyn Device,
+    kb: &'a mut dyn Device,
 }
 
 impl<'a> Bus for CpuView<'a> {
@@ -91,10 +97,29 @@ impl<'a> Bus for CpuView<'a> {
     }
 
     fn input(&mut self, port: u16) -> u8 {
+        // The upper byte or port not something we want
+        let port = port & 0xFF; 
         match port & 0xF0 {
-            IOAddr::DMA => self.dma.read(port),
+            // The lowest devices all mask to the same space
+            // as the IC
+            IOAddr::IC => match port {
+                IOAddr::IC => {
+                    if let Some(hd) = self.hd && hd.interrupting() { 
+                        return InterruptPriority::HD;
+                    }
+                    if self.vdc.interrupting() {
+                        return InterruptPriority::VDC;
+                    }
+                    todo!("Read PIC when not in interrupt. Undefined state");
+                }
 
-            IOAddr::BANK => self.bank.bank(),
+                IOAddr::KB => self.kb.read(port),
+
+                IOAddr::BANK => self.bank.bank(),
+
+                _ => 0,
+            },
+
 
             IOAddr::HD => match self.hd {
                 Some(hd) => hd.read(port),
@@ -103,17 +128,23 @@ impl<'a> Bus for CpuView<'a> {
 
             IOAddr::VDC => self.vdc.read(port),
 
-            IOAddr::PIPE => self.pipe.read(port),
-
             _ => 0,
         }
     }
 
     fn output(&mut self, port: u16, data: u8) {
+        // The upper byte or port not something we want
+        let port = port & 0xFF; 
         match port & 0xF0 {
-            IOAddr::DMA => self.dma.write(port, data),
+            // The lowest ports all mask to the same space
+            // as the IC
+            IOAddr::IC => match port {
+                IOAddr::KB => self.kb.write(port, data),
 
-            IOAddr::BANK => self.bank.select(data),
+                IOAddr::BANK => self.bank.select(data),
+
+                _ => {}
+            }
 
             IOAddr::HD => {
                 if let Some(hd) = self.hd {
@@ -123,99 +154,32 @@ impl<'a> Bus for CpuView<'a> {
 
             IOAddr::VDC => self.vdc.write(port, data),
 
-            IOAddr::PIPE => self.pipe.write(port, data),
-
             _ => {}
         }
     }
 }
 
-// This impl handles the well-documented z80 interrupt daisy-chain
 impl<'a> InterruptBus for CpuView<'a> {
     fn interrupted(&mut self) -> bool {
-        if self.dma.interrupting() {
+        if let Some(hd) = self.hd && hd.interrupting() { 
             return true;
-        }
-        match self.hd {
-            Some(hd) if hd.interrupting() => return true,
-            _ => {}
         }
         if self.vdc.interrupting() {
-            return true;
-        }
-        if self.pipe.interrupting() {
             return true;
         }
         false
     }
 }
 
-struct DmaView<'a> {
-    bank: &'a mut BankSelect,
-    ram: &'a mut Vec<u8>,
-    hd: &'a mut Option<&'a mut Box<dyn Device>>,
-    vdc: &'a mut Vdc,
-    pipe: &'a mut dyn Device,
-}
-
-impl<'a> Bus for DmaView<'a> {
-    fn read(&mut self, addr: u16) -> u8 {
-        read(&self.ram, self.bank.ram_offset(), addr)
-    }
-
-    fn write(&mut self, addr: u16, data: u8) {
-        write(&mut self.ram, self.bank.ram_offset(), addr, data);
-    }
-
-    fn input(&mut self, port: u16) -> u8 {
-        match port & 0xF0 {
-            IOAddr::BANK => self.bank.bank(),
-
-            IOAddr::HD => match self.hd {
-                Some(hd) => hd.read(port),
-                _ => 0,
-            },
-
-            IOAddr::VDC => self.vdc.read(port),
-
-            IOAddr::PIPE => self.pipe.read(port),
-
-            _ => 0,
-        }
-    }
-
-    fn output(&mut self, port: u16, data: u8) {
-        match port & 0xF0 {
-            IOAddr::BANK => self.bank.select(data),
-
-            IOAddr::HD => {
-                if let Some(hd) = self.hd {
-                    hd.write(port, data)
-                }
-            }
-
-            IOAddr::VDC => self.vdc.write(port, data),
-
-            IOAddr::PIPE => self.pipe.write(port, data),
-
-            _ => {}
-        }
-    }
-}
-
-impl<'a> DeviceBus for DmaView<'a> {}
-
 impl System {
-    // TODO: builder?
-    pub fn new(pipe: Box<dyn Device>, hd: Option<Box<dyn Device>>) -> Self {
+    pub fn new(kb: Box<dyn Device>, hd: Option<Box<dyn Device>>) -> Self {
         Self {
             cpu: Cpu::default(),
             bank: BankSelect::default(),
-            dma: Dma::default(),
             ram: vec![0; 0x10000 * 0x20],
             hd,
             vdc: Vdc::new(),
-            pipe,
+            kb,
         }
     }
 
@@ -223,34 +187,32 @@ impl System {
         let Self {
             cpu,
             bank,
-            dma,
             ram,
             hd,
             vdc,
-            pipe,
+            kb,
             ..
         } = self;
 
         let cycles = cpu.step(&mut CpuView {
             bank,
-            dma,
             ram,
             hd: &mut hd.as_mut(),
             vdc,
-            pipe: pipe.as_mut(),
+            kb: kb.as_mut(),
         });
 
         for _ in 0..cycles {
             // note: only 1 DMA device can run at a time.
             //   If I want to add support for more, then I need to put them in the daisy chain
             //   and only run the first DMA that is wishing to tick.
-            dma.tick(&mut DmaView {
-                bank,
-                ram,
-                hd: &mut hd.as_mut(),
-                vdc,
-                pipe: pipe.as_mut(),
-            });
+            //dma.tick(&mut DmaView {
+            //    bank,
+            //    ram,
+            //    hd: &mut hd.as_mut(),
+            //    vdc,
+            //    kb: kb.as_mut(),
+            //});
 
             vdc.tick(&mut NullBus {});
         }
