@@ -57,28 +57,28 @@ fn color_lookup(bits: u8) -> u32 {
         0b0001 => 0xFF555555,
 
         // blue
-        0b0010 => 0xFF0000AA,
-        0b0011 => 0xFF5555FF,
+        0b0010 => 0xFFAA0000,
+        0b0011 => 0xFFFF5555,
 
         // green
         0b0100 => 0xFF00AA00,
         0b0101 => 0xFF55FF55,
 
         // cyan
-        0b0110 => 0xFF00AAAA,
-        0b0111 => 0xFF55FFFF,
+        0b0110 => 0xFFAAAA00,
+        0b0111 => 0xFFFFFF55,
 
         // red
-        0b1000 => 0xFFAA0000,
-        0b1001 => 0xFFFF5555,
+        0b1000 => 0xFF0000AA,
+        0b1001 => 0xFF5555FF,
 
         // purple
         0b1010 => 0xFFAA00AA,
         0b1011 => 0xFFFF55FF,
 
         // yellow
-        0b1100 => 0xFFAAAA00,
-        0b1101 => 0xFFFFFF55,
+        0b1100 => 0xFF00AAAA,
+        0b1101 => 0xFF55FFFF,
 
         // white
         0b1110 => 0xFFAAAAAA,
@@ -138,6 +138,7 @@ impl Framebuffer {
 pub struct Vdc {
     framebuffer_ready: bool,
     framebuffer: Framebuffer,
+    blink_timer: usize,
     vram: Vec<u8>,
 
     // Rendering/CRT state
@@ -202,6 +203,7 @@ impl Vdc {
         Self {
             framebuffer_ready: false,
             framebuffer: Framebuffer::default(),
+            blink_timer: 0,
             vram: vec![0; VRAM_SIZE],
 
             parameters_dirty: true,
@@ -483,7 +485,7 @@ impl Device for Vdc {
                         // Reverse the video *AGAIN* if this is the cursor
                         let is_cursor =
                             (cell_x + (cell_y * cell_stride)) == (self.cursor_pos as usize);
-                        if is_cursor {
+                        if is_cursor && (self.blink_timer) & 0x0F < 0x07 {
                             if cell_yoffset >= self.cursor_start_line
                                 && cell_yoffset <= self.cursor_end_line
                             {
@@ -546,6 +548,7 @@ impl Device for Vdc {
             self.framebuffer_ready = self.raster_y == self.vsync_start;
             if self.raster_y == self.signal_height {
                 self.raster_y = 0;
+                self.blink_timer = self.blink_timer.wrapping_add(1);
             }
         }
     }

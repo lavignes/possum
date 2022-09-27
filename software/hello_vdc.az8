@@ -134,9 +134,9 @@ VDC_INIT_VALUES:
 	@db 21, $00
 	@db 22, $78	; cell is $8-wide ($7+1 visible)
 	@db 23, $08	; cell is $8 tall
-	@db 26, %11110000; wht on blk
+	@db 26, %11110010; wht on blu
 	@db 28, %00100000; pix data @ $2000
-	@db 29, 7	; underline at row 7
+	@db 29, 7	; underline at line 7
 	@db 34, 125	; hblank end @ col 125
 	@db 35, 100	; hblank start @ 100
 	@defn .len, @here - VDC_INIT_VALUES
