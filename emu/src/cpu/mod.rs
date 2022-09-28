@@ -100,7 +100,6 @@ pub struct Cpu {
     enable_interrupts_next_cycle: bool,
     iff1: bool,
     iff2: bool,
-    irq: bool,
 }
 
 impl Cpu {
@@ -2090,11 +2089,6 @@ impl Cpu {
         self.halted
     }
 
-    #[inline]
-    pub fn irq(&mut self) {
-        self.irq = true;
-    }
-
     pub fn step(&mut self, bus: &mut impl InterruptBus) -> usize {
         // when enabling interrupts, we essentially need to flip the iff flags,
         // but we hold off and only do so at the start of the *NEXT* instruction.
@@ -2108,14 +2102,17 @@ impl Cpu {
         let mut cycles = self.do_opcode(opcode, bus);
 
         // TODO: NMI
-        if self.irq {
-            cycles += self.do_irq(bus);
-            self.irq = false;
-        }
+        cycles += self.do_irq(bus);
+
         cycles
     }
 
     fn do_irq(&mut self, bus: &mut impl InterruptBus) -> usize {
+        // Do nothing if there aren't any pending interrupts
+        if !bus.interrupted() {
+            return 0;
+        }
+
         // interrupts do take us out of halt state
         if self.halted {
             self.halted = false;

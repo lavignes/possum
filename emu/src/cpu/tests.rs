@@ -113,7 +113,7 @@ fn inc_wide() {
     let mut bus = TestBus::with_mem(vec![
         0x01, 0x01, 0x00,                               // ld bc, $0001
         0x03,                                           // inc bc
-        0x01, 0xFF, 0xFF,                               // ld bc, $ffff
+        0x01, 0xFF, 0xFF,                               // ld bc, $FFFF
         0x03,                                           // inc bc
         0x00,                                           // nop
     ]);
@@ -130,7 +130,7 @@ fn inc_wide() {
 fn inc() {
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
-        0x3E, 0x0F,                                     // ld a, $0f
+        0x3E, 0x0F,                                     // ld a, $0F
         0x3C,                                           // inc a
         0x00,                                           // nop
     ]);
@@ -150,7 +150,7 @@ fn inc() {
 
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
-        0x3E, 0x7F,                                     // ld a, $7f
+        0x3E, 0x7F,                                     // ld a, $7F
         0x3C,                                           // inc a
         0x00,                                           // nop
     ]);
@@ -170,7 +170,7 @@ fn inc() {
 
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
-        0x3E, 0xFF,                                     // ld a, $ff
+        0x3E, 0xFF,                                     // ld a, $FF
         0x3C,                                           // inc a
         0x00,                                           // nop
     ]);
@@ -302,7 +302,7 @@ fn rlca() {
 fn exchange() {
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
-        0x21, 0xFF, 0xFF,                               // ld hl, $ffff
+        0x21, 0xFF, 0xFF,                               // ld hl, $FFFF
         0xE5,                                           // push hl
         0xF1,                                           // pop af
         0x08,                                           // ex af, af'
@@ -322,7 +322,7 @@ fn exchange() {
 fn add_wide() {
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
-        0x21, 0xFF, 0x0F,                               // ld hl, $0fff
+        0x21, 0xFF, 0x0F,                               // ld hl, $0FFF
         0x01, 0x01, 0x00,                               // ld bc, 1
         0x09,                                           // add hl, bc
         0x00,                                           // nop
@@ -414,7 +414,7 @@ fn jr() {
 fn add_immediate() {
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
-        0x3E, 0x0F,                                     // ld a, $0f
+        0x3E, 0x0F,                                     // ld a, $0F
         0xC6, 0x01,                                     // add a, 1
         0x00,                                           // nop
     ]);
@@ -434,7 +434,7 @@ fn add_immediate() {
 
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
-        0x3E, 0xFF,                                     // ld a, $ff
+        0x3E, 0xFF,                                     // ld a, $FF
         0xC6, 0x01,                                     // add a, 1
         0x00,                                           // nop
     ]);
@@ -454,8 +454,8 @@ fn add_immediate() {
 
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
-        0x3E, 0x7F,                                     // ld a, $7f
-        0xC6, 0x7F,                                     // add a, $7f
+        0x3E, 0x7F,                                     // ld a, $7F
+        0xC6, 0x7F,                                     // add a, $7F
         0x00,                                           // nop
     ]);
     let mut cpu = Cpu::default();
@@ -478,11 +478,11 @@ fn rotates() {
     #[rustfmt::skip]
     let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
-        0x06, 0xFF,                                     // ld b, $ff
+        0x06, 0xFF,                                     // ld b, $FF
         0x0E, 0x03,                                     // ld c, $03
-        0x16, 0xFE,                                     // ld d, $fe
+        0x16, 0xFE,                                     // ld d, $FE
         0x1E, 0x11,                                     // ld e, $11
-        0x26, 0x3F,                                     // ld h, $3f
+        0x26, 0x3F,                                     // ld h, $3F
         0x2E, 0x70,                                     // ld l, $70
         0xCB, 0x0F,                                     // rrc a
         0xCB, 0x07,                                     // rlc a
@@ -614,9 +614,9 @@ fn sla() {
     let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x06, 0x80,                                     // ld b, $80
-        0x0E, 0xAA,                                     // ld c, $aa
-        0x16, 0xFE,                                     // ld d, $fe
-        0x1E, 0x7F,                                     // ld e, $7f
+        0x0E, 0xAA,                                     // ld c, $AA
+        0x16, 0xFE,                                     // ld d, $FE
+        0x1E, 0x7F,                                     // ld e, $7F
         0x26, 0x11,                                     // ld h, $11
         0x2E, 0x00,                                     // ld l, $00
         0xCB, 0x27,                                     // sla a
@@ -704,9 +704,9 @@ fn sra() {
     let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x06, 0x80,                                     // ld b, $80
-        0x0E, 0xAA,                                     // ld c, $aa
-        0x16, 0xFE,                                     // ld d, $fe
-        0x1E, 0x7F,                                     // ld e, $7f
+        0x0E, 0xAA,                                     // ld c, $AA
+        0x16, 0xFE,                                     // ld d, $FE
+        0x1E, 0x7F,                                     // ld e, $7F
         0x26, 0x11,                                     // ld h, $11
         0x2E, 0x00,                                     // ld l, $00
         0xCB, 0x2F,                                     // sra a
@@ -755,9 +755,9 @@ fn srl() {
     let mut bus = TestBus::with_mem(vec![
         0x3E, 0x01,                                     // ld a, $01
         0x06, 0x80,                                     // ld b, $80
-        0x0E, 0xAA,                                     // ld c, $aa
-        0x16, 0xFE,                                     // ld d, $fe
-        0x1E, 0x7F,                                     // ld e, $7f
+        0x0E, 0xAA,                                     // ld c, $AA
+        0x16, 0xFE,                                     // ld d, $FE
+        0x1E, 0x7F,                                     // ld e, $7F
         0x26, 0x11,                                     // ld h, $11
         0x2E, 0x00,                                     // ld l, $00
         0xCB, 0x3F,                                     // srl a
@@ -856,7 +856,7 @@ fn cpl() {
         0x97,                                           // sub a
         0x2F,                                           // cpl
         0x2F,                                           // cpl
-        0xC6, 0xAA,                                     // add a, $aa
+        0xC6, 0xAA,                                     // add a, $AA
         0x2F,                                           // cpl
         0x2F,                                           // cpl
         0x00,                                           // nop
@@ -889,7 +889,7 @@ fn ccf_scf() {
         0x97,                                           // sub a
         0x37,                                           // scf
         0x3F,                                           // ccf
-        0xD6, 0xCC,                                     // sub $cc
+        0xD6, 0xCC,                                     // sub $CC
         0x3F,                                           // ccf
         0x37,                                           // scf
         0x00,                                           // nop
