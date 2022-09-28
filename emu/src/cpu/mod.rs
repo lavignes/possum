@@ -1491,8 +1491,10 @@ impl Cpu {
     }
 
     #[inline]
-    fn retn(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn retn_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let cycles = self.return_wz(bus);
+        self.iff1 = self.iff2;
+        cycles
     }
 
     #[inline]
@@ -1517,7 +1519,8 @@ impl Cpu {
 
     #[inline]
     fn reti_wz(&mut self, bus: &mut impl InterruptBus) -> usize {
-        let cycles = 1 + self.return_wz(bus);
+        let cycles = self.return_wz(bus);
+        self.iff1 = self.iff2;
         // Here is usually where you'd raise the reti pin to other devices
         // for mode 0/2 interrupts. But mode1 is king.
         cycles
@@ -1635,13 +1638,31 @@ impl Cpu {
     }
 
     #[inline]
-    fn ini(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn ini_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let data = bus.input(self.bc);
+        self.wz = self.bc.wrapping_add(1);
+        self.set_register(Register::B, self.register(Register::B).wrapping_sub(1));
+        bus.write(self.hl, data);
+        self.hl = self.hl.wrapping_add(1);
+        let b = self.register(Register::B);
+        // TODO: The other flags _should_ get set
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, b == 0);
+        12
     }
 
     #[inline]
-    fn outi_wz(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn outi_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let data = bus.read(self.hl);
+        self.hl = self.hl.wrapping_add(1);
+        self.set_register(Register::B, self.register(Register::B).wrapping_sub(1));
+        bus.output(self.bc, data);
+        self.wz = self.bc.wrapping_add(1);
+        let b = self.register(Register::B);
+        // TODO: The other flags _should_ get set
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, b == 0);
+        12
     }
 
     #[inline]
@@ -1682,13 +1703,31 @@ impl Cpu {
     }
 
     #[inline]
-    fn ind(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn ind_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let data = bus.input(self.bc);
+        self.wz = self.bc.wrapping_sub(1);
+        self.set_register(Register::B, self.register(Register::B).wrapping_sub(1));
+        bus.write(self.hl, data);
+        self.hl = self.hl.wrapping_sub(1);
+        let b = self.register(Register::B);
+        // TODO: The other flags _should_ get set
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, b == 0);
+        12
     }
 
     #[inline]
-    fn outd(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn outd_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let data = bus.read(self.hl);
+        self.hl = self.hl.wrapping_sub(1);
+        self.set_register(Register::B, self.register(Register::B).wrapping_sub(1));
+        bus.output(self.bc, data);
+        self.wz = self.bc.wrapping_sub(1);
+        let b = self.register(Register::B);
+        // TODO: The other flags _should_ get set
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, b == 0);
+        12
     }
 
     #[inline]
@@ -1718,13 +1757,43 @@ impl Cpu {
     }
 
     #[inline]
-    fn inir(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn inir_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let data = bus.input(self.bc);
+        self.wz = self.bc.wrapping_add(1);
+        self.set_register(Register::B, self.register(Register::B).wrapping_sub(1));
+        bus.write(self.hl, data);
+        self.hl = self.hl.wrapping_add(1);
+        let b = self.register(Register::B);
+        // TODO: The other flags _should_ get set
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, b == 0);
+        if b != 0 {
+            self.wz = self.pc.wrapping_sub(1);
+            self.pc = self.wz.wrapping_sub(1);
+            16
+        } else {
+            12
+        }
     }
 
     #[inline]
-    fn otir(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn otir_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let data = bus.read(self.hl);
+        self.hl = self.hl.wrapping_add(1);
+        self.set_register(Register::B, self.register(Register::B).wrapping_sub(1));
+        bus.output(self.bc, data);
+        self.wz = self.bc.wrapping_add(1);
+        let b = self.register(Register::B);
+        // TODO: The other flags _should_ get set
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, b == 0);
+        if b != 0 {
+            self.wz = self.pc.wrapping_sub(1);
+            self.pc = self.wz.wrapping_sub(1);
+            16
+        } else {
+            12
+        }
     }
 
     #[inline]
@@ -1754,13 +1823,43 @@ impl Cpu {
     }
 
     #[inline]
-    fn indr(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn indr_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let data = bus.input(self.bc);
+        self.wz = self.bc.wrapping_sub(1);
+        self.set_register(Register::B, self.register(Register::B).wrapping_sub(1));
+        bus.write(self.hl, data);
+        self.hl = self.hl.wrapping_sub(1);
+        let b = self.register(Register::B);
+        // TODO: The other flags _should_ get set
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, b == 0);
+        if b != 0 {
+            self.wz = self.pc.wrapping_sub(1);
+            self.pc = self.wz.wrapping_sub(1);
+            16
+        } else {
+            12
+        }
     }
 
     #[inline]
-    fn otdr_wz(&mut self, _: &mut impl Bus) -> usize {
-        todo!()
+    fn otdr_wz(&mut self, bus: &mut impl Bus) -> usize {
+        let data = bus.read(self.hl);
+        self.hl = self.hl.wrapping_sub(1);
+        self.set_register(Register::B, self.register(Register::B).wrapping_sub(1));
+        bus.output(self.bc, data);
+        self.wz = self.bc.wrapping_sub(1);
+        let b = self.register(Register::B);
+        // TODO: The other flags _should_ get set
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, b == 0);
+        if b != 0 {
+            self.wz = self.pc.wrapping_sub(1);
+            self.pc = self.wz.wrapping_sub(1);
+            16
+        } else {
+            12
+        }
     }
 
     #[inline]
@@ -2717,7 +2816,7 @@ impl Cpu {
             0x42 => /* sbc hl, bc       */ self.sub_carry_wide_wz(WideRegister::HL, WideRegister::BC),
             0x43 => /* ld (**), bc      */ self.write_wide_absolute_wz(WideRegister::BC, bus),
             0x44 => /* neg              */ self.neg(),
-            0x45 => /* retn             */ self.retn(bus),
+            0x45 => /* retn             */ self.retn_wz(bus),
             0x46 => /* im 0             */ self.set_interrupt_mode(InterruptMode::Zero),
             0x47 => /* ld i, a          */ self.copy_register(Register::I, Register::A),
             0x48 => /* in c, (c)        */ self.input(Register::C, bus),
@@ -2734,7 +2833,7 @@ impl Cpu {
             0x52 => /* sbc hl, de       */ self.sub_carry_wide_wz(WideRegister::HL, WideRegister::DE),
             0x53 => /* ld (**), de      */ self.write_wide_absolute_wz(WideRegister::DE, bus),
             0x54 => /* neg              */ self.neg(),
-            0x55 => /* retn             */ self.retn(bus),
+            0x55 => /* retn             */ self.retn_wz(bus),
             0x56 => /* im 1             */ self.set_interrupt_mode(InterruptMode::One),
             0x57 => /* ld a, i          */ self.copy_ir_register(Register::I),
             0x58 => /* in e, (c)        */ self.input(Register::E, bus),
@@ -2742,7 +2841,7 @@ impl Cpu {
             0x5A => /* adc hl, de       */ self.add_carry_wide_wz(WideRegister::HL, WideRegister::DE),
             0x5B => /* ld de, (**)      */ self.read_wide_absolute_wz(WideRegister::DE, bus),
             0x5C => /* neg              */ self.neg(),
-            0x5D => /* retn             */ self.retn(bus),
+            0x5D => /* retn             */ self.retn_wz(bus),
             0x5E => /* im 2             */ self.set_interrupt_mode(InterruptMode::Two),
             0x5F => /* ld a, r          */ self.copy_ir_register(Register::R),
 
@@ -2751,7 +2850,7 @@ impl Cpu {
             0x62 => /* sbc hl, hl       */ self.sub_carry_wide_wz(WideRegister::HL, WideRegister::HL),
             0x63 => /* ld (**), hl      */ self.write_wide_absolute_wz(WideRegister::HL, bus),
             0x64 => /* neg              */ self.neg(),
-            0x65 => /* retn             */ self.retn(bus),
+            0x65 => /* retn             */ self.retn_wz(bus),
             0x66 => /* im 0             */ self.set_interrupt_mode(InterruptMode::Zero),
             0x67 => /* rrd              */ self.rrd_wz(bus),
             0x68 => /* in l, (c)        */ self.input(Register::L, bus),
@@ -2759,7 +2858,7 @@ impl Cpu {
             0x6A => /* adc hl, de       */ self.add_carry_wide_wz(WideRegister::HL, WideRegister::HL),
             0x6B => /* ld hl, (**)      */ self.read_wide_absolute_wz(WideRegister::HL, bus),
             0x6C => /* neg              */ self.neg(),
-            0x6D => /* retn             */ self.retn(bus),
+            0x6D => /* retn             */ self.retn_wz(bus),
             0x6E => /* im 0/1           */ self.set_interrupt_mode(InterruptMode::Zero),
             0x6F => /* rld              */ self.rld_wz(bus),
 
@@ -2768,32 +2867,32 @@ impl Cpu {
             0x72 => /* sbc hl, sp       */ self.sub_carry_wide_wz(WideRegister::HL, WideRegister::SP),
             0x73 => /* ld (**), sp      */ self.write_wide_absolute_wz(WideRegister::SP, bus),
             0x74 => /* neg              */ self.neg(),
-            0x75 => /* retn             */ self.retn(bus),
+            0x75 => /* retn             */ self.retn_wz(bus),
             0x76 => /* im 1             */ self.set_interrupt_mode(InterruptMode::One),
             0x78 => /* in a, (c)        */ self.input(Register::A, bus),
             0x79 => /* out (c), a       */ self.output(Register::A, bus),
             0x7A => /* adc hl, sp       */ self.add_carry_wide_wz(WideRegister::HL, WideRegister::SP),
             0x7B => /* ld sp, (**)      */ self.read_wide_absolute_wz(WideRegister::SP, bus),
             0x7C => /* neg              */ self.neg(),
-            0x7D => /* retn             */ self.retn(bus),
+            0x7D => /* retn             */ self.retn_wz(bus),
             0x7E => /* im 2             */ self.set_interrupt_mode(InterruptMode::Two),
 
             0xA0 => /* ldi              */ self.ldi(bus),
             0xA1 => /* cpi              */ self.cpi_wz(bus),
-            0xA2 => /* ini              */ self.ini(bus),
+            0xA2 => /* ini              */ self.ini_wz(bus),
             0xA3 => /* outi             */ self.outi_wz(bus),
             0xA8 => /* ldd              */ self.ldd(bus),
             0xA9 => /* cpd              */ self.cpd_wz(bus),
-            0xAA => /* ind              */ self.ind(bus),
-            0xAB => /* outd             */ self.outd(bus),
+            0xAA => /* ind              */ self.ind_wz(bus),
+            0xAB => /* outd             */ self.outd_wz(bus),
 
             0xB0 => /* ldir             */ self.ldir(bus),
             0xB1 => /* cpir             */ self.cpir(bus),
-            0xB2 => /* inir             */ self.inir(bus),
-            0xB3 => /* otir             */ self.otir(bus),
+            0xB2 => /* inir             */ self.inir_wz(bus),
+            0xB3 => /* otir             */ self.otir_wz(bus),
             0xB8 => /* lddr             */ self.lddr(bus),
             0xB9 => /* cpdr             */ self.cpdr_wz(bus),
-            0xBA => /* indr             */ self.indr(bus),
+            0xBA => /* indr             */ self.indr_wz(bus),
             0xBB => /* otdr             */ self.otdr_wz(bus),
 
             // Any other opcode seems to act as if the prefix was a nop
