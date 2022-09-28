@@ -449,43 +449,50 @@ impl Device for Vdc {
                         let cell_index = self.vram[addr & VRAM_ADDR_MAX];
 
                         // If attributes are enabled, locate and apply them
-                        let (mut fg_color, mut bg_color, char_set_offset) =
-                            if (self.horiz_scroll_ctrl & HScrollControl::ATR) != 0 {
-                                // get the attrs for this cell
-                                let attr_index = (self.attr_addr as usize) + (cell_index as usize);
-                                let attr = self.vram[attr_index & VRAM_ADDR_MAX];
-                                let mut fg_color = color_lookup(attr);
+                        let (mut fg_color, mut bg_color, char_set_offset) = if (self
+                            .horiz_scroll_ctrl
+                            & HScrollControl::ATR)
+                            != 0
+                        {
+                            // get the attrs for this cell
+                            let attr_index = (self.attr_addr as usize) + (cell_index as usize);
+                            let attr = self.vram[attr_index & VRAM_ADDR_MAX];
+                            let mut fg_color = color_lookup(attr);
 
-                                // there are expected to be 2 sets of 256 characters when attributes
-                                // are enabled. The alternate set follows the first in memory.
-                                let char_set_offset = if attr & Attribute::ALTERNATE_CHARACTER != 0
-                                {
-                                    0
-                                } else {
-                                    256
-                                };
-
-                                // reverse it
-                                if (attr & Attribute::REVERSE) != 0 {
-                                    mem::swap(&mut fg_color, &mut bg_color);
-                                }
-
-                                // underline it
-                                if (attr & Attribute::UNDERLINE != 0)
-                                    && cell_yoffset == (self.underline_ctrl & 0x0F) as usize
-                                {
-                                    mem::swap(&mut fg_color, &mut bg_color);
-                                }
-
-                                (fg_color, bg_color, char_set_offset)
+                            // there are expected to be 2 sets of 256 characters when attributes
+                            // are enabled. The alternate set follows the first in memory.
+                            let char_set_offset = if attr & Attribute::ALTERNATE_CHARACTER != 0 {
+                                0
                             } else {
-                                (fg_color, bg_color, 0)
+                                256
                             };
+
+                            // reverse it
+                            if (attr & Attribute::REVERSE) != 0 {
+                                mem::swap(&mut fg_color, &mut bg_color);
+                            }
+
+                            // reverse it *again* if blinking
+                            if (attr & Attribute::BLINK) != 0 && (self.blink_timer & 0x0F) < 0x07 {
+                                mem::swap(&mut fg_color, &mut bg_color);
+                            }
+
+                            // underline it
+                            if (attr & Attribute::UNDERLINE != 0)
+                                && cell_yoffset == (self.underline_ctrl & 0x0F) as usize
+                            {
+                                mem::swap(&mut fg_color, &mut bg_color);
+                            }
+
+                            (fg_color, bg_color, char_set_offset)
+                        } else {
+                            (fg_color, bg_color, 0)
+                        };
 
                         // Reverse the video *AGAIN* if this is the cursor
                         let is_cursor =
                             (cell_x + (cell_y * cell_stride)) == (self.cursor_pos as usize);
-                        if is_cursor && (self.blink_timer) & 0x0F < 0x07 {
+                        if is_cursor && (self.blink_timer & 0x0F) < 0x07 {
                             if cell_yoffset >= self.cursor_start_line
                                 && cell_yoffset <= self.cursor_end_line
                             {

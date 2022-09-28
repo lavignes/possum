@@ -16,16 +16,18 @@ impl IOAddr {
     const BANK: u16 = 0x01;
     const KB: u16 = 0x02;
 
-    const SER: u16 = 0x10;
+    const SER1: u16 = 0x10;
+    const SER2: u16 = 0x18;
     const HD: u16 = 0x20;
     const VDC: u16 = 0x40;
 }
 
 struct InterruptPriority;
 impl InterruptPriority {
-    const SER: u8 = 0x00;
-    const HD: u8 = 0x01;
-    const VDC: u8 = 0x02;
+    const SER1: u8 = 0x00;
+    const SER2: u8 = 0x01;
+    const HD: u8 = 0x02;
+    const VDC: u8 = 0x03;
 }
 
 pub struct System {
@@ -202,18 +204,17 @@ impl System {
             kb: kb.as_mut(),
         });
 
+        // Process devices that run in parallel with CPU
+        // TODO: For DMA devices, they compete with the CPU for the bus.
+        //   depending on the transfer mode they may hold the bus or only
+        //   take it for ~3/4 of CPU cycles.
+        //   Overall I will probably have:
+        //   * A DMA device for serial port 1
+        //   * A DMA device for serial port 2 (can I share 1?)
+        //   * A DMA device for the CF bus
+        //   * And maybe an extra for the VDC (though that requires emulating an 8564
+        //     for the VDC RDY signal) 
         for _ in 0..cycles {
-            // note: only 1 DMA device can run at a time.
-            //   If I want to add support for more, then I need to put them in the daisy chain
-            //   and only run the first DMA that is wishing to tick.
-            //dma.tick(&mut DmaView {
-            //    bank,
-            //    ram,
-            //    hd: &mut hd.as_mut(),
-            //    vdc,
-            //    kb: kb.as_mut(),
-            //});
-
             vdc.tick(&mut NullBus {});
         }
         cycles
@@ -234,6 +235,7 @@ impl System {
         self.vdc.framebuffer()
     }
 
+    #[inline]
     pub fn write_ram(&mut self, data: &[u8], offset: usize) {
         for (i, b) in data.iter().enumerate() {
             self.ram[offset + i] = *b;

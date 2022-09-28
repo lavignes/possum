@@ -1,295 +1,295 @@
-@defn SECTOR_SIZE, 512
+@defn	SECTOR_SIZE, 512
 
 HD_PORT:
-	@defn .DATA,	$20
-	@defn .ERR,	$21
-	@defn .FEAT,	$21
-	@defn .SEC_CNT,	$22
-	@defn .SEC_NUM,	$23
-	@defn .CYL_LO,	$24
-	@defn .CYL_HI,	$25
-	@defn .HEAD,	$26
-	@defn .STAT,	$27
-	@defn .CMD,	$27
+	@defn	.DATA,		$20
+	@defn	.ERR,		$21
+	@defn	.FEAT,		$21
+	@defn	.SEC_CNT,	$22
+	@defn	.SEC_NUM,	$23
+	@defn	.CYL_LO,	$24
+	@defn	.CYL_HI,	$25
+	@defn	.HEAD,		$26
+	@defn	.STAT,		$27
+	@defn	.CMD,		$27
 
 HD_FEAT:
-	@defn .BITS8,	$01
+	@defn	.BITS8,	$01
 
 HD_STAT:
-	@defn .ERR,	$01
-	@defn .BSY,	$80
+	@defn	.ERR,	$01
+	@defn	.BSY,	$80
 
-@defn HD_DRIVE0,		$E0
-@defn HD_DRIVE1,		$F0
+	@defn	HD_DRIVE0,		$E0
+	@defn	HD_DRIVE1,		$F0
 
 HD_CMD:
-	@defn .DIAG,	$90
-	@defn .ERASE,	$C0
-	@defn .IDENT,	$EC
-	@defn .NOP,	$00
-	@defn .RD,	$20
-	@defn .FEAT,	$EF
-	@defn .WR,	$30
+	@defn	.DIAG,	$90
+	@defn	.ERASE,	$C0
+	@defn	.IDENT,	$EC
+	@defn	.NOP,	$00
+	@defn	.RD,	$20
+	@defn	.FEAT,	$EF
+	@defn	.WR,	$30
 
-@defn HDIdent.size_len,		4
-@defn HDIdent.serial_len,	20
-@defn HDIdent.model_len,	40
+@defn	HDIdent.size_len,	4
+@defn	HDIdent.serial_len,	20
+@defn	HDIdent.model_len,	40
 @struct HDIdent
-	@ds $0E
-	size .size_len
+	@ds	$0E
+	size	.size_len
 
-	@align $14
-	serial .serial_len
+	@align	$14
+	serial	.serial_len
 
-	@align $36
-	model .model_len
+	@align	$36
+	model	.model_len
 @endstruct
 
-@assert HDIdent.size	== $0E
-@assert HDIdent.serial	== $14
-@assert HDIdent.model	== $36
+@assert	HDIdent.size	== $0E
+@assert	HDIdent.serial	== $14
+@assert	HDIdent.model	== $36
 
-@defn KB_PORT, $02
+@defn 	KB_PORT,	$02
 
-start:
-	ld sp, $FFFF
+Start:
+	ld	sp, $FFFF
 
-	call hd_8bit
-	call c, err
-	call hd_ident
-	call c, err
+	call	Hd8Bit
+	call	c, Err
+	call	HdIdent
+	call	c, Err
 
-	ld hl, HD_MSG_MODEL
-	ld b, HD_MSG_MODEL.len
-	call pip_wr
+	ld	hl, HD_MSG_MODEL
+	ld	b, HD_MSG_MODEL.len
+	call	KbWrite
 
-	ld hl, SECTOR_BUF + HDIdent.model
-	ld b, HDIdent.model_len
-	call pip_wrln
+	ld	hl, SECTOR_BUF + HDIdent.model
+	ld	b, HDIdent.model_len
+	call	KbWriteLn
 
-	ld hl, HD_MSG_SERIAL
-	ld b, HD_MSG_SERIAL.len
-	call pip_wr
+	ld	hl, HD_MSG_SERIAL
+	ld	b, HD_MSG_SERIAL.len
+	call	KbWrite
 
-	ld hl, SECTOR_BUF + HDIdent.serial
-	ld b, HDIdent.serial_len
-	call pip_wrln
+	ld	hl, SECTOR_BUF + HDIdent.serial
+	ld	b, HDIdent.serial_len
+	call	KbWriteLn
 
-	ld hl, HD_MSG_SIZE
-	ld b, HD_MSG_SIZE.len
-	call pip_wr
+	ld	hl, HD_MSG_SIZE
+	ld	b, HD_MSG_SIZE.len
+	call	KbWrite
 
-	ld a, '$'
-	call pip_wrc
-	ld de, SECTOR_BUF + HDIdent.size + HDIdent.size_len - 1
-	ld a, (de)
-	call pip_wrx
-	dec de
-	ld a, (de)
-	call pip_wrx
-	dec de
-	ld a, (de)
-	call pip_wrx
-	dec de
-	ld a, (de)
-	call pip_wrx
-	ld a, '\r'
-	call pip_wrc
-	ld a, '\n'
-	call pip_wrc
+	ld	a, '$'
+	call	KbWriteC
+	ld	de, SECTOR_BUF + HDIdent.size + HDIdent.size_len - 1
+	ld	a, (de)
+	call	KbWriteX
+	dec	de
+	ld	a, (de)
+	call	KbWriteX
+	dec	de
+	ld	a, (de)
+	call	KbWriteX
+	dec	de
+	ld	a, (de)
+	call	KbWriteX
+	ld	a, '\r'
+	call	KbWriteC
+	ld	a, '\n'
+	call	KbWriteC
 
-	ld de, $0000
-	ld hl, $0000
-	call hd_lba
-	call hd_rd
-	jr c, err
+	ld	de, $0000
+	ld	hl, $0000
+	call	HdLba
+	call	HdRead
+	jr	c, Err
 
-	ld hl, HELLO_MSG
-	ld de, SECTOR_BUF
-	ld b, HELLO_MSG.len
+	ld	hl, HELLO_MSG
+	ld	de, SECTOR_BUF
+	ld	b, HELLO_MSG.len
 .cpy:
-	ld a, (hl)
-	ex de, hl
-	ld (hl), a
-	ex de, hl
-	inc hl
-	inc de
-	djnz .cpy
+	ld	a, (hl)
+	ex	de, hl
+	ld	(hl), a
+	ex	de, hl
+	inc	hl
+	inc	de
+	djnz	.cpy
 
-	ld de, $0000
-	ld hl, $0000
-	call hd_lba
-	call hd_wr
-	jr c, err
+	ld	de, $0000
+	ld	hl, $0000
+	call	HdLba
+	call	HdWrite
+	jr	c, Err
 
-	ld hl, HELLO_MSG
-	ld b, HELLO_MSG.len
-	call pip_wrln
+	ld	hl, HELLO_MSG
+	ld	b, HELLO_MSG.len
+	call	KbWriteLn
 
-	jr exit
+	jr	Exit
 
-err:
-	push af
-	ld hl, HD_MSG_ERR
-	ld b, HD_MSG_ERR.len
-	call pip_wr
-	ld a, '$'
-	pop af
-	call pip_wrx
+Err:
+	push	af
+	ld	hl, HD_MSG_ERR
+	ld	b, HD_MSG_ERR.len
+	call	KbWrite
+	ld	a, '$'
+	pop	af
+	call	KbWriteX
 
-exit:
-	in a, (KB_PORT)
-	set 5, a	; lowercase ASCII
-	cp 'q'
-	jr nz, exit
+Exit:
+	in	a, (KB_PORT)
+	set	5, a	; lowercase ASCII
+	cp	'q'
+	jr	nz, Exit
 
 	halt
 
-hd_8bit:
-	call hd_wait
-	ld a, HD_FEAT.BITS8
-	out (HD_PORT.FEAT), a
-	ld a, HD_CMD.FEAT
-	out (HD_PORT.CMD), a
-	jp hd_err
+Hd8Bit:
+	call	HdWait
+	ld	a, HD_FEAT.BITS8
+	out	(HD_PORT.FEAT), a
+	ld	a, HD_CMD.FEAT
+	out	(HD_PORT.CMD), a
+	jp	HdErr
 
-hd_ident:
-	call hd_wait
-	ld a, HD_CMD.IDENT
-	out (HD_PORT.CMD), a
-	call hd_err
-	ret c
-	jp hd_bufin
+HdIdent:
+	call	HdWait
+	ld	a, HD_CMD.IDENT
+	out	(HD_PORT.CMD), a
+	call	HdErr
+	ret	c
+	jp	HdBufIn
 
-hd_rd:
-	call hd_wait
-	ld a, HD_CMD.RD
-	out (HD_PORT.CMD), a
-	call hd_err
-	ret c
-	jp hd_bufin
+HdRead:
+	call	HdWait
+	ld	a, HD_CMD.RD
+	out	(HD_PORT.CMD), a
+	call	HdErr
+	ret	c
+	jp	HdBufIn
 
-hd_wr:
-	call hd_wait
-	ld a, HD_CMD.WR
-	out (HD_PORT.CMD), a
-	call hd_err
-	ret c
-	jp hd_bufout
+HdWrite:
+	call	HdWait
+	ld	a, HD_CMD.WR
+	out	(HD_PORT.CMD), a
+	call	HdErr
+	ret	c
+	jp	HdBufOut
 
-hd_lba:
-	ld a, e
-	out (HD_PORT.SEC_NUM), a
-        ld a, d
-	out (HD_PORT.CYL_LO), a
-	ld a, l
-	out (HD_PORT.CYL_HI), a
-	ld a, h
-	and $0F
-	or HD_DRIVE0
-	out (HD_PORT.HEAD), a
+HdLba:
+	ld	a, e
+	out	(HD_PORT.SEC_NUM), a
+        ld	a, d
+	out	(HD_PORT.CYL_LO), a
+	ld	a, l
+	out	(HD_PORT.CYL_HI), a
+	ld	a, h
+	and	$0F
+	or	HD_DRIVE0
+	out	(HD_PORT.HEAD), a
 	ret
 
-hd_bufin:
-	ld de, SECTOR_SIZE
-	ld hl, SECTOR_BUF
+HdBufIn:
+	ld	de, SECTOR_SIZE
+	ld	hl, SECTOR_BUF
 .inb:
-	call hd_wait
-	in a, (HD_PORT.DATA)
-	ld (hl), a
-	inc hl
-	dec de
-	ld a, d
-	or e
-	jp nz, .inb
-	jp hd_err
+	call	HdWait
+	in	a, (HD_PORT.DATA)
+	ld	(hl), a
+	inc	hl
+	dec	de
+	ld	a, d
+	or	e
+	jp	nz, .inb
+	jp	HdErr
 
-hd_bufout:
-	ld de, SECTOR_SIZE
-	ld hl, SECTOR_BUF
+HdBufOut:
+	ld	de, SECTOR_SIZE
+	ld	hl, SECTOR_BUF
 .outb:
-	call hd_wait
-	ld a, (hl)
-	out (HD_PORT.DATA), a
-	inc hl
-	dec de
-	ld a, d
-	or e
-	jp nz, .outb
-	jp hd_err
+	call	HdWait
+	ld	a, (hl)
+	out	(HD_PORT.DATA), a
+	inc	hl
+	dec	de
+	ld	a, d
+	or	e
+	jp	nz, .outb
+	jp	HdErr
 
-hd_err:
-	call hd_wait
-	in a, (HD_PORT.STAT)
-	and HD_STAT.ERR
-	ret z
+HdErr:
+	call	HdWait
+	in	a, (HD_PORT.STAT)
+	and	HD_STAT.ERR
+	ret	z
 	scf
-	in a, (HD_PORT.ERR)
+	in	a, (HD_PORT.ERR)
 	ret
 
-hd_wait:
-	ld b, HD_STAT.BSY
+HdWait:
+	ld	b, HD_STAT.BSY
 .loop:
-	in a, (HD_PORT.STAT)
-	and b
-	jr nz, .loop
+	in	a, (HD_PORT.STAT)
+	and	b
+	jr	nz, .loop
 	ret
 
-pip_wrx:
-	ld c, a
+KbWriteX:
+	ld	c, a
 	rra
 	rra
 	rra
 	rra
-	call .wr_low_nibble
-	ld a, c
+	call	.wr_low_nibble
+	ld	a, c
 .wr_low_nibble:
-	and $0f
-	add a, $90
+	and	$0F
+	add	a, $90
 	daa
-	adc a, $40
+	adc	a, $40
 	daa
-	out (KB_PORT), a
+	out	(KB_PORT), a
 	ret
 
-pip_wrc:
-	out (KB_PORT), a
+KbWriteC:
+	out	(KB_PORT), a
 	ret
 
-pip_wr:
-	ld a, (hl)
-	out (KB_PORT), a
-	inc hl
-	djnz pip_wr
+KbWrite:
+	ld	a, (hl)
+	out	(KB_PORT), a
+	inc	hl
+	djnz	KbWrite
 	ret
 
-pip_wrln:
-	call pip_wr
-	ld a, '\r'
-	out (KB_PORT), a
-	ld a, '\n'
-	out (KB_PORT), a
+KbWriteLn:
+	call	KbWrite
+	ld	a, '\r'
+	out	(KB_PORT), a
+	ld	a, '\n'
+	out	(KB_PORT), a
 	ret
 
 HELLO_MSG:
-	@db "Hello! Successfully wrote to the disk!"
-	@defn .len, @here - HELLO_MSG
+	@db	"Hello! Successfully wrote to the disk!"
+	@defn	.len, @here - HELLO_MSG
 
 HD_MSG_MODEL:
-	@db "Model Name:\t"
-	@defn .len, @here - HD_MSG_MODEL
+	@db	"Model Name:\t"
+	@defn	.len, @here - HD_MSG_MODEL
 
 HD_MSG_SERIAL:
-	@db "Serial #:\t"
-	@defn .len, @here - HD_MSG_SERIAL
+	@db	"Serial #:\t"
+	@defn	.len, @here - HD_MSG_SERIAL
 
 HD_MSG_SIZE:
-	@db "Disk Size:\t"
-	@defn .len, @here - HD_MSG_SIZE
+	@db	"Disk Size:\t"
+	@defn	.len, @here - HD_MSG_SIZE
 
 HD_MSG_ERR:
-	@db "Disk error:\t"
-	@defn .len, @here - HD_MSG_ERR
+	@db	"Disk error:\t"
+	@defn	.len, @here - HD_MSG_ERR
 
 SECTOR_BUF:
-	@ds SECTOR_SIZE
+	@ds	SECTOR_SIZE
