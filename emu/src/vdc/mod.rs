@@ -427,7 +427,7 @@ impl Device for Vdc {
                 }
 
                 // Adjust the line to the vertical scroll
-                let scroll_y = (self.vert_scroll_ctrl & 0x0F) as usize;
+                let scroll_y = (self.vert_scroll_ctrl & 0x1F) as usize;
                 let scrolled_y = self.raster_y - self.top_border_height + scroll_y;
 
                 // Lets find what cell row we want to render
