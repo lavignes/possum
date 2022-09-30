@@ -335,7 +335,7 @@ impl Vdc {
             .wrapping_sub(v_disable)
             & 0x3FF;
 
-        let vert_sync_pos = ((self.vert_sync.wrapping_sub(1) as usize) & 0xFF) * self.cell_height;
+        let vert_sync_pos = (self.vert_sync as usize) * self.cell_height;
         self.top_border_height = self
             .signal_height
             .wrapping_sub(vert_sync_pos)
@@ -350,7 +350,9 @@ impl Vdc {
             .wrapping_sub(v_disable / 2)
             & 0xFF;
 
-        let horiz_sync_pos = (self.horiz_sync as usize) * self.cell_width;
+        // TODO: subbing 2 here centers the screen properly. I must be missing something
+        //   since this -2 should *not* be required.
+        let horiz_sync_pos = (self.horiz_sync as usize).wrapping_sub(2) * self.cell_width;
         self.left_border_width = self
             .signal_width
             .wrapping_sub(horiz_sync_pos)
@@ -461,7 +463,7 @@ impl Device for Vdc {
 
                             // there are expected to be 2 sets of 256 characters when attributes
                             // are enabled. The alternate set follows the first in memory.
-                            let char_set_offset = if attr & Attribute::ALTERNATE_CHARACTER != 0 {
+                            let char_set_offset = if (attr & Attribute::ALTERNATE_CHARACTER) != 0 {
                                 0
                             } else {
                                 256
@@ -478,7 +480,7 @@ impl Device for Vdc {
                             }
 
                             // underline it
-                            if (attr & Attribute::UNDERLINE != 0)
+                            if (attr & Attribute::UNDERLINE) != 0
                                 && cell_yoffset == (self.underline_ctrl & 0x0F) as usize
                             {
                                 mem::swap(&mut fg_color, &mut bg_color);

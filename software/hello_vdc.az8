@@ -118,12 +118,14 @@ HELLO_MSG:
 VDC_INIT_VALUES:
 	@db	0, 126		; 126+1 columns
 	@db	1, 80		; 80 text columns
-	@db	2, 100		; hsync at col 100
-	@db	3, $49		; hsync $9-wide vsync $4
+	@db	2, 102		; hsync at col 102
+	@db	3, $49		; hsync 1+8-wide vsync 4
 	@db	4, 32		; 32+1 rows
+	@db	5, 0		; Fine vert adjustment
 	@db	6, 25		; 25 text rows
-	@db	7, 30		; vsync at row 30
-	@db	9, 7 		; 7+1 rows per cell
+	@db	7, 29		; vsync at row 29
+	@db	8, 0		; No interlace
+	@db	9, 7 		; 7+1 lines per cell
 	@db 	10, %01100000	; cursor starts at line 0, blink
 	@db	11, 7		; cursor ends at line 7
 	@db	12, $00		; screen memory at $0000
@@ -132,7 +134,7 @@ VDC_INIT_VALUES:
 	@db	15, $00
 	@db	20, $08		; attr memory at $0800
 	@db	21, $00
-	@db	22, $78		; cell is $8-wide ($7+1 visible)
+	@db	22, $78		; cell is (1+7)-wide (8 visible)
 	@db	23, $08		; cell is $8 tall
 	@db	26, %11110010	; wht on blu
 	@db	28, %00100000	; pix data @ $2000
