@@ -100,13 +100,13 @@ impl<'a> Bus for CpuView<'a> {
 
     fn input(&mut self, port: u16) -> u8 {
         // The upper byte or port not something we want
-        let port = port & 0xFF; 
+        let port = port & 0xFF;
         match port & 0xF0 {
             // The lowest devices all mask to the same space
             // as the IC
             IOAddr::IC => match port {
                 IOAddr::IC => {
-                    if let Some(hd) = self.hd && hd.interrupting() { 
+                    if let Some(hd) = self.hd && hd.interrupting() {
                         return InterruptPriority::HD;
                     }
                     if self.vdc.interrupting() {
@@ -122,7 +122,6 @@ impl<'a> Bus for CpuView<'a> {
                 _ => 0,
             },
 
-
             IOAddr::HD => match self.hd {
                 Some(hd) => hd.read(port),
                 _ => 0,
@@ -136,7 +135,7 @@ impl<'a> Bus for CpuView<'a> {
 
     fn output(&mut self, port: u16, data: u8) {
         // The upper byte or port not something we want
-        let port = port & 0xFF; 
+        let port = port & 0xFF;
         match port & 0xF0 {
             // The lowest ports all mask to the same space
             // as the IC
@@ -146,7 +145,7 @@ impl<'a> Bus for CpuView<'a> {
                 IOAddr::BANK => self.bank.select(data),
 
                 _ => {}
-            }
+            },
 
             IOAddr::HD => {
                 if let Some(hd) = self.hd {
@@ -163,7 +162,7 @@ impl<'a> Bus for CpuView<'a> {
 
 impl<'a> InterruptBus for CpuView<'a> {
     fn interrupted(&mut self) -> bool {
-        if let Some(hd) = self.hd && hd.interrupting() { 
+        if let Some(hd) = self.hd && hd.interrupting() {
             return true;
         }
         if self.vdc.interrupting() {
@@ -213,7 +212,7 @@ impl System {
         //   * A DMA device for serial port 2 (can I share 1?)
         //   * A DMA device for the CF bus
         //   * And maybe an extra for the VDC (though that requires emulating an 8564
-        //     for the VDC RDY signal) 
+        //     for the VDC RDY signal)
         for _ in 0..cycles {
             vdc.tick(&mut NullBus {});
         }

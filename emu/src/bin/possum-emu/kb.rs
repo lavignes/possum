@@ -38,7 +38,7 @@ impl Device for AsciiKeyboard {
                 _ => {}
             }
         }
-        self.buffer.pop_front().unwrap_or(0)
+        self.buffer.pop_front().unwrap_or_default()
     }
 
     fn write(&mut self, _: u16, data: u8) {
